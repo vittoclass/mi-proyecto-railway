@@ -1,3 +1,14 @@
+¡Por supuesto\! Es una excelente idea para evitar errores.
+
+Aquí tienes el código completo y corregido para tu archivo `page.tsx`.
+
+-----
+
+## Código Completo para `page.tsx`
+
+Copia todo el contenido de este bloque y reemplaza **todo** lo que tienes en tu archivo `page.tsx`.
+
+```tsx
 "use client"
 
 import type React from "react"
@@ -386,20 +397,12 @@ export default function GeniusEvaluator() {
                 <Button
                   onClick={evaluateDocuments}
                   disabled={isLoading || !currentEvaluation.files.length || !currentEvaluation.rubrica.trim()}
-                  className="w-full"
+                  className="w-full flex items-center justify-center"
                   size="lg"
                 >
-                  {isLoading ? (
-                    <>
-                      <Clock className="w-4 h-4 mr-2 animate-spin" />
-                      Evaluando...
-                    </>
-                  ) : (
-                    <>
-                      <Brain className="w-4 h-4 mr-2" />
-                      Iniciar Evaluación
-                    </>
-                  )}
+                  {isLoading && <Clock className="w-4 h-4 mr-2 animate-spin" />}
+                  {!isLoading && <Brain className="w-4 h-4 mr-2" />}
+                  {isLoading ? "Evaluando..." : "Iniciar Evaluación"}
                 </Button>
               </CardContent>
             </Card>
@@ -541,3 +544,4 @@ export default function GeniusEvaluator() {
     </div>
   )
 }
+```
