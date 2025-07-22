@@ -1,3 +1,12 @@
+¡Claro\! Aquí está el código completo para `page.tsx` con los cambios de depuración que discutimos. Con esto, esperamos confirmar el origen del error.
+
+-----
+
+### Código Completo para `page.tsx` (Modo Depuración)
+
+Borra todo el contenido de tu archivo `page.tsx` y reemplázalo con este código.
+
+```tsx
 "use client"
 
 import type React from "react"
@@ -91,7 +100,7 @@ export default function GeniusEvaluator() {
       return
     }
 
-    setIsLoading(true)
+    // setIsLoading(true) // <--- TEMPORALMENTE DESACTIVADO
     try {
       const formData = new FormData()
       currentEvaluation.files.forEach((file) => {
@@ -108,6 +117,8 @@ export default function GeniusEvaluator() {
         }),
       )
 
+      alert("Enviando datos para evaluar... (Modo de depuración)"); // Aviso para saber que funciona
+
       const response = await fetch("/api/evaluate", {
         method: "POST",
         body: formData,
@@ -117,15 +128,15 @@ export default function GeniusEvaluator() {
       if (result.success) {
         const newEvaluations = [...evaluations, ...result.evaluations]
         saveEvaluations(newEvaluations)
-        setActiveTab("results")
-        alert(`✅ Evaluación completada. ${result.evaluations.length} estudiantes evaluados.`)
+        // setActiveTab("results") // <--- TEMPORALMENTE DESACTIVADO
+        alert(`✅ Evaluación completada. ${result.evaluations.length} estudiantes evaluados. Ve a la pestaña de 'Resultados' manualmente.`)
       } else {
         throw new Error(result.error)
       }
     } catch (error) {
       alert(`❌ Error durante la evaluación: ${error}`)
     } finally {
-      setIsLoading(false)
+      // setIsLoading(false) // <--- TEMPORALMENTE DESACTIVADO
     }
   }
 
@@ -533,3 +544,4 @@ export default function GeniusEvaluator() {
     </div>
   )
 }
+```
