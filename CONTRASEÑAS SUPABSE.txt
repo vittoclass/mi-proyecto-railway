@@ -1,0 +1,5 @@
+postgresql://postgres:[16092999ABCD1]@db.jgowttaytnbugudmgrpy.supabase.co:5432/postgres
+
+
+
+CONTRASEÑA SUPABASE PROYECTO LIBELIA : 16092999ABCD1
