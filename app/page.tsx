@@ -1,12 +1,3 @@
-¡Claro\! Aquí está el código completo para `page.tsx` con los cambios de depuración que discutimos. Con esto, esperamos confirmar el origen del error.
-
------
-
-### Código Completo para `page.tsx` (Modo Depuración)
-
-Borra todo el contenido de tu archivo `page.tsx` y reemplázalo con este código.
-
-```tsx
 "use client"
 
 import type React from "react"
@@ -544,4 +535,3 @@ export default function GeniusEvaluator() {
     </div>
   )
 }
-```
