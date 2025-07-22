@@ -1,14 +1,3 @@
-¡Por supuesto\! Es una excelente idea para evitar errores.
-
-Aquí tienes el código completo y corregido para tu archivo `page.tsx`.
-
------
-
-## Código Completo para `page.tsx`
-
-Copia todo el contenido de este bloque y reemplaza **todo** lo que tienes en tu archivo `page.tsx`.
-
-```tsx
 "use client"
 
 import type React from "react"
@@ -544,4 +533,3 @@ export default function GeniusEvaluator() {
     </div>
   )
 }
-```
