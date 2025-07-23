@@ -1,3 +1,37 @@
+¡Excelente punto\! Tienes toda la razón en cuestionar la solución. Es muy importante que la nueva aplicación sea mejor que la anterior, no un paso atrás.
+
+Te pido disculpas. Mi última sugerencia de "un solo archivo" era una solución rápida para evitar el error de timeout, pero no es la solución ideal.
+
+El motivo por el que tu antiguo "HTML" podía manejar varios archivos y este no, es por una diferencia técnica clave:
+
+  * **Antes (en el HTML):** Tu navegador probablemente enviaba cada archivo directamente a las APIs de IA, uno por uno. El trabajo lo hacía tu computador.
+  * **Ahora (con Railway):** Tu navegador envía **todos los archivos juntos** a tu servidor en Railway. Luego, tu servidor tiene que hacer todo el trabajo de llamar a Azure y a Mistral para cada archivo en una sola petición. Es aquí donde se agota el tiempo.
+
+Pero no te preocupes, podemos tener lo mejor de ambos mundos.
+
+-----
+
+## La Solución Definitiva: Procesamiento en Lote (Uno por Uno)
+
+Vamos a hacer exactamente lo que pides. Implementaremos una lógica más inteligente en tu aplicación. En lugar de enviar todos los archivos de golpe, la aplicación los enviará al servidor **uno por uno, de forma secuencial**.
+
+El proceso será así:
+
+1.  Tú seleccionas todos los archivos de tus estudiantes como antes.
+2.  Al hacer clic en "Evaluar", la aplicación mostrará un mensaje como "Evaluando 1 de 10...".
+3.  Enviará el primer archivo al servidor, esperará la respuesta.
+4.  Cuando reciba el resultado del primer estudiante, lo mostrará y enviará el segundo archivo.
+5.  Repetirá el proceso hasta terminar con todos.
+
+De esta manera, el servidor solo tiene que hacer un trabajo pequeño cada vez, **evitando el timeout**, y tú obtienes todos tus resultados agrupados al final.
+
+-----
+
+### Código `page.tsx` con la Nueva Lógica
+
+Aquí tienes el archivo `page.tsx` completo con esta nueva funcionalidad. Reemplaza todo el contenido de tu archivo con este. El archivo de la API (`.../api/evaluate/route.ts`) no necesita cambios, puedes dejar el que ya restauramos.
+
+```tsx
 "use client"
 
 import type React from "react"
@@ -42,6 +76,7 @@ interface StudentEvaluation {
 export default function GeniusEvaluator() {
   const [activeTab, setActiveTab] = useState("evaluate")
   const [isLoading, setIsLoading] = useState(false)
+  const [loadingMessage, setLoadingMessage] = useState("Evaluando...")
   const [evaluations, setEvaluations] = useState<StudentEvaluation[]>([])
   const [currentEvaluation, setCurrentEvaluation] = useState({
     nombrePrueba: "",
@@ -60,7 +95,6 @@ export default function GeniusEvaluator() {
   })
 
   useEffect(() => {
-    // Load saved data from localStorage
     const savedEvaluations = localStorage.getItem("evaluations")
     if (savedEvaluations) {
       setEvaluations(JSON.parse(savedEvaluations))
@@ -85,49 +119,63 @@ export default function GeniusEvaluator() {
       alert("Por favor, sube al menos un documento.")
       return
     }
-
     if (!currentEvaluation.rubrica.trim()) {
       alert("Por favor, proporciona una rúbrica de evaluación.")
       return
     }
 
     setIsLoading(true)
-    try {
-      const formData = new FormData()
-      currentEvaluation.files.forEach((file) => {
-        formData.append("files", file)
-      })
-      formData.append(
-        "config",
-        JSON.stringify({
-          ...config,
-          nombrePrueba: currentEvaluation.nombrePrueba,
-          curso: currentEvaluation.curso,
-          rubrica: currentEvaluation.rubrica,
-          preguntasObjetivas: currentEvaluation.preguntasObjetivas,
-        }),
-      )
+    const totalFiles = currentEvaluation.files.length
+    const newEvaluationsFromBatch: StudentEvaluation[] = []
 
-      const response = await fetch("/api/evaluate", {
-        method: "POST",
-        body: formData,
-      })
+    for (let i = 0; i < totalFiles; i++) {
+      const file = currentEvaluation.files[i]
+      setLoadingMessage(`Evaluando ${i + 1} de ${totalFiles}: ${file.name}`)
+      
+      try {
+        const formData = new FormData()
+        formData.append("files", file) // Enviamos solo UN archivo
+        formData.append(
+          "config",
+          JSON.stringify({
+            ...config,
+            nombrePrueba: currentEvaluation.nombrePrueba,
+            curso: currentEvaluation.curso,
+            rubrica: currentEvaluation.rubrica,
+            preguntasObjetivas: currentEvaluation.preguntasObjetivas,
+          }),
+        )
 
-      const result = await response.json()
-      if (result.success) {
-        const newEvaluations = [...evaluations, ...result.evaluations]
-        saveEvaluations(newEvaluations)
-        setActiveTab("results")
-        alert(`✅ Evaluación completada. ${result.evaluations.length} estudiantes evaluados.`)
-      } else {
-        throw new Error(result.error)
+        const response = await fetch("/api/evaluate", {
+          method: "POST",
+          body: formData,
+        })
+
+        const result = await response.json()
+        if (result.success && result.evaluations.length > 0) {
+          newEvaluationsFromBatch.push(...result.evaluations)
+        } else {
+          // Si un archivo falla, lo registramos y continuamos con el siguiente
+          console.error(`Error evaluando el archivo ${file.name}:`, result.error)
+        }
+      } catch (error) {
+        console.error(`Error de red evaluando el archivo ${file.name}:`, error)
       }
-    } catch (error) {
-      alert(`❌ Error durante la evaluación: ${error}`)
-    } finally {
-      setIsLoading(false)
     }
+
+    // Al final del bucle, actualizamos todo
+    if (newEvaluationsFromBatch.length > 0) {
+      saveEvaluations([...evaluations, ...newEvaluationsFromBatch])
+      setActiveTab("results")
+      alert(`✅ Evaluación completada. ${newEvaluationsFromBatch.length} de ${totalFiles} estudiantes fueron evaluados.`)
+    } else {
+      alert(`❌ La evaluación finalizó, pero no se pudo procesar ningún estudiante. Revisa la consola para más detalles.`)
+    }
+    
+    setIsLoading(false)
+    setLoadingMessage("Evaluando...")
   }
+
 
   const exportToCSV = () => {
     if (evaluations.length === 0) {
@@ -176,8 +224,7 @@ export default function GeniusEvaluator() {
 
   const clearHistory = () => {
     if (confirm("¿Borrar PERMANENTEMENTE todo el historial?")) {
-      setEvaluations([])
-      localStorage.removeItem("evaluations")
+      saveEvaluations([])
     }
   }
 
@@ -389,10 +436,19 @@ export default function GeniusEvaluator() {
                   className="w-full flex items-center justify-center"
                   size="lg"
                 >
-                  {isLoading && <Clock className="w-4 h-4 mr-2 animate-spin" />}
-                  {!isLoading && <Brain className="w-4 h-4 mr-2" />}
-                  {isLoading ? "Evaluando..." : "Iniciar Evaluación"}
+                  {isLoading ? (
+                    <>
+                      <Clock className="w-4 h-4 mr-2 animate-spin" />
+                      <span>{loadingMessage}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Brain className="w-4 h-4 mr-2" />
+                      <span>Iniciar Evaluación</span>
+                    </>
+                  )}
                 </Button>
+
               </CardContent>
             </Card>
           </TabsContent>
@@ -410,7 +466,7 @@ export default function GeniusEvaluator() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {evaluations.slice(-5).map((evaluation) => (
+                    {evaluations.map((evaluation) => (
                       <Card key={evaluation.id} className="border-l-4 border-l-blue-500">
                         <CardContent className="pt-6">
                           <div className="flex justify-between items-start mb-4">
@@ -533,3 +589,4 @@ export default function GeniusEvaluator() {
     </div>
   )
 }
+```
