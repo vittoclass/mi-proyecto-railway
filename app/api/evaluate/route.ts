@@ -1,254 +1,173 @@
 import { type NextRequest, NextResponse } from "next/server"
 
+// --- INTERFACES Y FUNCIONES DE CÁLCULO (SIN CAMBIOS) ---
 interface EvaluationConfig {
-  sistema: string
-  nivelExigencia: number
-  puntajeMaximo: number
-  notaAprobacion: number
-  flexibility: number
-  fecha: string
-  nombrePrueba: string
-  curso: string
-  rubrica: string
-  preguntasObjetivas: string
+  sistema: string; nivelExigencia: number; puntajeMaximo: number; notaAprobacion: number; flexibility: number; fecha: string; nombrePrueba: string; curso: string; rubrica: string; preguntasObjetivas: string;
+}
+function calculateFinalGrade(puntajeObtenido: number, puntajeMax: number, sistema: string, exigencia: number, notaAprobacion: number) {
+  if (puntajeMax <= 0) return sistema === "chile_2_7" ? 2.0 : 0;
+  const porcentaje = puntajeObtenido / puntajeMax;
+  if (sistema === "chile_2_7") {
+    const pExigencia = exigencia / 100; const notaMax = 7.0; const notaMin = 2.0; let nota;
+    if (porcentaje >= pExigencia) { nota = notaAprobacion + (notaMax - notaAprobacion) * ((porcentaje - pExigencia) / (1 - pExigencia)); } 
+    else { nota = notaMin + (notaAprobacion - notaMin) * (porcentaje / pExigencia); }
+    return Math.min(notaMax, Math.max(notaMin, Math.round(nota * 10) / 10));
+  } else if (sistema === "latam_1_10") { return Math.min(10.0, 1.0 + 9.0 * porcentaje); } 
+  else if (sistema === "porcentual_0_100") { return Math.min(100.0, 100.0 * porcentaje); }
+  return 0;
 }
 
-async function callMistralAPI(payload: any) {
-  const apiKey = process.env.MISTRAL_API_KEY
-  if (!apiKey) {
-    throw new Error("MISTRAL_API_KEY no está configurada en las variables de entorno")
-  }
+// --- FUNCIONES DE API (MODIFICADAS Y MEJORADAS) ---
 
+async function callMistralAPI(payload: any) {
+  const apiKey = process.env.MISTRAL_API_KEY;
+  if (!apiKey) throw new Error("MISTRAL_API_KEY no está configurada.");
   const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify(payload),
-  })
-
-  const data = await response.json()
-  if (!response.ok) {
-    throw new Error(`Mistral API error: ${data.error?.message || response.statusText}`)
-  }
-  return data
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(`Mistral API error: ${data.error?.message || response.statusText}`);
+  return data;
 }
 
 async function ocrAzure(file: Buffer) {
-  const azureKey = process.env.AZURE_VISION_KEY
-  const azureEndpoint = process.env.AZURE_VISION_ENDPOINT
-
-  if (!azureKey || !azureEndpoint) {
-    throw new Error("AZURE_VISION_KEY o AZURE_VISION_ENDPOINT no están configuradas")
-  }
-
+  const azureKey = process.env.AZURE_VISION_KEY;
+  const azureEndpoint = process.env.AZURE_VISION_ENDPOINT;
+  if (!azureKey || !azureEndpoint) throw new Error("AZURE_VISION_KEY o AZURE_VISION_ENDPOINT no están configuradas.");
   const response = await fetch(`${azureEndpoint}vision/v3.2/ocr?language=es`, {
     method: "POST",
-    headers: {
-      "Ocp-Apim-Subscription-Key": azureKey,
-      "Content-Type": "application/octet-stream",
-    },
+    headers: { "Ocp-Apim-Subscription-Key": azureKey, "Content-Type": "application/octet-stream" },
     body: file,
-  })
-
-  if (!response.ok) {
-    throw new Error(`Azure OCR error: ${response.statusText}`)
-  }
-
-  const data = await response.json()
-  return (
-    data.regions
-      ?.flatMap((reg: any) => reg.lines.map((l: any) => l.words.map((w: any) => w.text).join(" ")))
-      .join("\n") || ""
-  )
+  });
+  if (!response.ok) throw new Error(`Azure OCR error: ${response.statusText}`);
+  const data = await response.json();
+  return data.regions?.flatMap((reg: any) => reg.lines.map((l: any) => l.words.map((w: any) => w.text).join(" "))).join("\n") || "";
 }
 
 async function extractNameWithAI(text: string) {
-  if (!text.trim()) return ""
-
-  const prompt = `Analiza el siguiente texto y extrae el nombre completo de la persona. Busca patrones como 'Nombre:', 'Alumno:', etc. Corrige errores obvios de OCR. Devuelve solo el nombre. Si no encuentras un nombre, responde con una cadena vacía.
-
-Texto: """${text}"""`
-
+  if (!text.trim()) return "";
+  const prompt = `De la siguiente transcripción de un documento, extrae el nombre completo del estudiante. Busca patrones como "Nombre:", "Alumno:", o similar. Tu respuesta debe ser ÚNICA Y EXCLUSIVAMENTE el nombre completo, sin saludos ni explicaciones. Si no encuentras un nombre claro, responde con una cadena vacía. Texto: """${text}"""`;
   const data = await callMistralAPI({
     model: "mistral-tiny",
     messages: [{ role: "user", content: prompt }],
-  })
-
-  return data.choices[0].message.content.trim()
+  });
+  return data.choices[0].message.content.trim();
 }
 
 async function evaluateWithAI(text: string, config: EvaluationConfig, studentName: string) {
   const flexibilityMap: { [key: number]: string } = {
     0: "Eres un evaluador extremadamente RÍGIDO y LITERAL. Te ciñes 100% a la rúbrica.",
-    5: "Eres un evaluador EQUILIBRADO. Te basas en la rúbrica pero puedes asignar puntajes parciales.",
-    10: "Eres un evaluador muy FLEXIBLE y HOLÍSTICO. Valoras la creatividad y el esfuerzo.",
-  }
+    5: "Eres un evaluador EQUILIBRADO y OBJETIVO. Te basas en la rúbrica pero puedes asignar puntajes parciales con justificación.",
+    10: "Eres un evaluador muy FLEXIBLE y HOLÍSTICO. Valoras la creatividad y el esfuerzo más allá de la rúbrica estricta.",
+  };
+  const flexibilityDescription = flexibilityMap[config.flexibility] || flexibilityMap[5];
 
-  const flexibilityDescription = flexibilityMap[config.flexibility] || flexibilityMap[5]
-
-  const prompt = `### PERFIL: DOCENTE-EVALUADOR EXPERTO ###
-Actúas como un profesor chileno experto en evaluación formativa.
-
-### NIVEL DE FLEXIBILIDAD ###
-Tu nivel de flexibilidad es **${config.flexibility}/10**: ${flexibilityDescription}
+  const prompt = `### PERFIL Y MISIÓN ###
+Actúas como un profesor experto y un asistente de evaluación pedagógica. Tu misión es analizar el trabajo de un estudiante, asignar un puntaje justo y generar una retroalimentación detallada, específica y constructiva.
 
 ### CONTEXTO DE LA EVALUACIÓN ###
-- Estudiante: "${studentName}"
 - Evaluación: "${config.nombrePrueba}"
 - Curso: "${config.curso}"
-- Rúbrica: """${config.rubrica}"""
-- Preguntas Objetivas: """${config.preguntasObjetivas}"""
-- Puntaje Máximo: ${config.puntajeMaximo}
+- Estudiante: "${studentName}"
+- Sistema de Calificación: El puntaje máximo total para esta evaluación es **${config.puntajeMaximo} puntos**. Debes asignar un puntaje coherente dentro de esta escala.
+- Rúbrica de Evaluación: """${config.rubrica}"""
+- Preguntas Objetivas (si aplica): """${config.preguntasObjetivas}"""
+- Tu Nivel de Flexibilidad: **${config.flexibility}/10** - ${flexibilityDescription}
 
-### MATERIAL DEL ESTUDIANTE ###
-${text || "(Sin texto extraído - El trabajo es puramente visual)"}
+### TRABAJO DEL ESTUDIANTE (TRANSCRIPCIÓN OCR) ###
+"""
+${text || "(Sin texto extraído - El trabajo podría ser puramente visual o no contener texto relevante)"}
+"""
 
-### TAREAS ###
-1. Evalúa según la rúbrica y preguntas objetivas
-2. Calcula el puntaje total obtenido
-3. Analiza habilidades demostradas
-4. Genera feedback constructivo
-5. Proporciona análisis detallado
-
-Responde ÚNICAMENTE con un objeto JSON válido:
+### TAREAS OBLIGATORIAS ###
+Analiza el trabajo del estudiante y responde ÚNICA Y EXCLUSIVAMENTE con un objeto JSON válido que siga esta estructura:
 {
-  "puntaje_obtenido": 0,
-  "analisis_habilidades": {
-    "Habilidad Ejemplo": {
-      "nivel": "Logrado",
-      "justificacion_con_cita": "Justificación con evidencia"
+  "puntaje_obtenido": Int,
+  "analisis_detallado": [
+    {
+      "criterio": "Nombre del criterio evaluado de la rúbrica.",
+      "evidencia": "Descripción de la evidencia encontrada en el trabajo del estudiante.",
+      "justificacion": "Justificación detallada de por qué se asignó el puntaje.",
+      "puntaje": "Puntaje asignado para este criterio (ej: '4/6 puntos')."
     }
-  },
+  ],
+  "analisis_habilidades": [
+    {
+      "habilidad": "Nombre de la habilidad demostrada (ej: 'Pensamiento Crítico', 'Síntesis de Información', 'Aplicación de Técnica Artística').",
+      "descripcion": "Descripción de cómo el estudiante demostró esta habilidad, **citando una parte específica del trabajo**."
+    }
+  ],
   "feedback_estudiante": {
-    "resumen": "Resumen general del desempeño",
+    "resumen": "Un resumen breve y alentador del desempeño general.",
     "fortalezas": [
       {
-        "descripcion": "Descripción de la fortaleza",
-        "cita": "Evidencia del trabajo"
+        "descripcion": "Describe una fortaleza clave.",
+        "cita": "**Cita textualmente o describe una parte específica del trabajo** que demuestre esta fortaleza."
       }
     ],
     "oportunidades": [
       {
-        "descripcion": "Área de mejora",
-        "cita": "Evidencia específica"
+        "descripcion": "Describe un área de mejora clara y accionable.",
+        "cita": "**Cita textualmente o describe una parte específica del trabajo** donde se evidencia esta área de mejora."
       }
     ],
-    "siguiente_paso_sugerido": "Sugerencia específica para mejorar"
+    "siguiente_paso_sugerido": "Una sugerencia concreta y práctica que el estudiante puede aplicar para mejorar en el futuro."
   },
   "analisis_profesor": {
-    "desempeno_general": "Análisis general del desempeño",
-    "patrones_observados": [
-      {
-        "descripcion": "Patrón observado",
-        "cita": "Evidencia"
-      }
-    ],
-    "sugerencia_pedagogica": "Sugerencia para el docente"
-  },
-  "analisis_detallado": [
-    {
-      "criterio": "Nombre del criterio",
-      "evidencia": "Evidencia encontrada",
-      "justificacion": "Justificación del puntaje",
-      "puntaje": "X/Y puntos"
-    }
-  ]
-}`
+    "desempeno_general": "Un análisis del desempeño para el profesor, más técnico que el del estudiante.",
+    "patrones_observados": "Describe patrones de error o acierto comunes que podrías estar viendo.",
+    "sugerencia_pedagogica": "Una sugerencia para el docente sobre cómo abordar las dificultades observadas en la enseñanza."
+  }
+}`;
 
   const data = await callMistralAPI({
     model: "mistral-large-latest",
     messages: [{ role: "user", content: prompt }],
     response_format: { type: "json_object" },
-  })
+  });
 
   try {
-    const parsed = JSON.parse(data.choices[0].message.content)
+    const parsed = JSON.parse(data.choices[0].message.content);
     if (typeof parsed.puntaje_obtenido === "undefined" || !parsed.feedback_estudiante) {
-      throw new Error("Invalid AI response format")
+      throw new Error("La respuesta de la IA no tiene el formato JSON esperado.");
     }
-    return parsed
+    return parsed;
   } catch (e) {
-    throw new Error(`Invalid JSON response from AI: ${data.choices[0].message.content}`)
+    throw new Error(`Respuesta JSON inválida de la IA: ${data.choices[0].message.content}`);
   }
 }
 
-function calculateFinalGrade(
-  puntajeObtenido: number,
-  puntajeMax: number,
-  sistema: string,
-  exigencia: number,
-  notaAprobacion: number,
-) {
-  if (puntajeMax <= 0) return sistema === "chile_2_7" ? 2.0 : 0
 
-  const porcentaje = puntajeObtenido / puntajeMax
-
-  if (sistema === "chile_2_7") {
-    const porcentajeExigencia = exigencia / 100
-    const notaMaxima = 7.0
-    const notaMinima = 2.0
-    let nota
-
-    if (porcentaje >= porcentajeExigencia) {
-      nota =
-        notaAprobacion +
-        (notaMaxima - notaAprobacion) * ((porcentaje - porcentajeExigencia) / (1 - porcentajeExigencia))
-    } else {
-      nota = notaMinima + (notaAprobacion - notaMinima) * (porcentaje / porcentajeExigencia)
-    }
-    return Math.min(notaMaxima, Math.max(notaMinima, Math.round(nota * 10) / 10))
-  } else if (sistema === "latam_1_10") {
-    return Math.min(10.0, 1.0 + 9.0 * porcentaje)
-  } else if (sistema === "porcentual_0_100") {
-    return Math.min(100.0, 100.0 * porcentaje)
-  }
-  return 0
-}
-
+// --- FUNCIÓN PRINCIPAL POST (SIN CAMBIOS) ---
 export async function POST(request: NextRequest) {
   try {
-    const formData = await request.formData()
-    const files = formData.getAll("files") as File[]
-    const configStr = formData.get("config") as string
-    const config: EvaluationConfig = JSON.parse(configStr)
+    const formData = await request.formData();
+    const files = formData.getAll("files") as File[];
+    const configStr = formData.get("config") as string;
+    const config: EvaluationConfig = JSON.parse(configStr);
 
     if (!files.length) {
-      return NextResponse.json({
-        success: false,
-        error: "No files provided",
-      })
+      return NextResponse.json({ success: false, error: "No files provided" });
     }
 
-    const evaluations = []
-
+    const evaluations = [];
     for (const file of files) {
       try {
-        const buffer = Buffer.from(await file.arrayBuffer())
-
-        // Extract text using Azure OCR
-        let extractedText = ""
+        const buffer = Buffer.from(await file.arrayBuffer());
+        let extractedText = "";
         if (file.type.startsWith("image/") || file.name.endsWith(".pdf")) {
-          extractedText = await ocrAzure(buffer)
+          extractedText = await ocrAzure(buffer);
         } else if (file.name.endsWith(".txt")) {
-          extractedText = await file.text()
+          extractedText = await file.text();
         }
 
-        // Extract student name using AI
-        const studentName = (await extractNameWithAI(extractedText)) || `Estudiante_${file.name.split(".")[0]}`
-
-        // Evaluate with AI
-        const aiResult = await evaluateWithAI(extractedText, config, studentName)
-
-        // Calculate final grade
+        const studentName = (await extractNameWithAI(extractedText)) || `Estudiante_${file.name.split(".")[0]}`;
+        const aiResult = await evaluateWithAI(extractedText, config, studentName);
         const finalGrade = calculateFinalGrade(
-          aiResult.puntaje_obtenido,
-          config.puntajeMaximo,
-          config.sistema,
-          config.nivelExigencia,
-          config.notaAprobacion,
-        )
+          aiResult.puntaje_obtenido, config.puntajeMaximo, config.sistema, config.nivelExigencia, config.notaAprobacion
+        );
 
         const evaluation = {
           id: `eval_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -264,24 +183,16 @@ export async function POST(request: NextRequest) {
           analisis_detallado: aiResult.analisis_detallado,
           bonificacion: 0,
           justificacionDecimas: "",
-        }
-
-        evaluations.push(evaluation)
+        };
+        evaluations.push(evaluation);
       } catch (error) {
-        console.error(`Error processing file ${file.name}:`, error)
-        // Continue with other files even if one fails
+        console.error(`Error processing file ${file.name}:`, error);
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      evaluations,
-    })
+    return NextResponse.json({ success: true, evaluations });
   } catch (error) {
-    console.error("Evaluation error:", error)
-    return NextResponse.json({
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error occurred",
-    })
+    console.error("Evaluation error:", error);
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Unknown error occurred" });
   }
 }
