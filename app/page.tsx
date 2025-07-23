@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,7 +11,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"
 import { Badge } from "@/components/ui/badge"
-import { Upload, FileText, Brain, Download, Copy, Trash2, BarChart3, GraduationCap, Clock } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import {
+  Upload,
+  FileText,
+  Brain,
+  Download,
+  Copy,
+  Trash2,
+  BarChart3,
+  GraduationCap,
+  Clock,
+  X,
+  Plus,
+  Eye,
+  Loader2,
+  FileIcon,
+} from "lucide-react"
 
 interface EvaluationConfig {
   sistema: string
@@ -21,6 +36,20 @@ interface EvaluationConfig {
   notaAprobacion: number
   flexibility: number
   fecha: string
+}
+
+interface FilePreview {
+  id: string
+  file: File
+  preview?: string
+  type: "image" | "pdf" | "other"
+}
+
+interface StudentGroup {
+  id: string
+  studentName: string
+  files: FilePreview[]
+  isExtractingName?: boolean
 }
 
 interface StudentEvaluation {
@@ -37,20 +66,24 @@ interface StudentEvaluation {
   analisis_detallado: any[]
   bonificacion: number
   justificacionDecimas: string
+  filesPreviews?: FilePreview[]
 }
 
 export default function GeniusEvaluator() {
   const [activeTab, setActiveTab] = useState("evaluate")
   const [isLoading, setIsLoading] = useState(false)
-  const [loadingMessage, setLoadingMessage] = useState("Evaluando...")
   const [evaluations, setEvaluations] = useState<StudentEvaluation[]>([])
+  const [studentGroups, setStudentGroups] = useState<StudentGroup[]>([])
+  const [draggedFile, setDraggedFile] = useState<string | null>(null)
+  const [selectedEvaluation, setSelectedEvaluation] = useState<StudentEvaluation | null>(null)
+
   const [currentEvaluation, setCurrentEvaluation] = useState({
     nombrePrueba: "",
     curso: "",
     rubrica: "",
     preguntasObjetivas: "",
-    files: [] as File[],
   })
+
   const [config, setConfig] = useState<EvaluationConfig>({
     sistema: "chile_2_7",
     nivelExigencia: 60,
@@ -72,35 +105,165 @@ export default function GeniusEvaluator() {
     localStorage.setItem("evaluations", JSON.stringify(newEvaluations))
   }
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const createFilePreview = async (file: File): Promise<FilePreview> => {
+    const id = `file_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    let preview = undefined
+    let type: "image" | "pdf" | "other" = "other"
+
+    if (file.type.startsWith("image/")) {
+      type = "image"
+      preview = URL.createObjectURL(file)
+    } else if (file.type === "application/pdf") {
+      type = "pdf"
+    }
+
+    return { id, file, preview, type }
+  }
+
+  const extractNameFromFile = async (filePreview: FilePreview): Promise<string> => {
+    try {
+      const formData = new FormData()
+      formData.append("file", filePreview.file)
+
+      const response = await fetch("/api/extract-name", {
+        method: "POST",
+        body: formData,
+      })
+
+      const result = await response.json()
+      return result.success ? result.name : ""
+    } catch (error) {
+      console.error("Error extracting name:", error)
+      return ""
+    }
+  }
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || [])
-    setCurrentEvaluation((prev) => ({
-      ...prev,
-      files: [...prev.files, ...files],
-    }))
+
+    for (const file of files) {
+      const filePreview = await createFilePreview(file)
+
+      // Crear un nuevo grupo para cada archivo
+      const newGroupId = `group_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      const newGroup: StudentGroup = {
+        id: newGroupId,
+        studentName: "",
+        files: [filePreview],
+        isExtractingName: true,
+      }
+
+      setStudentGroups((prev) => [...prev, newGroup])
+
+      // Extraer nombre automáticamente
+      const extractedName = await extractNameFromFile(filePreview)
+
+      setStudentGroups((prev) =>
+        prev.map((group) =>
+          group.id === newGroupId ? { ...group, studentName: extractedName, isExtractingName: false } : group,
+        ),
+      )
+    }
+  }
+
+  const removeFileFromGroup = (groupId: string, fileId: string) => {
+    setStudentGroups(
+      (prev) =>
+        prev
+          .map((group) => {
+            if (group.id === groupId) {
+              const updatedFiles = group.files.filter((f) => f.id !== fileId)
+              // Si no quedan archivos, eliminar el grupo
+              return updatedFiles.length > 0 ? { ...group, files: updatedFiles } : null
+            }
+            return group
+          })
+          .filter(Boolean) as StudentGroup[],
+    )
+  }
+
+  const addNewStudentGroup = () => {
+    const newGroup: StudentGroup = {
+      id: `group_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      studentName: "",
+      files: [],
+    }
+    setStudentGroups((prev) => [...prev, newGroup])
+  }
+
+  const updateStudentName = (groupId: string, name: string) => {
+    setStudentGroups((prev) => prev.map((group) => (group.id === groupId ? { ...group, studentName: name } : group)))
+  }
+
+  const handleDragStart = (fileId: string) => {
+    setDraggedFile(fileId)
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+  }
+
+  const handleDrop = (e: React.DragEvent, targetGroupId: string) => {
+    e.preventDefault()
+    if (!draggedFile) return
+
+    // Encontrar el archivo arrastrado y su grupo origen
+    let sourceGroupId = ""
+    let draggedFileObj: FilePreview | null = null
+
+    for (const group of studentGroups) {
+      const file = group.files.find((f) => f.id === draggedFile)
+      if (file) {
+        sourceGroupId = group.id
+        draggedFileObj = file
+        break
+      }
+    }
+
+    if (!draggedFileObj || sourceGroupId === targetGroupId) return
+
+    setStudentGroups(
+      (prev) =>
+        prev
+          .map((group) => {
+            if (group.id === sourceGroupId) {
+              // Remover archivo del grupo origen
+              const updatedFiles = group.files.filter((f) => f.id !== draggedFile)
+              return updatedFiles.length > 0 ? { ...group, files: updatedFiles } : null
+            } else if (group.id === targetGroupId) {
+              // Añadir archivo al grupo destino
+              return { ...group, files: [...group.files, draggedFileObj!] }
+            }
+            return group
+          })
+          .filter(Boolean) as StudentGroup[],
+    )
+
+    setDraggedFile(null)
   }
 
   const evaluateDocuments = async () => {
-    if (!currentEvaluation.files.length) {
+    if (studentGroups.length === 0) {
       alert("Por favor, sube al menos un documento.")
       return
     }
+
     if (!currentEvaluation.rubrica.trim()) {
       alert("Por favor, proporciona una rúbrica de evaluación.")
       return
     }
 
     setIsLoading(true)
-    const totalFiles = currentEvaluation.files.length
-    const newEvaluationsFromBatch: StudentEvaluation[] = []
+    try {
+      const newEvaluations: StudentEvaluation[] = []
 
-    for (let i = 0; i < totalFiles; i++) {
-      const file = currentEvaluation.files[i]
-      setLoadingMessage(`Evaluando ${i + 1} de ${totalFiles}: ${file.name}`)
-      
-      try {
+      for (const group of studentGroups) {
+        if (group.files.length === 0) continue
+
         const formData = new FormData()
-        formData.append("files", file) // Enviamos solo UN archivo
+        group.files.forEach((filePreview) => {
+          formData.append("files", filePreview.file)
+        })
         formData.append(
           "config",
           JSON.stringify({
@@ -119,29 +282,33 @@ export default function GeniusEvaluator() {
 
         const result = await response.json()
         if (result.success && result.evaluations.length > 0) {
-          newEvaluationsFromBatch.push(...result.evaluations)
-        } else {
-          // Si un archivo falla, lo registramos y continuamos con el siguiente
-          console.error(`Error evaluando el archivo ${file.name}:`, result.error)
+          // Usar el nombre del grupo si está disponible
+          const evaluation = result.evaluations[0]
+          if (group.studentName.trim()) {
+            evaluation.nombreEstudiante = group.studentName
+          }
+          evaluation.filesPreviews = group.files
+          newEvaluations.push(evaluation)
         }
-      } catch (error) {
-        console.error(`Error de red evaluando el archivo ${file.name}:`, error)
       }
-    }
 
-    // Al final del bucle, actualizamos todo
-    if (newEvaluationsFromBatch.length > 0) {
-      saveEvaluations([...evaluations, ...newEvaluationsFromBatch])
-      setActiveTab("results")
-      alert(`✅ Evaluación completada. ${newEvaluationsFromBatch.length} de ${totalFiles} estudiantes fueron evaluados.`)
-    } else {
-      alert(`❌ La evaluación finalizó, pero no se pudo procesar ningún estudiante. Revisa la consola para más detalles.`)
+      if (newEvaluations.length > 0) {
+        const allEvaluations = [...evaluations, ...newEvaluations]
+        saveEvaluations(allEvaluations)
+        setActiveTab("results")
+        alert(`✅ Evaluación completada. ${newEvaluations.length} estudiantes evaluados.`)
+
+        // Limpiar grupos después de evaluar
+        setStudentGroups([])
+      } else {
+        throw new Error("No se pudieron procesar las evaluaciones")
+      }
+    } catch (error) {
+      alert(`❌ Error durante la evaluación: ${error}`)
+    } finally {
+      setIsLoading(false)
     }
-    
-    setIsLoading(false)
-    setLoadingMessage("Evaluando...")
   }
-
 
   const exportToCSV = () => {
     if (evaluations.length === 0) {
@@ -190,9 +357,53 @@ export default function GeniusEvaluator() {
 
   const clearHistory = () => {
     if (confirm("¿Borrar PERMANENTEMENTE todo el historial?")) {
-      saveEvaluations([])
+      setEvaluations([])
+      localStorage.removeItem("evaluations")
     }
   }
+
+  const FilePreviewCard = ({
+    filePreview,
+    groupId,
+    isDraggable = true,
+  }: {
+    filePreview: FilePreview
+    groupId: string
+    isDraggable?: boolean
+  }) => (
+    <div
+      className={`relative border-2 border-dashed border-gray-300 rounded-lg p-2 bg-white ${
+        isDraggable ? "cursor-move hover:border-blue-400" : ""
+      }`}
+      draggable={isDraggable}
+      onDragStart={() => isDraggable && handleDragStart(filePreview.id)}
+    >
+      <div className="flex flex-col items-center space-y-2">
+        {filePreview.type === "image" && filePreview.preview ? (
+          <img
+            src={filePreview.preview || "/placeholder.svg"}
+            alt={filePreview.file.name}
+            className="w-16 h-16 object-cover rounded"
+          />
+        ) : filePreview.type === "pdf" ? (
+          <FileIcon className="w-16 h-16 text-red-500" />
+        ) : (
+          <FileText className="w-16 h-16 text-gray-500" />
+        )}
+        <span className="text-xs text-center truncate w-full" title={filePreview.file.name}>
+          {filePreview.file.name}
+        </span>
+      </div>
+      {isDraggable && (
+        <button
+          onClick={() => removeFileFromGroup(groupId, filePreview.id)}
+          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+        >
+          <X className="w-3 h-3" />
+        </button>
+      )}
+    </div>
+  )
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -352,22 +563,57 @@ export default function GeniusEvaluator() {
                     </Button>
                   </Label>
                 </div>
-
-                {currentEvaluation.files.length > 0 && (
-                  <div className="space-y-2">
-                    <Label>Archivos seleccionados:</Label>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                      {currentEvaluation.files.map((file, index) => (
-                        <div key={index} className="p-2 border rounded-lg text-sm">
-                          <FileText className="w-4 h-4 inline mr-1" />
-                          {file.name}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </CardContent>
             </Card>
+
+            {studentGroups.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex justify-between items-center">
+                    <span>Agrupar Evaluaciones por Estudiante</span>
+                    <Button onClick={addNewStudentGroup} variant="outline" size="sm">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Nuevo Estudiante
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {studentGroups.map((group) => (
+                    <div
+                      key={group.id}
+                      className="border rounded-lg p-4 bg-gray-50"
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => handleDrop(e, group.id)}
+                    >
+                      <div className="flex items-center gap-4 mb-4">
+                        <div className="flex-1">
+                          <Label htmlFor={`student-${group.id}`}>Nombre del Estudiante</Label>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              id={`student-${group.id}`}
+                              value={group.studentName}
+                              onChange={(e) => updateStudentName(group.id, e.target.value)}
+                              placeholder="Nombre del estudiante..."
+                              className="flex-1"
+                            />
+                            {group.isExtractingName && <Loader2 className="w-4 h-4 animate-spin text-blue-500" />}
+                          </div>
+                        </div>
+                        <Badge variant="secondary">
+                          {group.files.length} archivo{group.files.length !== 1 ? "s" : ""}
+                        </Badge>
+                      </div>
+
+                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                        {group.files.map((filePreview) => (
+                          <FilePreviewCard key={filePreview.id} filePreview={filePreview} groupId={group.id} />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
 
             <Card>
               <CardHeader>
@@ -398,23 +644,22 @@ export default function GeniusEvaluator() {
 
                 <Button
                   onClick={evaluateDocuments}
-                  disabled={isLoading || !currentEvaluation.files.length || !currentEvaluation.rubrica.trim()}
-                  className="w-full flex items-center justify-center"
+                  disabled={isLoading || studentGroups.length === 0 || !currentEvaluation.rubrica.trim()}
+                  className="w-full"
                   size="lg"
                 >
                   {isLoading ? (
                     <>
                       <Clock className="w-4 h-4 mr-2 animate-spin" />
-                      <span>{loadingMessage}</span>
+                      Evaluando...
                     </>
                   ) : (
                     <>
                       <Brain className="w-4 h-4 mr-2" />
-                      <span>Iniciar Evaluación</span>
+                      Iniciar Evaluación
                     </>
                   )}
                 </Button>
-
               </CardContent>
             </Card>
           </TabsContent>
@@ -432,55 +677,169 @@ export default function GeniusEvaluator() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {evaluations.map((evaluation) => (
-                      <Card key={evaluation.id} className="border-l-4 border-l-blue-500">
-                        <CardContent className="pt-6">
-                          <div className="flex justify-between items-start mb-4">
-                            <div>
-                              <h3 className="font-semibold text-lg">{evaluation.nombreEstudiante}</h3>
-                              <p className="text-gray-600">
-                                {evaluation.nombrePrueba} - {evaluation.curso}
-                              </p>
-                            </div>
-                            <Badge variant="secondary" className="text-lg px-3 py-1">
-                              {evaluation.notaFinal.toFixed(1)}
-                            </Badge>
-                          </div>
-
-                          {evaluation.feedback_estudiante && (
-                            <div className="space-y-3">
-                              <div>
-                                <h4 className="font-medium text-green-700">🌟 Fortalezas</h4>
-                                <ul className="list-disc list-inside text-sm text-gray-600 ml-4">
-                                  {evaluation.feedback_estudiante.fortalezas?.map((fortaleza: any, index: number) => (
-                                    <li key={index}>{fortaleza.descripcion}</li>
-                                  ))}
-                                </ul>
-                              </div>
-
-                              <div>
-                                <h4 className="font-medium text-orange-700">🚀 Oportunidades de Mejora</h4>
-                                <ul className="list-disc list-inside text-sm text-gray-600 ml-4">
-                                  {evaluation.feedback_estudiante.oportunidades?.map(
-                                    (oportunidad: any, index: number) => (
-                                      <li key={index}>{oportunidad.descripcion}</li>
-                                    ),
-                                  )}
-                                </ul>
-                              </div>
-
-                              {evaluation.feedback_estudiante.siguiente_paso_sugerido && (
+                    {evaluations.slice(-5).map((evaluation) => (
+                      <Dialog key={evaluation.id}>
+                        <DialogTrigger asChild>
+                          <Card className="border-l-4 border-l-blue-500 cursor-pointer hover:shadow-md transition-shadow">
+                            <CardContent className="pt-6">
+                              <div className="flex justify-between items-start mb-4">
                                 <div>
-                                  <h4 className="font-medium text-blue-700">🎯 Siguiente Paso</h4>
-                                  <p className="text-sm text-gray-600">
-                                    {evaluation.feedback_estudiante.siguiente_paso_sugerido}
+                                  <h3 className="font-semibold text-lg">{evaluation.nombreEstudiante}</h3>
+                                  <p className="text-gray-600">
+                                    {evaluation.nombrePrueba} - {evaluation.curso}
                                   </p>
                                 </div>
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="secondary" className="text-lg px-3 py-1">
+                                    {evaluation.notaFinal.toFixed(1)}
+                                  </Badge>
+                                  <Eye className="w-4 h-4 text-gray-400" />
+                                </div>
+                              </div>
+
+                              {evaluation.feedback_estudiante && (
+                                <div className="space-y-2">
+                                  <div>
+                                    <h4 className="font-medium text-green-700 text-sm">🌟 Fortalezas</h4>
+                                    <p className="text-sm text-gray-600 line-clamp-2">
+                                      {evaluation.feedback_estudiante.fortalezas?.[0]?.descripcion ||
+                                        "Sin fortalezas registradas"}
+                                    </p>
+                                  </div>
+                                </div>
                               )}
+                            </CardContent>
+                          </Card>
+                        </DialogTrigger>
+
+                        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                          <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                              <GraduationCap className="w-5 h-5" />
+                              Carpeta de {evaluation.nombreEstudiante}
+                            </DialogTitle>
+                          </DialogHeader>
+
+                          <div className="space-y-6">
+                            {/* Información General */}
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <Label className="text-sm font-medium">Evaluación</Label>
+                                <p className="text-sm">{evaluation.nombrePrueba}</p>
+                              </div>
+                              <div>
+                                <Label className="text-sm font-medium">Curso</Label>
+                                <p className="text-sm">{evaluation.curso}</p>
+                              </div>
+                              <div>
+                                <Label className="text-sm font-medium">Nota Final</Label>
+                                <Badge variant="secondary" className="text-lg">
+                                  {evaluation.notaFinal.toFixed(1)}
+                                </Badge>
+                              </div>
+                              <div>
+                                <Label className="text-sm font-medium">Puntaje</Label>
+                                <p className="text-sm">
+                                  {evaluation.puntajeObtenido}/{evaluation.configuracion.puntajeMaximo}
+                                </p>
+                              </div>
                             </div>
-                          )}
-                        </CardContent>
-                      </Card>
+
+                            {/* Archivos Evaluados */}
+                            {evaluation.filesPreviews && evaluation.filesPreviews.length > 0 && (
+                              <div>
+                                <Label className="text-sm font-medium mb-2 block">Archivos Evaluados</Label>
+                                <div className="grid grid-cols-4 gap-2">
+                                  {evaluation.filesPreviews.map((filePreview) => (
+                                    <FilePreviewCard
+                                      key={filePreview.id}
+                                      filePreview={filePreview}
+                                      groupId=""
+                                      isDraggable={false}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Feedback Detallado */}
+                            {evaluation.feedback_estudiante && (
+                              <div className="space-y-4">
+                                <div>
+                                  <Label className="text-sm font-medium">Resumen General</Label>
+                                  <p className="text-sm text-gray-600 mt-1">{evaluation.feedback_estudiante.resumen}</p>
+                                </div>
+
+                                <div>
+                                  <Label className="text-sm font-medium text-green-700">🌟 Fortalezas</Label>
+                                  <div className="space-y-2 mt-1">
+                                    {evaluation.feedback_estudiante.fortalezas?.map((fortaleza: any, index: number) => (
+                                      <div key={index} className="bg-green-50 p-3 rounded-lg">
+                                        <p className="font-medium text-sm">{fortaleza.descripcion}</p>
+                                        <p className="text-xs text-gray-600 mt-1">{fortaleza.cita}</p>
+                                        {fortaleza.habilidad_demostrada && (
+                                          <Badge variant="outline" className="mt-2 text-xs">
+                                            {fortaleza.habilidad_demostrada}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <Label className="text-sm font-medium text-orange-700">
+                                    🚀 Oportunidades de Mejora
+                                  </Label>
+                                  <div className="space-y-2 mt-1">
+                                    {evaluation.feedback_estudiante.oportunidades?.map(
+                                      (oportunidad: any, index: number) => (
+                                        <div key={index} className="bg-orange-50 p-3 rounded-lg">
+                                          <p className="font-medium text-sm">{oportunidad.descripcion}</p>
+                                          <p className="text-xs text-gray-600 mt-1">{oportunidad.cita}</p>
+                                          {oportunidad.sugerencia_tecnica && (
+                                            <p className="text-xs text-blue-600 mt-1 font-medium">
+                                              💡 {oportunidad.sugerencia_tecnica}
+                                            </p>
+                                          )}
+                                        </div>
+                                      ),
+                                    )}
+                                  </div>
+                                </div>
+
+                                {evaluation.feedback_estudiante.siguiente_paso_sugerido && (
+                                  <div>
+                                    <Label className="text-sm font-medium text-blue-700">🎯 Siguiente Paso</Label>
+                                    <p className="text-sm text-gray-600 mt-1 bg-blue-50 p-3 rounded-lg">
+                                      {evaluation.feedback_estudiante.siguiente_paso_sugerido}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Análisis por Criterio */}
+                            {evaluation.analisis_detallado && evaluation.analisis_detallado.length > 0 && (
+                              <div>
+                                <Label className="text-sm font-medium mb-2 block">Análisis por Criterio</Label>
+                                <div className="space-y-2">
+                                  {evaluation.analisis_detallado.map((criterio: any, index: number) => (
+                                    <div key={index} className="border rounded-lg p-3">
+                                      <div className="flex justify-between items-start mb-2">
+                                        <h4 className="font-medium text-sm">{criterio.criterio}</h4>
+                                        <Badge variant="outline">{criterio.puntaje}</Badge>
+                                      </div>
+                                      <p className="text-xs text-gray-600 mb-1">{criterio.evidencia}</p>
+                                      <p className="text-xs text-gray-500">{criterio.justificacion}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </DialogContent>
+                      </Dialog>
                     ))}
                   </div>
                 )}
@@ -516,35 +875,156 @@ export default function GeniusEvaluator() {
                     <p className="text-gray-600">No hay historial disponible</p>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse">
-                      <thead>
-                        <tr className="border-b">
-                          <th className="text-left p-2">Estudiante</th>
-                          <th className="text-left p-2">Curso</th>
-                          <th className="text-left p-2">Evaluación</th>
-                          <th className="text-left p-2">Nota</th>
-                          <th className="text-left p-2">Puntaje</th>
-                          <th className="text-left p-2">Fecha</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {evaluations.map((evaluation) => (
-                          <tr key={evaluation.id} className="border-b hover:bg-gray-50">
-                            <td className="p-2">{evaluation.nombreEstudiante}</td>
-                            <td className="p-2">{evaluation.curso}</td>
-                            <td className="p-2">{evaluation.nombrePrueba}</td>
-                            <td className="p-2">
+                  <div className="space-y-2">
+                    {evaluations.map((evaluation) => (
+                      <Dialog key={evaluation.id}>
+                        <DialogTrigger asChild>
+                          <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                            <div className="flex items-center gap-4">
+                              <div>
+                                <p className="font-medium">{evaluation.nombreEstudiante}</p>
+                                <p className="text-sm text-gray-600">
+                                  {evaluation.nombrePrueba} - {evaluation.curso}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-4">
                               <Badge variant="secondary">{evaluation.notaFinal.toFixed(1)}</Badge>
-                            </td>
-                            <td className="p-2">
-                              {evaluation.puntajeObtenido}/{evaluation.configuracion.puntajeMaximo}
-                            </td>
-                            <td className="p-2">{evaluation.configuracion.fecha}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                              <span className="text-sm text-gray-500">
+                                {evaluation.puntajeObtenido}/{evaluation.configuracion.puntajeMaximo}
+                              </span>
+                              <span className="text-sm text-gray-500">{evaluation.configuracion.fecha}</span>
+                              <Eye className="w-4 h-4 text-gray-400" />
+                            </div>
+                          </div>
+                        </DialogTrigger>
+
+                        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                          <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                              <GraduationCap className="w-5 h-5" />
+                              Carpeta de {evaluation.nombreEstudiante}
+                            </DialogTitle>
+                          </DialogHeader>
+
+                          {/* Mismo contenido del modal que en la pestaña de resultados */}
+                          <div className="space-y-6">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <Label className="text-sm font-medium">Evaluación</Label>
+                                <p className="text-sm">{evaluation.nombrePrueba}</p>
+                              </div>
+                              <div>
+                                <Label className="text-sm font-medium">Curso</Label>
+                                <p className="text-sm">{evaluation.curso}</p>
+                              </div>
+                              <div>
+                                <Label className="text-sm font-medium">Nota Final</Label>
+                                <Badge variant="secondary" className="text-lg">
+                                  {evaluation.notaFinal.toFixed(1)}
+                                </Badge>
+                              </div>
+                              <div>
+                                <Label className="text-sm font-medium">Puntaje</Label>
+                                <p className="text-sm">
+                                  {evaluation.puntajeObtenido}/{evaluation.configuracion.puntajeMaximo}
+                                </p>
+                              </div>
+                            </div>
+
+                            {evaluation.filesPreviews && evaluation.filesPreviews.length > 0 && (
+                              <div>
+                                <Label className="text-sm font-medium mb-2 block">Archivos Evaluados</Label>
+                                <div className="grid grid-cols-4 gap-2">
+                                  {evaluation.filesPreviews.map((filePreview) => (
+                                    <FilePreviewCard
+                                      key={filePreview.id}
+                                      filePreview={filePreview}
+                                      groupId=""
+                                      isDraggable={false}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {evaluation.feedback_estudiante && (
+                              <div className="space-y-4">
+                                <div>
+                                  <Label className="text-sm font-medium">Resumen General</Label>
+                                  <p className="text-sm text-gray-600 mt-1">{evaluation.feedback_estudiante.resumen}</p>
+                                </div>
+
+                                <div>
+                                  <Label className="text-sm font-medium text-green-700">🌟 Fortalezas</Label>
+                                  <div className="space-y-2 mt-1">
+                                    {evaluation.feedback_estudiante.fortalezas?.map((fortaleza: any, index: number) => (
+                                      <div key={index} className="bg-green-50 p-3 rounded-lg">
+                                        <p className="font-medium text-sm">{fortaleza.descripcion}</p>
+                                        <p className="text-xs text-gray-600 mt-1">{fortaleza.cita}</p>
+                                        {fortaleza.habilidad_demostrada && (
+                                          <Badge variant="outline" className="mt-2 text-xs">
+                                            {fortaleza.habilidad_demostrada}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <Label className="text-sm font-medium text-orange-700">
+                                    🚀 Oportunidades de Mejora
+                                  </Label>
+                                  <div className="space-y-2 mt-1">
+                                    {evaluation.feedback_estudiante.oportunidades?.map(
+                                      (oportunidad: any, index: number) => (
+                                        <div key={index} className="bg-orange-50 p-3 rounded-lg">
+                                          <p className="font-medium text-sm">{oportunidad.descripcion}</p>
+                                          <p className="text-xs text-gray-600 mt-1">{oportunidad.cita}</p>
+                                          {oportunidad.sugerencia_tecnica && (
+                                            <p className="text-xs text-blue-600 mt-1 font-medium">
+                                              💡 {oportunidad.sugerencia_tecnica}
+                                            </p>
+                                          )}
+                                        </div>
+                                      ),
+                                    )}
+                                  </div>
+                                </div>
+
+                                {evaluation.feedback_estudiante.siguiente_paso_sugerido && (
+                                  <div>
+                                    <Label className="text-sm font-medium text-blue-700">🎯 Siguiente Paso</Label>
+                                    <p className="text-sm text-gray-600 mt-1 bg-blue-50 p-3 rounded-lg">
+                                      {evaluation.feedback_estudiante.siguiente_paso_sugerido}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {evaluation.analisis_detallado && evaluation.analisis_detallado.length > 0 && (
+                              <div>
+                                <Label className="text-sm font-medium mb-2 block">Análisis por Criterio</Label>
+                                <div className="space-y-2">
+                                  {evaluation.analisis_detallado.map((criterio: any, index: number) => (
+                                    <div key={index} className="border rounded-lg p-3">
+                                      <div className="flex justify-between items-start mb-2">
+                                        <h4 className="font-medium text-sm">{criterio.criterio}</h4>
+                                        <Badge variant="outline">{criterio.puntaje}</Badge>
+                                      </div>
+                                      <p className="text-xs text-gray-600 mb-1">{criterio.evidencia}</p>
+                                      <p className="text-xs text-gray-500">{criterio.justificacion}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    ))}
                   </div>
                 )}
               </CardContent>
