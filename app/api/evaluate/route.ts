@@ -50,6 +50,8 @@ async function extractNameWithAI(text: string) {
   });
   return data.choices[0].message.content.trim();
 }
+
+// --- FUNCIÓN DE EVALUACIÓN CON PROMPT MEJORADO ---
 async function evaluateWithAI(text: string, config: EvaluationConfig, studentName: string) {
   const flexibilityMap: { [key: number]: string } = {
     0: "Eres un evaluador extremadamente RÍGIDO y LITERAL. Te ciñes 100% a la rúbrica.",
@@ -57,14 +59,15 @@ async function evaluateWithAI(text: string, config: EvaluationConfig, studentNam
     10: "Eres un evaluador muy FLEXIBLE y HOLÍSTICO. Valoras la creatividad y el esfuerzo más allá de la rúbrica estricta.",
   };
   const flexibilityDescription = flexibilityMap[config.flexibility] || flexibilityMap[5];
-  const prompt = `### PERFIL Y MISIÓN ###
-Actúas como un profesor experto y un asistente de evaluación pedagógica. Tu misión es analizar el trabajo de un estudiante, asignar un puntaje justo y generar una retroalimentación detallada, específica y constructiva.
 
-### CONTEXTO DE LA EVALUCIÓN ###
+  const prompt = `### PERFIL Y MISIÓN ###
+Actúas como un profesor experto y un asistente de evaluación pedagógica. Tu misión es analizar el trabajo de un estudiante, asignar un puntaje justo y generar una retroalimentación detallada, específica y "mil veces más enriquecida". Tu análisis debe ser profundo, pedagógico y siempre conectado con la evidencia del trabajo.
+
+### CONTEXTO DE LA EVALUACIÓN ###
 - Evaluación: "${config.nombrePrueba}"
 - Curso: "${config.curso}"
 - Estudiante: "${studentName}"
-- Sistema de Calificación: El puntaje máximo total para esta evaluación es **${config.puntajeMaximo} puntos**. Debes asignar un puntaje coherente dentro de esta escala.
+- Sistema de Calificación: El puntaje máximo total para esta evaluación es **${config.puntajeMaximo} puntos**. Tu puntaje asignado DEBE ser coherente con esta escala.
 - Rúbrica de Evaluación: """${config.rubrica}"""
 - Preguntas Objetivas (si aplica): """${config.preguntasObjetivas}"""
 - Tu Nivel de Flexibilidad: **${config.flexibility}/10** - ${flexibilityDescription}
@@ -74,46 +77,53 @@ Actúas como un profesor experto y un asistente de evaluación pedagógica. Tu m
 ${text || "(Sin texto extraído - El trabajo podría ser puramente visual o no contener texto relevante)"}
 """
 
-### TAREAS OBLIGATORIAS ###
-Analiza el trabajo del estudiante y responde ÚNICA Y EXCLUSIVAMENTE con un objeto JSON válido que siga esta estructura:
+### TAREAS OBLIGATORIAS Y FORMATO DE RESPUESTA ###
+Analiza el trabajo y responde ÚNICA Y EXCLUSIVAMENTE con un objeto JSON válido. Sigue estrictamente la estructura y las instrucciones para cada campo.
+
+#### EJEMPLO DE RESPUESTA DE ALTA CALIDAD:
+\`\`\`json
 {
-  "puntaje_obtenido": Int,
+  "puntaje_obtenido": 24,
   "analisis_detallado": [
     {
-      "criterio": "Nombre del criterio evaluado de la rúbrica.",
-      "evidencia": "Descripción de la evidencia encontrada en el trabajo del estudiante.",
-      "justificacion": "Justificación detallada de por qué se asignó el puntaje.",
-      "puntaje": "Puntaje asignado para este criterio (ej: '4/6 puntos')."
+      "criterio": "Crítica Social",
+      "evidencia": "La ilustración representa a personas absortas en sus teléfonos mientras ignoran su entorno.",
+      "justificacion": "El estudiante aborda claramente el tema de la alienación digital. La crítica es profunda porque no solo muestra el problema, sino que utiliza colores grises en las personas y colores vibrantes en el mundo exterior para simbolizar lo que se están perdiendo. Conecta directamente con el criterio de la rúbrica.",
+      "puntaje": "6/7 puntos"
     }
   ],
   "analisis_habilidades": [
     {
-      "habilidad": "Nombre de la habilidad demostrada (ej: 'Pensamiento Crítico', 'Síntesis de Información', 'Aplicación de Técnica Artística').",
-      "descripcion": "Descripción de cómo el estudiante demostró esta habilidad, **citando una parte específica del trabajo**."
+      "habilidad": "Comunicación Visual",
+      "descripcion": "El estudiante demuestra una excelente habilidad para comunicar un mensaje complejo sin texto, usando eficazmente el simbolismo del color para guiar la interpretación del espectador."
     }
   ],
   "feedback_estudiante": {
-    "resumen": "Un resumen breve y alentador del desempeño general.",
+    "resumen": "¡Gran trabajo, [Nombre del Estudiante]! Tu ilustración sobre la alienación digital es visualmente impactante y transmite un mensaje crítico muy relevante y claro.",
     "fortalezas": [
       {
-        "descripcion": "Describe una fortaleza clave.",
-        "cita": "**Cita textualmente o describe una parte específica del trabajo** que demuestre esta fortaleza."
+        "descripcion": "Tu capacidad para usar el color simbólicamente es tu mayor fortaleza en este trabajo.",
+        "cita": "El contraste entre los grises de las figuras humanas y los colores vivos del parque es una decisión de diseño muy inteligente y efectiva que refuerza tu mensaje."
       }
     ],
     "oportunidades": [
       {
-        "descripcion": "Describe un área de mejora clara y accionable.",
-        "cita": "**Cita textualmente o describe una parte específica del trabajo** donde se evidencia esta área de mejora."
+        "descripcion": "Podrías mejorar la composición para guiar aún más la mirada del espectador.",
+        "cita": "Por ejemplo, la figura de la esquina inferior derecha está un poco aislada. Si la hubieras acercado más al grupo central, podrías haber creado un sentido de unidad más fuerte en la alienación que criticas."
       }
     ],
-    "siguiente_paso_sugerido": "Una sugerencia concreta y práctica que el estudiante puede aplicar para mejorar en el futuro."
+    "siguiente_paso_sugerido": "Para tu próximo trabajo, te sugiero experimentar con la 'regla de los tercios' en tu boceto inicial para fortalecer aún más tus composiciones."
   },
   "analisis_profesor": {
-    "desempeno_general": "Un análisis del desempeño para el profesor, más técnico que el del estudiante.",
-    "patrones_observados": "Describe patrones de error o acierto comunes que podrías estar viendo.",
-    "sugerencia_pedagogica": "Una sugerencia para el docente sobre cómo abordar las dificultades observadas en la enseñanza."
+    "desempeno_general": "El estudiante demuestra una comprensión conceptual avanzada del tema y posee las habilidades técnicas para ejecutar su visión. Muestra un alto potencial.",
+    "patrones_observados": "Tiende a concentrar los elementos principales en el centro, podría beneficiarse de explorar composiciones más dinámicas.",
+    "sugerencia_pedagogica": "Recomendar al estudiante el estudio de artistas como Banksy o Pawel Kuczynski para inspirar enfoques en la composición de crítica social."
   }
-}`;
+}
+\`\`\`
+
+### TU TURNO: GENERA EL JSON PARA EL TRABAJO PROPORCIONADO ###
+Ahora, genera el objeto JSON para el trabajo del estudiante que te he pasado, siguiendo el mismo nivel de detalle y especificidad del ejemplo.`;
 
   const data = await callMistralAPI({
     model: "mistral-large-latest",
@@ -132,7 +142,7 @@ Analiza el trabajo del estudiante y responde ÚNICA Y EXCLUSIVAMENTE con un obje
   }
 }
 
-// --- FUNCIÓN PRINCIPAL POST (CORREGIDA) ---
+// --- FUNCIÓN PRINCIPAL POST (SIN CAMBIOS) ---
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -141,12 +151,10 @@ export async function POST(request: NextRequest) {
     const config: EvaluationConfig = JSON.parse(configStr);
 
     if (!files.length) {
-      return NextResponse.json({ success: false, error: "No se proporcionaron archivos." });
+      return NextResponse.json({ success: false, error: "No files provided" });
     }
 
     const evaluations = [];
-    let firstError: string | null = null; // Guardaremos el primer error que ocurra
-
     for (const file of files) {
       try {
         const buffer = Buffer.from(await file.arrayBuffer());
@@ -180,27 +188,26 @@ export async function POST(request: NextRequest) {
         };
         evaluations.push(evaluation);
       } catch (error) {
-        console.error(`Error procesando el archivo ${file.name}:`, error);
-        if (!firstError) {
-          firstError = error instanceof Error ? error.message : "Error desconocido procesando un archivo.";
+        console.error(`Error processing file ${file.name}:`, error);
+        if (error instanceof Error) {
+            const evaluationError = {
+                id: `error_${Date.now()}`,
+                nombreEstudiante: `Error en archivo ${file.name}`,
+                nombrePrueba: config.nombrePrueba,
+                curso: config.curso,
+                notaFinal: 1.0,
+                puntajeObtenido: 0,
+                configuracion: config,
+                feedback_estudiante: { resumen: `Error: ${error.message}` }
+            };
+            evaluations.push(evaluationError as any);
         }
       }
     }
 
-    // NUEVA LÓGICA: Si no se procesó ninguna evaluación con éxito, devolver un error.
-    if (evaluations.length === 0 && files.length > 0) {
-      return NextResponse.json({
-        success: false,
-        error: `No se pudo procesar ningún archivo. El primer error fue: ${firstError}`,
-      });
-    }
-
     return NextResponse.json({ success: true, evaluations });
   } catch (error) {
-    console.error("Error general en la evaluación:", error);
-    return NextResponse.json({
-      success: false,
-      error: error instanceof Error ? error.message : "Ocurrió un error desconocido",
-    });
+    console.error("Evaluation error:", error);
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Unknown error occurred" });
   }
 }
