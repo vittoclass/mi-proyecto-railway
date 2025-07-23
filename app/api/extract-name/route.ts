@@ -1,33 +1,58 @@
 import { type NextRequest, NextResponse } from "next/server"
 
-// Simulación mejorada de extracción de nombres con IA para múltiples archivos
-async function extractNameFromFiles(files: Buffer[], fileNames: string[]): Promise<string> {
-  // Simulamos diferentes casos para demostrar la funcionalidad
-  const randomNames = [
-    "María González Pérez",
-    "Juan Carlos Rodríguez",
-    "Ana Sofía Martínez",
-    "Carlos Eduardo Silva",
-    "Valentina Torres López",
-    "Diego Alejandro Herrera",
-    "Isabella Fernández",
-    "Mateo Sebastián García",
-    "", // Caso donde no se encuentra nombre
-  ]
+// --- FUNCIONES DE IA REQUERIDAS ---
 
-  // Simulamos un delay de procesamiento más realista
-  await new Promise((resolve) => setTimeout(resolve, 800))
+async function callMistralAPI(payload: any) {
+  const apiKey = process.env.MISTRAL_API_KEY
+  if (!apiKey) throw new Error("MISTRAL_API_KEY no está configurada.")
 
-  // Con múltiples archivos, mayor probabilidad de encontrar nombre
-  const hasMultipleFiles = files.length > 1
-  const successRate = hasMultipleFiles ? 0.9 : 0.7
+  const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify(payload),
+  })
 
-  if (Math.random() < successRate) {
-    return randomNames[Math.floor(Math.random() * (randomNames.length - 1))]
-  }
-
-  return ""
+  const data = await response.json()
+  if (!response.ok) throw new Error(`Mistral API error: ${data.error?.message || response.statusText}`)
+  return data
 }
+
+async function ocrAzure(file: Buffer) {
+  const azureKey = process.env.AZURE_VISION_KEY
+  const azureEndpoint = process.env.AZURE_VISION_ENDPOINT
+
+  if (!azureKey || !azureEndpoint) throw new Error("AZURE_VISION_KEY o AZURE_VISION_ENDPOINT no están configuradas.")
+
+  const response = await fetch(`${azureEndpoint}vision/v3.2/ocr?language=es`, {
+    method: "POST",
+    headers: { "Ocp-Apim-Subscription-Key": azureKey, "Content-Type": "application/octet-stream" },
+    body: file,
+  })
+
+  if (!response.ok) throw new Error(`Azure OCR error: ${response.statusText}`)
+  const data = await response.json()
+  return (
+    data.regions
+      ?.flatMap((reg: any) => reg.lines.map((l: any) => l.words.map((w: any) => w.text).join(" ")))
+      .join("\n") || ""
+  )
+}
+
+async function extractNameWithAI(text: string) {
+  if (!text.trim()) return ""
+
+  const prompt = `Como profesor chileno experto, analiza esta transcripción y extrae únicamente el nombre completo del estudiante. Busca patrones como "Nombre:", "Alumno/a:", etc. Corrige errores de OCR (ej: "Jvan" → "Iván"). Responde SOLO con el nombre completo o una cadena vacía si no lo encuentras. Texto: """${text}"""`
+
+  const data = await callMistralAPI({
+    model: "mistral-tiny",
+    messages: [{ role: "user", content: prompt }],
+  })
+
+  return data.choices[0].message.content.trim()
+}
+
+
+// --- FUNCIÓN PRINCIPAL POST (CON LÓGICA REAL) ---
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,21 +63,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "No files provided" })
     }
 
-    const buffers: Buffer[] = []
-    const fileNames: string[] = []
-
+    // Procesar todos los archivos para extraer su texto
+    let combinedText = ""
     for (const file of files) {
-      buffers.push(Buffer.from(await file.arrayBuffer()))
-      fileNames.push(file.name)
+      const buffer = Buffer.from(await file.arrayBuffer())
+      let extractedText = ""
+      if (file.type.startsWith("image/") || file.name.endsWith(".pdf")) {
+        extractedText = await ocrAzure(buffer)
+      } else if (file.name.endsWith(".txt")) {
+        extractedText = await file.text()
+      }
+      combinedText += extractedText + "\n\n"
     }
 
-    const extractedName = await extractNameFromFiles(buffers, fileNames)
+    // Usar la IA para extraer el nombre del texto combinado
+    const extractedName = await extractNameWithAI(combinedText)
 
     return NextResponse.json({
       success: true,
       name: extractedName,
-      confidence: extractedName ? 0.92 : 0.0,
-      filesProcessed: files.length,
     })
   } catch (error) {
     console.error("Name extraction error:", error)
