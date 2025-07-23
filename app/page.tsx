@@ -1,14 +1,3 @@
-Por supuesto. Tienes razón, es más claro si te envío el archivo `page.tsx` completo y actualizado.
-
-Aquí está la versión final que integra correctamente el nuevo botón y el modal de la "Cámara Inteligente" que acabamos de crear.
-
------
-
-## Código `page.tsx` Completo (con Cámara Inteligente Integrada)
-
-Reemplaza **todo** el contenido de tu archivo `page.tsx` con este código.
-
-```tsx
 "use client"
 
 import type React from "react"
