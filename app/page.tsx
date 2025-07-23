@@ -1,14 +1,3 @@
-Tienes toda la razón, y te pido disculpas nuevamente por la confusión anterior con el archivo incompleto. Fue un error de mi parte.
-
-Aquí tienes el archivo `page.tsx` **100% completo y final**, sin partes omitidas y con todas las correcciones y optimizaciones que hemos discutido, incluyendo la solución para el error `puntajeMaximo`.
-
------
-
-## Código `page.tsx` Completo y Definitivo
-
-Por favor, borra todo el contenido de tu archivo `page.tsx` y reemplázalo con este código.
-
-```tsx
 "use client"
 
 import type React from "react"
