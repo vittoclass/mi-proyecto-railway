@@ -1,37 +1,3 @@
-¡Excelente punto\! Tienes toda la razón en cuestionar la solución. Es muy importante que la nueva aplicación sea mejor que la anterior, no un paso atrás.
-
-Te pido disculpas. Mi última sugerencia de "un solo archivo" era una solución rápida para evitar el error de timeout, pero no es la solución ideal.
-
-El motivo por el que tu antiguo "HTML" podía manejar varios archivos y este no, es por una diferencia técnica clave:
-
-  * **Antes (en el HTML):** Tu navegador probablemente enviaba cada archivo directamente a las APIs de IA, uno por uno. El trabajo lo hacía tu computador.
-  * **Ahora (con Railway):** Tu navegador envía **todos los archivos juntos** a tu servidor en Railway. Luego, tu servidor tiene que hacer todo el trabajo de llamar a Azure y a Mistral para cada archivo en una sola petición. Es aquí donde se agota el tiempo.
-
-Pero no te preocupes, podemos tener lo mejor de ambos mundos.
-
------
-
-## La Solución Definitiva: Procesamiento en Lote (Uno por Uno)
-
-Vamos a hacer exactamente lo que pides. Implementaremos una lógica más inteligente en tu aplicación. En lugar de enviar todos los archivos de golpe, la aplicación los enviará al servidor **uno por uno, de forma secuencial**.
-
-El proceso será así:
-
-1.  Tú seleccionas todos los archivos de tus estudiantes como antes.
-2.  Al hacer clic en "Evaluar", la aplicación mostrará un mensaje como "Evaluando 1 de 10...".
-3.  Enviará el primer archivo al servidor, esperará la respuesta.
-4.  Cuando reciba el resultado del primer estudiante, lo mostrará y enviará el segundo archivo.
-5.  Repetirá el proceso hasta terminar con todos.
-
-De esta manera, el servidor solo tiene que hacer un trabajo pequeño cada vez, **evitando el timeout**, y tú obtienes todos tus resultados agrupados al final.
-
------
-
-### Código `page.tsx` con la Nueva Lógica
-
-Aquí tienes el archivo `page.tsx` completo con esta nueva funcionalidad. Reemplaza todo el contenido de tu archivo con este. El archivo de la API (`.../api/evaluate/route.ts`) no necesita cambios, puedes dejar el que ya restauramos.
-
-```tsx
 "use client"
 
 import type React from "react"
