@@ -51,7 +51,7 @@ async function extractNameWithAI(text: string) {
   return data.choices[0].message.content.trim();
 }
 
-// --- FUNCIÓN DE EVALUACIÓN CON PROMPT MEJORADO ---
+// --- FUNCIÓN DE EVALUACIÓN CON PROMPT DE NIVEL EXPERTO v2 ---
 async function evaluateWithAI(text: string, config: EvaluationConfig, studentName: string) {
   const flexibilityMap: { [key: number]: string } = {
     0: "Eres un evaluador extremadamente RÍGIDO y LITERAL. Te ciñes 100% a la rúbrica.",
@@ -61,13 +61,23 @@ async function evaluateWithAI(text: string, config: EvaluationConfig, studentNam
   const flexibilityDescription = flexibilityMap[config.flexibility] || flexibilityMap[5];
 
   const prompt = `### PERFIL Y MISIÓN ###
-Actúas como un profesor experto y un asistente de evaluación pedagógica. Tu misión es analizar el trabajo de un estudiante, asignar un puntaje justo y generar una retroalimentación detallada, específica y "mil veces más enriquecida". Tu análisis debe ser profundo, pedagógico y siempre conectado con la evidencia del trabajo.
+Actúas como un profesor experto y un asistente de evaluación pedagógica. Tu reputación como un evaluador detallado, justo y perspicaz está en juego. Tu misión es analizar a fondo el trabajo de un estudiante, conectando siempre tus observaciones con la evidencia concreta.
+
+### REGLAS CRÍTICAS (NO IGNORAR) ###
+1.  **CERO GENERALIDADES:** No harás afirmaciones genéricas. CADA comentario, fortaleza u oportunidad DEBE estar respaldado por una descripción o cita específica del trabajo.
+2.  **INTERACCIÓN RÚBRICA-TRABAJO:** Tu análisis DEBE demostrar una interacción clara entre los criterios de la rúbrica y lo que observas en el trabajo del estudiante.
+3.  **RESPUESTA EXCLUSIVAMENTE EN JSON:** Tu única salida será un objeto JSON válido, sin ningún texto introductorio o explicaciones adicionales.
+
+### PLAN DE ACCIÓN PARA TU ANÁLISIS ###
+Sigue estos pasos en orden para construir tu respuesta:
+1.  **Análisis Profundo:** Lee detenidamente la rúbrica y el trabajo del estudiante. Identifica dónde y cómo cumple o no con cada criterio.
+2.  **Calificación Basada en Evidencia:** Asigna un puntaje para cada criterio basado en tu análisis, asegurándote de que el puntaje total sea coherente con la escala de **${config.puntajeMaximo} puntos**.
+3.  **Construcción de la Retroalimentación:** Redacta los comentarios para el estudiante y el profesor. Recuerda la REGLA CRÍTICA #1: cada punto debe estar anclado a una evidencia específica.
 
 ### CONTEXTO DE LA EVALUACIÓN ###
 - Evaluación: "${config.nombrePrueba}"
 - Curso: "${config.curso}"
 - Estudiante: "${studentName}"
-- Sistema de Calificación: El puntaje máximo total para esta evaluación es **${config.puntajeMaximo} puntos**. Tu puntaje asignado DEBE ser coherente con esta escala.
 - Rúbrica de Evaluación: """${config.rubrica}"""
 - Preguntas Objetivas (si aplica): """${config.preguntasObjetivas}"""
 - Tu Nivel de Flexibilidad: **${config.flexibility}/10** - ${flexibilityDescription}
@@ -77,53 +87,41 @@ Actúas como un profesor experto y un asistente de evaluación pedagógica. Tu m
 ${text || "(Sin texto extraído - El trabajo podría ser puramente visual o no contener texto relevante)"}
 """
 
-### TAREAS OBLIGATORIAS Y FORMATO DE RESPUESTA ###
-Analiza el trabajo y responde ÚNICA Y EXCLUSIVAMENTE con un objeto JSON válido. Sigue estrictamente la estructura y las instrucciones para cada campo.
+### FORMATO JSON DE SALIDA OBLIGATORIO ###
+Genera el objeto JSON para el trabajo proporcionado, siguiendo estrictamente el siguiente formato y el nivel de detalle exigido.
 
-#### EJEMPLO DE RESPUESTA DE ALTA CALIDAD:
-\`\`\`json
 {
-  "puntaje_obtenido": 24,
+  "puntaje_obtenido": Int,
   "analisis_detallado": [
     {
-      "criterio": "Crítica Social",
-      "evidencia": "La ilustración representa a personas absortas en sus teléfonos mientras ignoran su entorno.",
-      "justificacion": "El estudiante aborda claramente el tema de la alienación digital. La crítica es profunda porque no solo muestra el problema, sino que utiliza colores grises en las personas y colores vibrantes en el mundo exterior para simbolizar lo que se están perdiendo. Conecta directamente con el criterio de la rúbrica.",
-      "puntaje": "6/7 puntos"
-    }
-  ],
-  "analisis_habilidades": [
-    {
-      "habilidad": "Comunicación Visual",
-      "descripcion": "El estudiante demuestra una excelente habilidad para comunicar un mensaje complejo sin texto, usando eficazmente el simbolismo del color para guiar la interpretación del espectador."
+      "criterio": "Nombre del criterio evaluado.",
+      "evidencia": "Descripción DETALLADA de la evidencia encontrada en el trabajo.",
+      "justificacion": "Justificación que CONECTA la evidencia con la rúbrica.",
+      "puntaje": "Puntaje para este criterio (ej: '4/6 puntos')."
     }
   ],
   "feedback_estudiante": {
-    "resumen": "¡Gran trabajo, [Nombre del Estudiante]! Tu ilustración sobre la alienación digital es visualmente impactante y transmite un mensaje crítico muy relevante y claro.",
+    "resumen": "Resumen breve y alentador del desempeño general.",
     "fortalezas": [
       {
-        "descripcion": "Tu capacidad para usar el color simbólicamente es tu mayor fortaleza en este trabajo.",
-        "cita": "El contraste entre los grises de las figuras humanas y los colores vivos del parque es una decisión de diseño muy inteligente y efectiva que refuerza tu mensaje."
+        "descripcion": "Describe una fortaleza clave.",
+        "cita": "Describe la parte específica del trabajo (ej: 'En la esquina superior derecha, el uso del rojo sobre azul...') que demuestra esta fortaleza."
       }
     ],
     "oportunidades": [
       {
-        "descripcion": "Podrías mejorar la composición para guiar aún más la mirada del espectador.",
-        "cita": "Por ejemplo, la figura de la esquina inferior derecha está un poco aislada. Si la hubieras acercado más al grupo central, podrías haber creado un sentido de unidad más fuerte en la alienación que criticas."
+        "descripcion": "Describe un área de mejora clara y accionable.",
+        "cita": "Describe la parte específica del trabajo (ej: 'La reflexión sobre la crítica social es buena, pero no mencionas cuál es el tema específico...') donde se evidencia esta área de mejora."
       }
     ],
-    "siguiente_paso_sugerido": "Para tu próximo trabajo, te sugiero experimentar con la 'regla de los tercios' en tu boceto inicial para fortalecer aún más tus composiciones."
+    "siguiente_paso_sugerido": "Una sugerencia concreta y práctica que el estudiante puede aplicar."
   },
   "analisis_profesor": {
-    "desempeno_general": "El estudiante demuestra una comprensión conceptual avanzada del tema y posee las habilidades técnicas para ejecutar su visión. Muestra un alto potencial.",
-    "patrones_observados": "Tiende a concentrar los elementos principales en el centro, podría beneficiarse de explorar composiciones más dinámicas.",
-    "sugerencia_pedagogica": "Recomendar al estudiante el estudio de artistas como Banksy o Pawel Kuczynski para inspirar enfoques en la composición de crítica social."
+    "desempeno_general": "Análisis técnico del desempeño para el profesor.",
+    "patrones_observados": "Describe patrones de error o acierto.",
+    "sugerencia_pedagogica": "Una sugerencia para el docente sobre cómo abordar las dificultades observadas."
   }
-}
-\`\`\`
-
-### TU TURNO: GENERA EL JSON PARA EL TRABAJO PROPORCIONADO ###
-Ahora, genera el objeto JSON para el trabajo del estudiante que te he pasado, siguiendo el mismo nivel de detalle y especificidad del ejemplo.`;
+}`;
 
   const data = await callMistralAPI({
     model: "mistral-large-latest",
@@ -181,7 +179,7 @@ export async function POST(request: NextRequest) {
           configuracion: config,
           feedback_estudiante: aiResult.feedback_estudiante,
           analisis_profesor: aiResult.analisis_profesor,
-          analisis_habilidades: aiResult.analisis_habilidades,
+          // Se elimina 'analisis_habilidades' del objeto final para no duplicar info, ya que ahora está implícito en el feedback
           analisis_detallado: aiResult.analisis_detallado,
           bonificacion: 0,
           justificacionDecimas: "",
