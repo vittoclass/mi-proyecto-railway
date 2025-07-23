@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 
+// --- TUS FUNCIONES ORIGINALES (SIN CAMBIOS) ---
+
 interface EvaluationConfig {
   sistema: string
   nivelExigencia: number
@@ -207,76 +209,48 @@ function calculateFinalGrade(
   return 0
 }
 
+// --- FUNCIÓN PRINCIPAL POST (MODIFICADA PARA LA PRUEBA) ---
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
-    const files = formData.getAll("files") as File[]
     const configStr = formData.get("config") as string
     const config: EvaluationConfig = JSON.parse(configStr)
 
-    if (!files.length) {
-      return NextResponse.json({
-        success: false,
-        error: "No files provided",
-      })
-    }
+    console.log("API /api/evaluate RECIBIÓ LA LLAMADA. Omitiendo IA para depurar.");
 
-    const evaluations = []
-
-    for (const file of files) {
-      try {
-        const buffer = Buffer.from(await file.arrayBuffer())
-
-        // Extract text using Azure OCR
-        let extractedText = ""
-        if (file.type.startsWith("image/") || file.name.endsWith(".pdf")) {
-          extractedText = await ocrAzure(buffer)
-        } else if (file.name.endsWith(".txt")) {
-          extractedText = await file.text()
-        }
-
-        // Extract student name using AI
-        const studentName = (await extractNameWithAI(extractedText)) || `Estudiante_${file.name.split(".")[0]}`
-
-        // Evaluate with AI
-        const aiResult = await evaluateWithAI(extractedText, config, studentName)
-
-        // Calculate final grade
-        const finalGrade = calculateFinalGrade(
-          aiResult.puntaje_obtenido,
-          config.puntajeMaximo,
-          config.sistema,
-          config.nivelExigencia,
-          config.notaAprobacion,
-        )
-
-        const evaluation = {
-          id: `eval_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          nombreEstudiante: studentName,
-          nombrePrueba: config.nombrePrueba,
-          curso: config.curso,
-          notaFinal: finalGrade,
-          puntajeObtenido: aiResult.puntaje_obtenido,
-          configuracion: config,
-          feedback_estudiante: aiResult.feedback_estudiante,
-          analisis_profesor: aiResult.analisis_profesor,
-          analisis_habilidades: aiResult.analisis_habilidades,
-          analisis_detallado: aiResult.analisis_detallado,
-          bonificacion: 0,
-          justificacionDecimas: "",
-        }
-
-        evaluations.push(evaluation)
-      } catch (error) {
-        console.error(`Error processing file ${file.name}:`, error)
-        // Continue with other files even if one fails
-      }
-    }
-
-    return NextResponse.json({
+    // --- INICIO DEL CÓDIGO DE PRUEBA ---
+    // En lugar de procesar los archivos, creamos una respuesta falsa.
+    const fakeEvaluationResult = {
       success: true,
-      evaluations,
-    })
+      evaluations: [
+        {
+          id: "test-123",
+          nombreEstudiante: "Estudiante de Prueba Exitosa",
+          nombrePrueba: config.nombrePrueba || "Ensayo de Depuración",
+          curso: config.curso || "Informática 101",
+          notaFinal: 6.5,
+          puntajeObtenido: 25,
+          configuracion: config,
+          feedback_estudiante: {
+            resumen: "Prueba completada.",
+            fortalezas: [{ descripcion: "La prueba de depuración fue exitosa.", cita: "" }],
+            oportunidades: [{ descripcion: "Optimizar el tiempo de respuesta.", cita: "" }],
+            siguiente_paso_sugerido: "Reactivar las llamadas a las APIs."
+          },
+          analisis_profesor: { desempeno_general: "OK", patrones_observados: [], sugerencia_pedagogica: "OK" },
+          analisis_habilidades: { "Depuración": { nivel: "Logrado", justificacion_con_cita: "Se devolvió una respuesta falsa correctamente." }},
+          analisis_detallado: [],
+          bonificacion: 0,
+          justificacionDecimas: ""
+        }
+      ]
+    };
+    
+    // Devolvemos la respuesta falsa inmediatamente.
+    return NextResponse.json(fakeEvaluationResult);
+    // --- FIN DEL CÓDIGO DE PRUEBA ---
+
   } catch (error) {
     console.error("Evaluation error:", error)
     return NextResponse.json({
