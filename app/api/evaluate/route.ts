@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 
-// --- INTERFACES Y FUNCIONES DE CÁLCULO (SIN CAMBIOS) ---
+// --- INTERFACES Y FUNCIONES AUXILIARES (SIN CAMBIOS) ---
 interface EvaluationConfig {
   sistema: string; nivelExigencia: number; puntajeMaximo: number; notaAprobacion: number; flexibility: number; fecha: string; nombrePrueba: string; curso: string; rubrica: string; preguntasObjetivas: string;
 }
@@ -16,9 +16,6 @@ function calculateFinalGrade(puntajeObtenido: number, puntajeMax: number, sistem
   else if (sistema === "porcentual_0_100") { return Math.min(100.0, 100.0 * porcentaje); }
   return 0;
 }
-
-// --- FUNCIONES DE API (MODIFICADAS Y MEJORADAS) ---
-
 async function callMistralAPI(payload: any) {
   const apiKey = process.env.MISTRAL_API_KEY;
   if (!apiKey) throw new Error("MISTRAL_API_KEY no está configurada.");
@@ -31,7 +28,6 @@ async function callMistralAPI(payload: any) {
   if (!response.ok) throw new Error(`Mistral API error: ${data.error?.message || response.statusText}`);
   return data;
 }
-
 async function ocrAzure(file: Buffer) {
   const azureKey = process.env.AZURE_VISION_KEY;
   const azureEndpoint = process.env.AZURE_VISION_ENDPOINT;
@@ -45,7 +41,6 @@ async function ocrAzure(file: Buffer) {
   const data = await response.json();
   return data.regions?.flatMap((reg: any) => reg.lines.map((l: any) => l.words.map((w: any) => w.text).join(" "))).join("\n") || "";
 }
-
 async function extractNameWithAI(text: string) {
   if (!text.trim()) return "";
   const prompt = `De la siguiente transcripción de un documento, extrae el nombre completo del estudiante. Busca patrones como "Nombre:", "Alumno:", o similar. Tu respuesta debe ser ÚNICA Y EXCLUSIVAMENTE el nombre completo, sin saludos ni explicaciones. Si no encuentras un nombre claro, responde con una cadena vacía. Texto: """${text}"""`;
@@ -55,7 +50,6 @@ async function extractNameWithAI(text: string) {
   });
   return data.choices[0].message.content.trim();
 }
-
 async function evaluateWithAI(text: string, config: EvaluationConfig, studentName: string) {
   const flexibilityMap: { [key: number]: string } = {
     0: "Eres un evaluador extremadamente RÍGIDO y LITERAL. Te ciñes 100% a la rúbrica.",
@@ -63,11 +57,10 @@ async function evaluateWithAI(text: string, config: EvaluationConfig, studentNam
     10: "Eres un evaluador muy FLEXIBLE y HOLÍSTICO. Valoras la creatividad y el esfuerzo más allá de la rúbrica estricta.",
   };
   const flexibilityDescription = flexibilityMap[config.flexibility] || flexibilityMap[5];
-
   const prompt = `### PERFIL Y MISIÓN ###
 Actúas como un profesor experto y un asistente de evaluación pedagógica. Tu misión es analizar el trabajo de un estudiante, asignar un puntaje justo y generar una retroalimentación detallada, específica y constructiva.
 
-### CONTEXTO DE LA EVALUACIÓN ###
+### CONTEXTO DE LA EVALUCIÓN ###
 - Evaluación: "${config.nombrePrueba}"
 - Curso: "${config.curso}"
 - Estudiante: "${studentName}"
@@ -139,8 +132,7 @@ Analiza el trabajo del estudiante y responde ÚNICA Y EXCLUSIVAMENTE con un obje
   }
 }
 
-
-// --- FUNCIÓN PRINCIPAL POST (SIN CAMBIOS) ---
+// --- FUNCIÓN PRINCIPAL POST (CORREGIDA) ---
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -149,10 +141,12 @@ export async function POST(request: NextRequest) {
     const config: EvaluationConfig = JSON.parse(configStr);
 
     if (!files.length) {
-      return NextResponse.json({ success: false, error: "No files provided" });
+      return NextResponse.json({ success: false, error: "No se proporcionaron archivos." });
     }
 
     const evaluations = [];
+    let firstError: string | null = null; // Guardaremos el primer error que ocurra
+
     for (const file of files) {
       try {
         const buffer = Buffer.from(await file.arrayBuffer());
@@ -186,13 +180,27 @@ export async function POST(request: NextRequest) {
         };
         evaluations.push(evaluation);
       } catch (error) {
-        console.error(`Error processing file ${file.name}:`, error);
+        console.error(`Error procesando el archivo ${file.name}:`, error);
+        if (!firstError) {
+          firstError = error instanceof Error ? error.message : "Error desconocido procesando un archivo.";
+        }
       }
+    }
+
+    // NUEVA LÓGICA: Si no se procesó ninguna evaluación con éxito, devolver un error.
+    if (evaluations.length === 0 && files.length > 0) {
+      return NextResponse.json({
+        success: false,
+        error: `No se pudo procesar ningún archivo. El primer error fue: ${firstError}`,
+      });
     }
 
     return NextResponse.json({ success: true, evaluations });
   } catch (error) {
-    console.error("Evaluation error:", error);
-    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Unknown error occurred" });
+    console.error("Error general en la evaluación:", error);
+    return NextResponse.json({
+      success: false,
+      error: error instanceof Error ? error.message : "Ocurrió un error desconocido",
+    });
   }
 }
