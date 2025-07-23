@@ -43,7 +43,7 @@ async function ocrAzure(file: Buffer) {
 }
 async function extractNameWithAI(text: string) {
   if (!text.trim()) return "";
-  const prompt = `De la siguiente transcripción de un documento, extrae el nombre completo del estudiante. Busca patrones como "Nombre:", "Alumno:", o similar. Tu respuesta debe ser ÚNICA Y EXCLUSIVAMENTE el nombre completo, sin saludos ni explicaciones. Si no encuentras un nombre claro, responde con una cadena vacía. Texto: """${text}"""`;
+  const prompt = `De la siguiente transcripción, extrae el nombre completo del estudiante. Tu respuesta debe ser ÚNICA Y EXCLUSIVAMENTE el nombre, sin explicaciones. Si no hay nombre, responde con una cadena vacía. Texto: """${text}"""`;
   const data = await callMistralAPI({
     model: "mistral-tiny",
     messages: [{ role: "user", content: prompt }],
@@ -51,96 +51,98 @@ async function extractNameWithAI(text: string) {
   return data.choices[0].message.content.trim();
 }
 
-// --- FUNCIÓN DE EVALUACIÓN CON PROMPT DE NIVEL EXPERTO v2 ---
-async function evaluateWithAI(text: string, config: EvaluationConfig, studentName: string) {
-  const flexibilityMap: { [key: number]: string } = {
-    0: "Eres un evaluador extremadamente RÍGIDO y LITERAL. Te ciñes 100% a la rúbrica.",
-    5: "Eres un evaluador EQUILIBRADO y OBJETIVO. Te basas en la rúbrica pero puedes asignar puntajes parciales con justificación.",
-    10: "Eres un evaluador muy FLEXIBLE y HOLÍSTICO. Valoras la creatividad y el esfuerzo más allá de la rúbrica estricta.",
-  };
-  const flexibilityDescription = flexibilityMap[config.flexibility] || flexibilityMap[5];
+// --- NUEVA ARQUITECTURA DE EVALUACIÓN EN DOS PASOS ---
 
-  const prompt = `### PERFIL Y MISIÓN ###
-Actúas como un profesor experto y un asistente de evaluación pedagógica. Tu reputación como un evaluador detallado, justo y perspicaz está en juego. Tu misión es analizar a fondo el trabajo de un estudiante, conectando siempre tus observaciones con la evidencia concreta.
+// PASO 1: IA Analista - Se enfoca solo en puntuar objetivamente
+async function getScoreFromAI(text: string, config: EvaluationConfig) {
+  const prompt = `### MISIÓN: ANALISTA CUANTITATIVO ###
+Tu única tarea es evaluar el siguiente trabajo de un estudiante contra la rúbrica y puntuarlo objetivamente.
 
-### REGLAS CRÍTICAS (NO IGNORAR) ###
-1.  **CERO GENERALIDADES:** No harás afirmaciones genéricas. CADA comentario, fortaleza u oportunidad DEBE estar respaldado por una descripción o cita específica del trabajo.
-2.  **INTERACCIÓN RÚBRICA-TRABAJO:** Tu análisis DEBE demostrar una interacción clara entre los criterios de la rúbrica y lo que observas en el trabajo del estudiante.
-3.  **RESPUESTA EXCLUSIVAMENTE EN JSON:** Tu única salida será un objeto JSON válido, sin ningún texto introductorio o explicaciones adicionales.
-
-### PLAN DE ACCIÓN PARA TU ANÁLISIS ###
-Sigue estos pasos en orden para construir tu respuesta:
-1.  **Análisis Profundo:** Lee detenidamente la rúbrica y el trabajo del estudiante. Identifica dónde y cómo cumple o no con cada criterio.
-2.  **Calificación Basada en Evidencia:** Asigna un puntaje para cada criterio basado en tu análisis, asegurándote de que el puntaje total sea coherente con la escala de **${config.puntajeMaximo} puntos**.
-3.  **Construcción de la Retroalimentación:** Redacta los comentarios para el estudiante y el profesor. Recuerda la REGLA CRÍTICA #1: cada punto debe estar anclado a una evidencia específica.
-
-### CONTEXTO DE LA EVALUACIÓN ###
-- Evaluación: "${config.nombrePrueba}"
-- Curso: "${config.curso}"
-- Estudiante: "${studentName}"
+### CONTEXTO ###
 - Rúbrica de Evaluación: """${config.rubrica}"""
 - Preguntas Objetivas (si aplica): """${config.preguntasObjetivas}"""
-- Tu Nivel de Flexibilidad: **${config.flexibility}/10** - ${flexibilityDescription}
+- Puntaje Máximo Total: ${config.puntajeMaximo}
 
-### TRABAJO DEL ESTUDIANTE (TRANSCRIPCIÓN OCR) ###
-"""
-${text || "(Sin texto extraído - El trabajo podría ser puramente visual o no contener texto relevante)"}
-"""
+### TRABAJO DEL ESTUDIANDE ###
+"""${text}"""
 
-### FORMATO JSON DE SALIDA OBLIGATORIO ###
-Genera el objeto JSON para el trabajo proporcionado, siguiendo estrictamente el siguiente formato y el nivel de detalle exigido.
-
+### FORMATO DE RESPUESTA OBLIGATORIO ###
+Responde ÚNICA Y EXCLUSIVAMENTE con un objeto JSON que contenga el puntaje detallado y el puntaje total.
 {
-  "puntaje_obtenido": Int,
   "analisis_detallado": [
     {
-      "criterio": "Nombre del criterio evaluado.",
-      "evidencia": "Descripción DETALLADA de la evidencia encontrada en el trabajo.",
-      "justificacion": "Justificación que CONECTA la evidencia con la rúbrica.",
-      "puntaje": "Puntaje para este criterio (ej: '4/6 puntos')."
+      "criterio": "Nombre del criterio de la rúbrica.",
+      "puntaje_asignado": "Puntaje numérico para este criterio.",
+      "puntaje_maximo_criterio": "Puntaje máximo para este criterio.",
+      "justificacion_corta": "Justificación muy breve y objetiva del puntaje."
     }
   ],
+  "puntaje_obtenido_total": Int
+}`;
+  
+  const data = await callMistralAPI({
+    model: "mistral-large-latest", // Usamos el modelo grande para un análisis preciso
+    messages: [{ role: "user", content: prompt }],
+    response_format: { type: "json_object" },
+  });
+  return JSON.parse(data.choices[0].message.content);
+}
+
+// PASO 2: IA Pedagogo - Se enfoca en redactar el feedback, usando el puntaje del paso 1
+async function getFeedbackFromAI(text: string, config: EvaluationConfig, studentName: string, scoreResult: any) {
+  const prompt = `### PERFIL: PROFESOR PEDAGOGO EXPERTO ###
+Tu misión es redactar una retroalimentación enriquecida y específica para un estudiante, basándote en un análisis de puntaje que ya fue realizado.
+
+### REGLAS CRÍTICAS ###
+1.  **CERO GENERALIDADES:** CADA comentario DEBE estar directamente conectado con la evidencia del trabajo.
+2.  **USA EL PUNTAJE DADO:** Tu feedback debe justificar y explicar el puntaje que se te entrega. No inventes un nuevo puntaje.
+
+### CONTEXTO ###
+- Evaluación: "${config.nombrePrueba}"
+- Estudiante: "${studentName}"
+- Rúbrica: """${config.rubrica}"""
+- **Análisis de Puntaje (tu base para el feedback):** \`\`\`json
+  ${JSON.stringify(scoreResult, null, 2)}
+  \`\`\`
+
+### TRABAJO DEL ESTUDIANTE ###
+"""${text}"""
+
+### FORMATO DE RESPUESTA OBLIGATORIO ###
+Responde ÚNICA Y EXCLUSIVAMENTE con un objeto JSON. Para cada fortaleza y oportunidad, DEBES describir una parte específica del trabajo que lo demuestre.
+{
   "feedback_estudiante": {
-    "resumen": "Resumen breve y alentador del desempeño general.",
+    "resumen": "Un resumen breve y alentador del desempeño general, consistente con el puntaje.",
     "fortalezas": [
       {
         "descripcion": "Describe una fortaleza clave.",
-        "cita": "Describe la parte específica del trabajo (ej: 'En la esquina superior derecha, el uso del rojo sobre azul...') que demuestra esta fortaleza."
+        "cita": "Describe la parte específica del trabajo (ej: 'En la ilustración de la sociedad actual, el uso de una balanza desequilibrada para representar la injusticia...') que demuestra esta fortaleza."
       }
     ],
     "oportunidades": [
       {
         "descripcion": "Describe un área de mejora clara y accionable.",
-        "cita": "Describe la parte específica del trabajo (ej: 'La reflexión sobre la crítica social es buena, pero no mencionas cuál es el tema específico...') donde se evidencia esta área de mejora."
+        "cita": "Describe la parte específica del trabajo (ej: 'La reflexión sobre la crítica social es un buen comienzo, pero para alcanzar el puntaje máximo, podrías haber incluido un símbolo que represente las consecuencias de esa desigualdad...') donde se evidencia."
       }
     ],
     "siguiente_paso_sugerido": "Una sugerencia concreta y práctica que el estudiante puede aplicar."
   },
   "analisis_profesor": {
     "desempeno_general": "Análisis técnico del desempeño para el profesor.",
-    "patrones_observados": "Describe patrones de error o acierto.",
     "sugerencia_pedagogica": "Una sugerencia para el docente sobre cómo abordar las dificultades observadas."
   }
 }`;
-
+  
   const data = await callMistralAPI({
-    model: "mistral-large-latest",
+    model: "mistral-large-latest", // Usamos el modelo grande para una redacción de calidad
     messages: [{ role: "user", content: prompt }],
     response_format: { type: "json_object" },
   });
-
-  try {
-    const parsed = JSON.parse(data.choices[0].message.content);
-    if (typeof parsed.puntaje_obtenido === "undefined" || !parsed.feedback_estudiante) {
-      throw new Error("La respuesta de la IA no tiene el formato JSON esperado.");
-    }
-    return parsed;
-  } catch (e) {
-    throw new Error(`Respuesta JSON inválida de la IA: ${data.choices[0].message.content}`);
-  }
+  return JSON.parse(data.choices[0].message.content);
 }
 
-// --- FUNCIÓN PRINCIPAL POST (SIN CAMBIOS) ---
+
+// --- FUNCIÓN PRINCIPAL POST (REFACTORIZADA) ---
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -149,7 +151,7 @@ export async function POST(request: NextRequest) {
     const config: EvaluationConfig = JSON.parse(configStr);
 
     if (!files.length) {
-      return NextResponse.json({ success: false, error: "No files provided" });
+      return NextResponse.json({ success: false, error: "No se proporcionaron archivos." });
     }
 
     const evaluations = [];
@@ -164,9 +166,18 @@ export async function POST(request: NextRequest) {
         }
 
         const studentName = (await extractNameWithAI(extractedText)) || `Estudiante_${file.name.split(".")[0]}`;
-        const aiResult = await evaluateWithAI(extractedText, config, studentName);
+        
+        // --- NUEVO FLUJO DE DOS PASOS ---
+        // 1. Obtener el puntaje
+        const scoreResult = await getScoreFromAI(extractedText, config);
+        
+        // 2. Obtener el feedback basado en el puntaje
+        const feedbackResult = await getFeedbackFromAI(extractedText, config, studentName, scoreResult);
+        
+        const puntajeObtenido = scoreResult.puntaje_obtenido_total;
+
         const finalGrade = calculateFinalGrade(
-          aiResult.puntaje_obtenido, config.puntajeMaximo, config.sistema, config.nivelExigencia, config.notaAprobacion
+          puntajeObtenido, config.puntajeMaximo, config.sistema, config.nivelExigencia, config.notaAprobacion
         );
 
         const evaluation = {
@@ -175,18 +186,15 @@ export async function POST(request: NextRequest) {
           nombrePrueba: config.nombrePrueba,
           curso: config.curso,
           notaFinal: finalGrade,
-          puntajeObtenido: aiResult.puntaje_obtenido,
+          puntajeObtenido: puntajeObtenido,
           configuracion: config,
-          feedback_estudiante: aiResult.feedback_estudiante,
-          analisis_profesor: aiResult.analisis_profesor,
-          // Se elimina 'analisis_habilidades' del objeto final para no duplicar info, ya que ahora está implícito en el feedback
-          analisis_detallado: aiResult.analisis_detallado,
-          bonificacion: 0,
-          justificacionDecimas: "",
+          feedback_estudiante: feedbackResult.feedback_estudiante,
+          analisis_profesor: feedbackResult.analisis_profesor,
+          analisis_detallado: scoreResult.analisis_detallado,
         };
-        evaluations.push(evaluation);
+        evaluations.push(evaluation as any);
       } catch (error) {
-        console.error(`Error processing file ${file.name}:`, error);
+        console.error(`Error procesando el archivo ${file.name}:`, error);
         if (error instanceof Error) {
             const evaluationError = {
                 id: `error_${Date.now()}`,
@@ -203,9 +211,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (evaluations.length === 0 && files.length > 0) {
+      return NextResponse.json({
+        success: false,
+        error: "No se pudo procesar ningún archivo. Revisa los registros del servidor para más detalles.",
+      });
+    }
+
     return NextResponse.json({ success: true, evaluations });
   } catch (error) {
-    console.error("Evaluation error:", error);
-    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Unknown error occurred" });
+    console.error("Error general en la evaluación:", error);
+    return NextResponse.json({
+      success: false,
+      error: error instanceof Error ? error.message : "Ocurrió un error desconocido",
+    });
   }
 }
