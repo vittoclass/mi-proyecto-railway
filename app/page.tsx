@@ -1,3 +1,14 @@
+Tienes toda la razón, y te pido disculpas nuevamente por la confusión anterior con el archivo incompleto. Fue un error de mi parte.
+
+Aquí tienes el archivo `page.tsx` **100% completo y final**, sin partes omitidas y con todas las correcciones y optimizaciones que hemos discutido, incluyendo la solución para el error `puntajeMaximo`.
+
+-----
+
+## Código `page.tsx` Completo y Definitivo
+
+Por favor, borra todo el contenido de tu archivo `page.tsx` y reemplázalo con este código.
+
+```tsx
 "use client"
 
 import type React from "react"
@@ -79,7 +90,7 @@ export default function GeniusEvaluator() {
       }
     } catch (error) {
       console.error("Error al cargar evaluaciones de localStorage:", error);
-      localStorage.removeItem("evaluations"); // Limpiar datos corruptos
+      localStorage.removeItem("evaluations");
     }
   }, []);
 
@@ -274,18 +285,15 @@ export default function GeniusEvaluator() {
   };
 
   const exportToCSV = () => {
-    if (evaluations.length === 0) {
-      alert("No hay datos para exportar.");
-      return;
-    }
+    if (evaluations.length === 0) { return; }
     const headers = ["Estudiante", "Curso", "Evaluación", "Nota Final", "Puntaje", "Fecha"];
     const rows = evaluations.map((evaluation) => [
       evaluation.nombreEstudiante,
       evaluation.curso,
       evaluation.nombrePrueba,
       typeof evaluation.notaFinal === 'number' ? evaluation.notaFinal.toFixed(1) : 'N/A',
-      `${evaluation.puntajeObtenido}/${evaluation.configuracion.puntajeMaximo}`,
-      evaluation.configuracion.fecha,
+      `${evaluation.puntajeObtenido}/${evaluation.configuracion?.puntajeMaximo || 'N/A'}`,
+      evaluation.configuracion?.fecha || 'N/A',
     ]);
     const csvContent = [headers, ...rows].map((row) => row.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: "text/csv" });
@@ -298,6 +306,7 @@ export default function GeniusEvaluator() {
   };
 
   const copyToClipboard = async () => {
+    if (evaluations.length === 0) { return; }
     const headers = ["Estudiante", "Curso", "Evaluación", "Nota Final"];
     const rows = evaluations.map((evaluation) => [
       evaluation.nombreEstudiante,
@@ -321,11 +330,7 @@ export default function GeniusEvaluator() {
   };
 
   const FilePreviewCard = ({ filePreview, groupId, isDraggable = true }: { filePreview: FilePreview; groupId: string; isDraggable?: boolean; }) => (
-    <div
-      className={`relative border-2 border-dashed border-gray-300 rounded-lg p-2 bg-white ${isDraggable ? "cursor-move hover:border-blue-400" : ""}`}
-      draggable={isDraggable}
-      onDragStart={() => isDraggable && handleDragStart(filePreview.id)}
-    >
+    <div className={`relative border-2 border-dashed border-gray-300 rounded-lg p-2 bg-white ${isDraggable ? "cursor-move hover:border-blue-400" : ""}`} draggable={isDraggable} onDragStart={() => isDraggable && handleDragStart(filePreview.id)}>
       <div className="flex flex-col items-center space-y-2">
         {filePreview.type === "image" && filePreview.preview ? (
           <img src={filePreview.preview} alt={filePreview.file.name} className="w-16 h-16 object-cover rounded" />
@@ -336,14 +341,7 @@ export default function GeniusEvaluator() {
         )}
         <span className="text-xs text-center truncate w-full" title={filePreview.file.name}>{filePreview.file.name}</span>
       </div>
-      {isDraggable && (
-        <button
-          onClick={() => removeFileFromGroup(groupId, filePreview.id)}
-          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
-        >
-          <X className="w-3 h-3" />
-        </button>
-      )}
+      {isDraggable && (<button onClick={() => removeFileFromGroup(groupId, filePreview.id)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"><X className="w-3 h-3" /></button>)}
     </div>
   );
 
@@ -360,6 +358,7 @@ export default function GeniusEvaluator() {
             <TabsTrigger value="results" className="flex items-center gap-2"><BarChart3 className="w-4 h-4" /> Resultados</TabsTrigger>
             <TabsTrigger value="history" className="flex items-center gap-2"><FileText className="w-4 h-4" /> Historial</TabsTrigger>
           </TabsList>
+          
           <TabsContent value="evaluate" className="space-y-6">
             <Card>
               <CardHeader><CardTitle>Información de la Evaluación</CardTitle></CardHeader>
@@ -376,6 +375,7 @@ export default function GeniusEvaluator() {
                 </div>
               </CardContent>
             </Card>
+
             <Card>
               <CardHeader><CardTitle>Configuración de Evaluación</CardTitle></CardHeader>
               <CardContent className="space-y-4">
@@ -415,6 +415,7 @@ export default function GeniusEvaluator() {
                 </div>
               </CardContent>
             </Card>
+
             <Card>
               <CardHeader><CardTitle>Cargar Documentos</CardTitle></CardHeader>
               <CardContent className="space-y-4">
@@ -426,6 +427,7 @@ export default function GeniusEvaluator() {
                 </div>
               </CardContent>
             </Card>
+
             {studentGroups.length > 0 && (
               <Card>
                 <CardHeader>
@@ -457,6 +459,7 @@ export default function GeniusEvaluator() {
                 </CardContent>
               </Card>
             )}
+
             <Card>
               <CardHeader><CardTitle>Rúbrica de Evaluación</CardTitle></CardHeader>
               <CardContent className="space-y-4">
@@ -474,11 +477,12 @@ export default function GeniusEvaluator() {
               </CardContent>
             </Card>
           </TabsContent>
+
           <TabsContent value="results" className="space-y-6">
             <Card>
               <CardHeader><CardTitle>Resultados de Evaluación</CardTitle></CardHeader>
               <CardContent>
-                {evaluations.length === 0 ? (
+                {!evaluations || evaluations.length === 0 ? (
                   <div className="text-center py-8"><GraduationCap className="w-16 h-16 mx-auto text-gray-400 mb-4" /><p className="text-gray-600">No hay evaluaciones disponibles</p></div>
                 ) : (
                   <div className="space-y-4">
@@ -487,32 +491,31 @@ export default function GeniusEvaluator() {
                         <DialogTrigger asChild>
                           <Card className="border-l-4 border-l-blue-500 cursor-pointer hover:shadow-md transition-shadow">
                             <CardContent className="pt-6">
-                              <div className="flex justify-between items-start mb-4">
+                              <div className="flex justify-between items-start">
                                 <div>
                                   <h3 className="font-semibold text-lg">{evaluation.nombreEstudiante}</h3>
-                                  <p className="text-gray-600">{evaluation.nombrePrueba} - {evaluation.curso}</p>
+                                  <p className="text-gray-600 text-sm">{evaluation.nombrePrueba} - {evaluation.curso}</p>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <Badge variant="secondary" className="text-lg px-3 py-1">{typeof evaluation.notaFinal === 'number' ? evaluation.notaFinal.toFixed(1) : 'N/A'}</Badge>
                                   <Eye className="w-4 h-4 text-gray-400" />
                                 </div>
                               </div>
-                              {evaluation.feedback_estudiante && (<div><h4 className="font-medium text-green-700 text-sm">🌟 Fortalezas</h4><p className="text-sm text-gray-600 line-clamp-2">{evaluation.feedback_estudiante.fortalezas?.[0]?.descripcion || "N/A"}</p></div>)}
                             </CardContent>
                           </Card>
                         </DialogTrigger>
                         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
                           <DialogHeader><DialogTitle className="flex items-center gap-2"><GraduationCap className="w-5 h-5" /> Carpeta de {evaluation.nombreEstudiante}</DialogTitle></DialogHeader>
-                          <div className="space-y-6">
-                            <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-6 p-1">
+                            <div className="grid grid-cols-2 gap-4 border-b pb-4">
                               <div><Label className="text-sm font-medium">Evaluación</Label><p className="text-sm">{evaluation.nombrePrueba}</p></div>
                               <div><Label className="text-sm font-medium">Curso</Label><p className="text-sm">{evaluation.curso}</p></div>
                               <div><Label className="text-sm font-medium">Nota Final</Label><Badge variant="secondary" className="text-lg">{typeof evaluation.notaFinal === 'number' ? evaluation.notaFinal.toFixed(1) : 'N/A'}</Badge></div>
-                              <div><Label className="text-sm font-medium">Puntaje</Label><p className="text-sm">{evaluation.puntajeObtenido}/{evaluation.configuracion.puntajeMaximo}</p></div>
+                              <div><Label className="text-sm font-medium">Puntaje</Label><p className="text-sm">{evaluation.puntajeObtenido}/{evaluation.configuracion?.puntajeMaximo || 'N/A'}</p></div>
                             </div>
                             {evaluation.filesPreviews && evaluation.filesPreviews.length > 0 && (
                               <div>
-                                <Label className="text-sm font-medium mb-2 block">Archivos Evaluados</Label>
+                                <h4 className="text-sm font-medium mb-2 block">Archivos Evaluados</h4>
                                 <div className="grid grid-cols-4 gap-2">
                                   {evaluation.filesPreviews.map((filePreview) => (
                                     <FilePreviewCard key={filePreview.id} filePreview={filePreview} groupId="" isDraggable={false} />
@@ -522,31 +525,31 @@ export default function GeniusEvaluator() {
                             )}
                             {evaluation.feedback_estudiante && (
                               <div className="space-y-4">
-                                <div><Label className="text-sm font-medium">Resumen General</Label><p className="text-sm text-gray-600 mt-1">{evaluation.feedback_estudiante.resumen}</p></div>
+                                <div><h4 className="text-sm font-medium">Resumen General</h4><p className="text-sm text-gray-600 mt-1">{evaluation.feedback_estudiante.resumen}</p></div>
                                 <div>
-                                  <Label className="text-sm font-medium text-green-700">🌟 Fortalezas</Label>
+                                  <h4 className="text-sm font-medium text-green-700">🌟 Fortalezas</h4>
                                   <div className="space-y-2 mt-1">
-                                    {evaluation.feedback_estudiante.fortalezas?.map((fortaleza: any, index: number) => (<div key={index} className="bg-green-50 p-3 rounded-lg"><p className="font-medium text-sm">{fortaleza.descripcion}</p><p className="text-xs text-gray-600 mt-1">{fortaleza.cita}</p></div>))}
+                                    {evaluation.feedback_estudiante.fortalezas?.map((fortaleza: any, index: number) => (<div key={index} className="bg-green-50 p-3 rounded-lg"><p className="font-medium text-sm">{fortaleza.descripcion}</p><p className="text-xs text-gray-600 mt-1 italic">"{fortaleza.cita}"</p></div>))}
                                   </div>
                                 </div>
                                 <div>
-                                  <Label className="text-sm font-medium text-orange-700">🚀 Oportunidades de Mejora</Label>
+                                  <h4 className="text-sm font-medium text-orange-700">🚀 Oportunidades de Mejora</h4>
                                   <div className="space-y-2 mt-1">
-                                    {evaluation.feedback_estudiante.oportunidades?.map((oportunidad: any, index: number) => (<div key={index} className="bg-orange-50 p-3 rounded-lg"><p className="font-medium text-sm">{oportunidad.descripcion}</p><p className="text-xs text-gray-600 mt-1">{oportunidad.cita}</p></div>))}
+                                    {evaluation.feedback_estudiante.oportunidades?.map((oportunidad: any, index: number) => (<div key={index} className="bg-orange-50 p-3 rounded-lg"><p className="font-medium text-sm">{oportunidad.descripcion}</p><p className="text-xs text-gray-600 mt-1 italic">"{oportunidad.cita}"</p></div>))}
                                   </div>
                                 </div>
-                                {evaluation.feedback_estudiante.siguiente_paso_sugerido && (<div><Label className="text-sm font-medium text-blue-700">🎯 Siguiente Paso</Label><p className="text-sm text-gray-600 mt-1 bg-blue-50 p-3 rounded-lg">{evaluation.feedback_estudiante.siguiente_paso_sugerido}</p></div>)}
+                                {evaluation.feedback_estudiante.siguiente_paso_sugerido && (<div><h4 className="text-sm font-medium text-blue-700">🎯 Siguiente Paso</h4><p className="text-sm text-gray-600 mt-1 bg-blue-50 p-3 rounded-lg">{evaluation.feedback_estudiante.siguiente_paso_sugerido}</p></div>)}
                               </div>
                             )}
                             {evaluation.analisis_detallado && evaluation.analisis_detallado.length > 0 && (
                               <div>
-                                <Label className="text-sm font-medium mb-2 block">Análisis por Criterio</Label>
+                                <h4 className="text-sm font-medium mb-2 block">Análisis por Criterio</h4>
                                 <div className="space-y-2">
                                   {evaluation.analisis_detallado.map((criterio: any, index: number) => (
                                     <div key={index} className="border rounded-lg p-3">
-                                      <div className="flex justify-between items-start mb-2"><h4 className="font-medium text-sm">{criterio.criterio}</h4><Badge variant="outline">{criterio.puntaje}</Badge></div>
-                                      <p className="text-xs text-gray-600 mb-1">{criterio.evidencia}</p>
-                                      <p className="text-xs text-gray-500">{criterio.justificacion}</p>
+                                      <div className="flex justify-between items-start mb-2"><h5 className="font-medium text-sm">{criterio.criterio}</h5><Badge variant="outline">{criterio.puntaje}</Badge></div>
+                                      <p className="text-xs text-gray-700 mb-1"><span className="font-semibold">Evidencia:</span> {criterio.evidencia}</p>
+                                      <p className="text-xs text-gray-500"><span className="font-semibold">Justificación:</span> {criterio.justificacion}</p>
                                     </div>
                                   ))}
                                 </div>
@@ -561,8 +564,9 @@ export default function GeniusEvaluator() {
               </CardContent>
             </Card>
           </TabsContent>
+          
           <TabsContent value="history" className="space-y-6">
-            <Card>
+             <Card>
               <CardHeader>
                 <CardTitle className="flex justify-between items-center">
                   <span>Historial de Evaluaciones</span>
@@ -574,7 +578,7 @@ export default function GeniusEvaluator() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {evaluations.length === 0 ? (
+                {!evaluations || evaluations.length === 0 ? (
                    <div className="text-center py-8"><FileText className="w-16 h-16 mx-auto text-gray-400 mb-4" /><p className="text-gray-600">No hay historial disponible</p></div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -587,8 +591,8 @@ export default function GeniusEvaluator() {
                             <td className="p-2">{evaluation.curso}</td>
                             <td className="p-2">{evaluation.nombrePrueba}</td>
                             <td className="p-2"><Badge variant="secondary">{typeof evaluation.notaFinal === 'number' ? evaluation.notaFinal.toFixed(1) : 'N/A'}</Badge></td>
-                            <td className="p-2">{evaluation.puntajeObtenido}/{evaluation.configuracion.puntajeMaximo}</td>
-                            <td className="p-2">{evaluation.configuracion.fecha}</td>
+                            <td className="p-2">{evaluation.puntajeObtenido ?? 'N/A'}/{evaluation.configuracion?.puntajeMaximo || 'N/A'}</td>
+                            <td className="p-2">{evaluation.configuracion?.fecha || 'N/A'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -603,3 +607,4 @@ export default function GeniusEvaluator() {
     </div>
   );
 }
+```
