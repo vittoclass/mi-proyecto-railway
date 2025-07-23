@@ -596,4 +596,3 @@ export default function GeniusEvaluator() {
     </div>
   );
 }
-```
