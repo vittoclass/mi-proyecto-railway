@@ -439,7 +439,15 @@ export default function GeniusEvaluator() {
       results.forEach((result) => {
         if (result.status === "fulfilled") {
           if (result.value.success) {
-            successfulEvaluations.push(result.value.evaluation)
+            // Validar que la evaluación tenga los campos necesarios
+            const evaluation = result.value.evaluation
+            if (!evaluation.notaFinal && evaluation.notaFinal !== 0) {
+              evaluation.notaFinal = 1.0 // Nota mínima por defecto
+            }
+            if (!evaluation.puntajeObtenido && evaluation.puntajeObtenido !== 0) {
+              evaluation.puntajeObtenido = 0
+            }
+            successfulEvaluations.push(evaluation)
           } else {
             failedEvaluations.push(`${result.value.groupName}: ${result.value.error}`)
           }
@@ -500,8 +508,8 @@ export default function GeniusEvaluator() {
       evaluation.nombreEstudiante,
       evaluation.curso,
       evaluation.nombrePrueba,
-      evaluation.notaFinal.toFixed(1),
-      `${evaluation.puntajeObtenido}/${evaluation.configuracion.puntajeMaximo}`,
+      evaluation.notaFinal ? evaluation.notaFinal.toFixed(1) : "N/A",
+      `${evaluation.puntajeObtenido || 0}/${evaluation.configuracion.puntajeMaximo}`,
       evaluation.configuracion.fecha,
     ])
 
@@ -521,7 +529,7 @@ export default function GeniusEvaluator() {
       evaluation.nombreEstudiante,
       evaluation.curso,
       evaluation.nombrePrueba,
-      evaluation.notaFinal.toFixed(1),
+      evaluation.notaFinal ? evaluation.notaFinal.toFixed(1) : "N/A",
     ])
 
     const tsvContent = [headers, ...rows].map((row) => row.join("\t")).join("\n")
@@ -605,7 +613,7 @@ export default function GeniusEvaluator() {
         <div className="inline-flex items-center gap-4 bg-gray-100 px-6 py-4 rounded-lg">
           <span className="text-lg font-medium">Tu Nota Final:</span>
           <Badge variant="secondary" className="text-2xl px-4 py-2">
-            {evaluation.notaFinal.toFixed(1)}
+            {evaluation.notaFinal ? evaluation.notaFinal.toFixed(1) : "N/A"}
           </Badge>
         </div>
       </div>
@@ -1144,7 +1152,7 @@ export default function GeniusEvaluator() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <Badge variant="secondary" className="text-lg px-3 py-1">
-                                    {evaluation.notaFinal.toFixed(1)}
+                                    {evaluation.notaFinal ? evaluation.notaFinal.toFixed(1) : "N/A"}
                                   </Badge>
                                   <Eye className="w-4 h-4 text-gray-400" />
                                 </div>
@@ -1238,7 +1246,9 @@ export default function GeniusEvaluator() {
                               </div>
                             </div>
                             <div className="flex items-center gap-4">
-                              <Badge variant="secondary">{evaluation.notaFinal.toFixed(1)}</Badge>
+                              <Badge variant="secondary">
+                                {evaluation.notaFinal ? evaluation.notaFinal.toFixed(1) : "N/A"}
+                              </Badge>
                               <span className="text-sm text-gray-500">
                                 {evaluation.puntajeObtenido}/{evaluation.configuracion.puntajeMaximo}
                               </span>
