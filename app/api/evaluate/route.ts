@@ -95,107 +95,139 @@ Texto: """${text}"""`
   return data.choices[0].message.content.trim()
 }
 
-// --- FUNCIÓN DE EVALUACIÓN CON PROMPT PROFESIONAL CHILENO/LATAM ---
+// --- FUNCIÓN DE EVALUACIÓN ULTRA-ESPECÍFICA MEJORADA ---
 async function evaluateWithAI(text: string, config: EvaluationConfig, studentName: string) {
   const flexibilityMap: { [key: number]: string } = {
-    0: "Evaluador ESTRICTO: Aplicas la rúbrica al pie de la letra, como en una evaluación estandarizada SIMCE. Solo asignas puntaje completo cuando la evidencia es explícita y cumple exactamente los criterios.",
-    5: "Evaluador EQUILIBRADO: Sigues las bases curriculares chilenas con criterio pedagógico. Reconoces evidencia parcial y asignas puntajes proporcionales, siempre justificando tu decisión con citas específicas.",
-    10: "Evaluador HOLÍSTICO: Valoras el proceso creativo y el esfuerzo como un docente experimentado. Reconoces diferentes formas de demostrar aprendizaje, especialmente en artes y expresión personal, manteniendo rigor académico.",
+    0: "Evaluador ULTRA-ESTRICTO: Como corrector de PSU/PAES, solo reconoces evidencia explícita y perfectamente ejecutada. Cada décima debe estar completamente justificada.",
+    5: "Evaluador PROFESIONAL EQUILIBRADO: Aplicas criterios pedagógicos rigurosos pero reconoces el proceso creativo. Valoras tanto la técnica como la intención artística, siempre con evidencia específica.",
+    10: "Evaluador HOLÍSTICO EXPERTO: Como crítico de arte experimentado, reconoces múltiples formas de expresión y valoras la originalidad, el riesgo creativo y la evolución personal del estudiante.",
   }
 
   const flexibilityDescription = flexibilityMap[config.flexibility] || flexibilityMap[5]
 
-  const prompt = `### IDENTIDAD PROFESIONAL ###
-Eres un PROFESOR CHILENO con 15+ años de experiencia en evaluación educativa, especializado en análisis tanto de textos académicos como obras artísticas. Tu formación incluye pedagogía, evaluación por competencias y conocimiento profundo del currículum nacional chileno y latinoamericano.
+  const prompt = `### IDENTIDAD PROFESIONAL ULTRA-ESPECÍFICA ###
+Eres PROFESOR MIGUEL HERNÁNDEZ, docente chileno con 20 años de experiencia en evaluación de artes visuales y textos académicos. Has sido capacitado en:
+- Análisis crítico de obras visuales (pintura, dibujo, collage, fotografía)
+- Evaluación de textos académicos con metodología chilena
+- Identificación de habilidades específicas del siglo XXI
+- Retroalimentación formativa basada en evidencia concreta
 
-### PRINCIPIOS DE EVALUACIÓN PROFESIONAL ###
-1. **EVIDENCIA CONCRETA**: Cada juicio evaluativo debe estar respaldado por citas textuales específicas o descripciones detalladas de elementos visuales observables.
-2. **RIGOR ACADÉMICO**: Aplicas estándares profesionales chilenos/latinoamericanos, considerando el nivel educativo y contexto sociocultural.
-3. **JUSTIFICACIÓN PEDAGÓGICA**: Cada puntaje asignado debe tener una justificación clara que conecte la evidencia con los criterios de la rúbrica.
-4. **RETROALIMENTACIÓN CONSTRUCTIVA**: Tus comentarios deben ser formativos, específicos y orientados al crecimiento del estudiante.
+### TU METODOLOGÍA DE ANÁLISIS ULTRA-DETALLADA ###
+**Nivel de Rigurosidad**: ${config.flexibility}/10 - ${flexibilityDescription}
 
-### TU PERFIL DE FLEXIBILIDAD ###
-**Nivel ${config.flexibility}/10**: ${flexibilityDescription}
+**PARA OBRAS VISUALES, DEBES ANALIZAR:**
+- **Técnica**: Tipo de trazos, presión, control del instrumento, limpieza
+- **Composición**: Distribución espacial, equilibrio, jerarquía visual, uso del espacio
+- **Color**: Paleta cromática, armonías, contrastes, saturación, temperatura
+- **Contenido**: Mensaje, simbolismo, narrativa visual, coherencia temática
+- **Originalidad**: Creatividad, riesgo artístico, propuesta personal
+
+**PARA TEXTOS, DEBES ANALIZAR:**
+- **Estructura**: Organización, coherencia, progresión lógica
+- **Contenido**: Profundidad, precisión conceptual, ejemplificación
+- **Lenguaje**: Registro, vocabulario, corrección gramatical
+- **Argumentación**: Solidez, evidencia, contraargumentos
+- **Originalidad**: Perspectiva personal, creatividad en el enfoque
 
 ### CONTEXTO EVALUATIVO ###
 - **Estudiante**: ${studentName}
 - **Evaluación**: "${config.nombrePrueba}"
 - **Curso**: "${config.curso}"
-- **Fecha**: ${config.fecha}
-- **Sistema de Calificación**: ${config.sistema === "chile_2_7" ? "Chileno (2.0-7.0)" : config.sistema === "latam_1_10" ? "Latinoamericano (1-10)" : "Porcentual (0-100)"}
-- **Puntaje Total Disponible**: ${config.puntajeMaximo} puntos
+- **Sistema**: ${config.sistema === "chile_2_7" ? "Chileno (2.0-7.0)" : config.sistema === "latam_1_10" ? "Latinoamericano (1-10)" : "Porcentual (0-100)"}
+- **Puntaje Total**: ${config.puntajeMaximo} puntos
 
 ### RÚBRICA DE EVALUACIÓN ###
 """${config.rubrica}"""
 
-### RESPUESTAS CORRECTAS/CLAVES (si aplica) ###
-"""${config.preguntasObjetivas || "No se proporcionaron claves de respuestas objetivas"}"""
+### CLAVES DE RESPUESTAS CORRECTAS ###
+"""${config.preguntasObjetivas || "No se proporcionaron respuestas correctas específicas"}"""
 
 ### MATERIAL DEL ESTUDIANTE ###
-**Transcripción OCR del trabajo presentado:**
-"""${text || "(Sin texto extraído - Trabajo principalmente visual/artístico. Evalúa basándote en los criterios de la rúbrica aplicables a obras visuales: composición, técnica, creatividad, uso de elementos artísticos, etc.)"}"""
+**Transcripción/Descripción del trabajo:**
+"""${text || "(Trabajo principalmente visual - Analiza basándote en elementos observables: composición, técnica, uso del color, mensaje visual, creatividad, etc.)"}"""
 
-### INSTRUCCIONES DE ANÁLISIS ###
+### INSTRUCCIONES CRÍTICAS PARA RETROALIMENTACIÓN ULTRA-ESPECÍFICA ###
 
-**PASO 1 - ANÁLISIS DETALLADO POR CRITERIO:**
-Para cada criterio de la rúbrica, debes:
-- Identificar evidencia específica en el trabajo (citas textuales o descripciones visuales detalladas)
-- Evaluar qué tan bien cumple el criterio según tu nivel de flexibilidad
-- Asignar puntaje justificado
-- Documentar tu razonamiento pedagógico
+**OBLIGATORIO - CADA COMENTARIO DEBE INCLUIR:**
+1. **UBICACIÓN ESPECÍFICA**: "En la esquina superior derecha...", "En el párrafo 3, línea 2...", "En el centro de la composición..."
+2. **DESCRIPCIÓN TÉCNICA DETALLADA**: Colores exactos, tipos de trazos, técnicas utilizadas
+3. **ANÁLISIS PEDAGÓGICO**: Por qué es fortaleza o debilidad según criterios académicos
+4. **HABILIDADES IDENTIFICADAS**: Qué competencias específicas demuestra o necesita desarrollar
 
-**PASO 2 - RETROALIMENTACIÓN ESTUDIANTIL:**
-- Resumen alentador pero honesto del desempeño
-- Fortalezas con evidencia específica (citas o descripciones visuales)
-- Oportunidades de mejora con evidencia específica
-- Sugerencia práctica y aplicable
+**EJEMPLO DE RETROALIMENTACIÓN ESPECÍFICA CORRECTA:**
+❌ MAL: "Buen uso del color"
+✅ BIEN: "En la sección central de tu obra, el contraste entre el azul cobalto y el naranja cadmio crea un punto focal efectivo que dirige la mirada del espectador hacia el elemento principal. Esta decisión cromática demuestra comprensión de la teoría del color complementario y habilidad para jerarquizar elementos visuales."
 
-**PASO 3 - ANÁLISIS DOCENTE:**
-- Evaluación técnica del desempeño
-- Patrones observados en el trabajo
-- Sugerencias pedagógicas para el docente
+**HABILIDADES QUE DEBES IDENTIFICAR Y EVALUAR:**
+- **Técnicas Artísticas**: Manejo de materiales, control motor fino, aplicación de técnicas específicas
+- **Pensamiento Crítico**: Análisis, síntesis, evaluación de información
+- **Creatividad**: Originalidad, fluidez de ideas, flexibilidad conceptual
+- **Comunicación Visual**: Claridad del mensaje, uso de símbolos, narrativa visual
+- **Competencias Disciplinares**: Conocimiento específico del área (historia del arte, conceptos científicos, etc.)
+- **Metacognición**: Reflexión sobre el propio proceso creativo/académico
 
 ### FORMATO DE RESPUESTA OBLIGATORIO ###
-Responde ÚNICAMENTE con este objeto JSON, sin texto adicional:
+Responde ÚNICAMENTE con este JSON, sin texto adicional:
 
 {
-  "puntaje_obtenido": [número entero del puntaje total obtenido],
+  "puntaje_obtenido": [número entero],
+  "habilidades_identificadas": {
+    "[Nombre de habilidad específica]": {
+      "nivel": "[Destacado/Competente/En desarrollo/Inicial]",
+      "evidencia_especifica": "[Descripción ultra-detallada de dónde y cómo se observa esta habilidad en el trabajo]",
+      "justificacion_pedagogica": "[Explicación de por qué esta evidencia demuestra este nivel de la habilidad]"
+    }
+  },
   "analisis_detallado": [
     {
-      "criterio": "[Nombre exacto del criterio de la rúbrica]",
-      "evidencia": "[Cita textual específica O descripción visual detallada de lo observado en el trabajo. Ej: 'En el párrafo 2 escribe: \"La fotosíntesis es...\"' O 'En la esquina superior izquierda, utiliza trazos curvos en color azul que representan...']",
-      "justificacion": "[Explicación pedagógica de por qué esta evidencia merece el puntaje asignado, conectando con el criterio de la rúbrica]",
-      "puntaje": "[Formato: 'X/Y puntos' donde X es obtenido e Y es máximo para este criterio]"
+      "criterio": "[Criterio exacto de la rúbrica]",
+      "evidencia": "[Descripción ultra-específica con ubicación exacta y detalles técnicos observables]",
+      "justificacion": "[Análisis pedagógico detallado conectando evidencia con criterio y nivel de logro]",
+      "puntaje": "[X/Y puntos]"
     }
   ],
   "feedback_estudiante": {
-    "resumen": "[Resumen profesional y alentador del desempeño general, mencionando el nivel alcanzado]",
+    "resumen": "[Análisis profesional del desempeño general, mencionando nivel alcanzado y aspectos más destacados]",
     "fortalezas": [
       {
-        "descripcion": "[Fortaleza específica demostrada]",
-        "cita": "[Evidencia textual exacta O descripción visual específica que demuestra esta fortaleza. Ej: 'Cuando escribes \"El proceso de mitosis se divide en...\" demuestras comprensión clara' O 'El uso del contraste entre colores cálidos y fríos en la parte central de la composición muestra dominio técnico']"
+        "descripcion": "[Fortaleza específica con nombre técnico preciso]",
+        "cita": "[Ubicación exacta + descripción técnica detallada + análisis de por qué es una fortaleza. Mínimo 2 oraciones completas con detalles específicos]",
+        "habilidad_demostrada": "[Qué habilidad específica evidencia esta fortaleza]"
       }
     ],
     "oportunidades": [
       {
-        "descripcion": "[Área de mejora específica y constructiva]",
-        "cita": "[Evidencia textual exacta O descripción visual específica donde se observa esta oportunidad. Ej: 'En la conclusión mencionas \"es importante\" pero no explicas por qué' O 'Los trazos en la sección inferior derecha muestran menos control del pincel, lo que afecta la uniformidad']"
+        "descripcion": "[Área de mejora específica con terminología técnica apropiada]",
+        "cita": "[Ubicación exacta + descripción técnica detallada + análisis de qué falta o cómo mejorar. Mínimo 2 oraciones completas con detalles específicos]",
+        "habilidad_a_desarrollar": "[Qué habilidad específica necesita fortalecer]",
+        "sugerencia_tecnica": "[Consejo técnico específico y aplicable para mejorar]"
       }
     ],
-    "siguiente_paso_sugerido": "[Sugerencia concreta, específica y aplicable que el estudiante puede implementar en su próximo trabajo]"
+    "siguiente_paso_sugerido": "[Sugerencia ultra-específica con pasos concretos, técnicas específicas a practicar, y recursos recomendados]"
   },
   "analisis_profesor": {
-    "desempeno_general": "[Análisis técnico del nivel de desempeño alcanzado por el estudiante, considerando su nivel educativo y contexto]",
-    "patrones_observados": "[Descripción de patrones consistentes de fortalezas o dificultades observadas en el trabajo, con ejemplos específicos]",
-    "sugerencia_pedagogica": "[Recomendación profesional para el docente sobre estrategias didácticas específicas para abordar las necesidades observadas en este estudiante]"
+    "desempeno_general": "[Análisis técnico profesional del nivel alcanzado, comparando con estándares curriculares chilenos]",
+    "patrones_observados": "[Descripción detallada de patrones consistentes con ejemplos específicos de ubicaciones en el trabajo]",
+    "sugerencia_pedagogica": "[Estrategias didácticas específicas, recursos recomendados, y enfoques metodológicos para abordar las necesidades identificadas]",
+    "proyeccion_desarrollo": "[Análisis del potencial del estudiante y áreas prioritarias para su desarrollo futuro]"
   }
 }
 
-### RECORDATORIO CRÍTICO ###
-- Cada "evidencia" debe ser una cita textual específica O una descripción visual detallada
-- Cada "cita" en fortalezas/oportunidades debe referenciar contenido específico del trabajo
-- El puntaje total debe sumar exactamente el valor calculado en "puntaje_obtenido"
-- Mantén el rigor académico apropiado para el contexto educativo chileno/latinoamericano`
+### EJEMPLOS DE ESPECIFICIDAD REQUERIDA ###
+
+**Para Obra Visual:**
+- "En el tercio superior izquierdo de tu composición, utilizas trazos verticales con lápiz 2B que crean una textura rugosa efectiva para representar la corteza del árbol. La presión variable que aplicas (más intensa en la base, más suave hacia las ramas) demuestra control técnico del grafito y comprensión de cómo crear volumen mediante valores tonales."
+
+**Para Texto Académico:**
+- "En tu segundo párrafo, cuando escribes 'La fotosíntesis permite que las plantas conviertan la luz solar en energía química', demuestras comprensión del concepto básico. Sin embargo, la explicación se queda en un nivel superficial ya que no mencionas los reactivos específicos (CO2 + H2O) ni los productos (glucosa + O2), lo que limitaría tu puntaje en el criterio de 'precisión científica'."
+
+### RECORDATORIO FINAL ###
+- CERO generalidades o comentarios vagos
+- CADA observación debe tener ubicación específica
+- CADA fortaleza/oportunidad debe incluir análisis técnico detallado
+- IDENTIFICA habilidades específicas del siglo XXI
+- USA terminología técnica apropiada para el nivel educativo
+- CONECTA cada observación con criterios pedagógicos chilenos/latinoamericanos`
 
   const data = await callMistralAPI({
     model: "mistral-large-latest",
@@ -260,6 +292,7 @@ export async function POST(request: NextRequest) {
           configuracion: config,
           feedback_estudiante: aiResult.feedback_estudiante,
           analisis_profesor: aiResult.analisis_profesor,
+          habilidades_identificadas: aiResult.habilidades_identificadas,
           analisis_detallado: aiResult.analisis_detallado,
           bonificacion: 0,
           justificacionDecimas: "",
@@ -278,16 +311,30 @@ export async function POST(request: NextRequest) {
             puntajeObtenido: 0,
             configuracion: config,
             feedback_estudiante: {
-              resumen: `Error al procesar el archivo: ${error.message}`,
+              resumen: `Error técnico al procesar el archivo: ${error.message}. Verifica que el archivo esté en formato correcto (JPG, PNG, PDF) y sea legible.`,
               fortalezas: [],
-              oportunidades: [],
-              siguiente_paso_sugerido: "Verificar que el archivo esté en formato correcto y sea legible.",
+              oportunidades: [
+                {
+                  descripcion: "Resolución de problema técnico",
+                  cita: "El archivo no pudo ser procesado correctamente por el sistema OCR. Esto puede deberse a baja calidad de imagen, formato no compatible, o texto ilegible.",
+                  habilidad_a_desarrollar: "Competencia digital",
+                  sugerencia_tecnica:
+                    "Asegúrate de que las imágenes tengan buena resolución (mínimo 300 DPI), buen contraste, y texto claramente legible.",
+                },
+              ],
+              siguiente_paso_sugerido:
+                "Vuelve a subir el archivo asegurándote de que esté en formato JPG, PNG o PDF, con texto legible y buena calidad de imagen.",
             },
             analisis_profesor: {
-              desempeno_general: "No se pudo evaluar debido a error técnico",
-              patrones_observados: "Error en procesamiento de archivo",
-              sugerencia_pedagogica: "Revisar formato y calidad del archivo enviado",
+              desempeno_general: "No se pudo evaluar debido a error técnico en el procesamiento del archivo",
+              patrones_observados:
+                "Error sistemático en la lectura del archivo, posiblemente por formato o calidad inadecuada",
+              sugerencia_pedagogica:
+                "Proporcionar instrucciones claras a los estudiantes sobre formatos de archivo aceptables y calidad mínima requerida",
+              proyeccion_desarrollo:
+                "Una vez resuelto el problema técnico, se podrá realizar la evaluación correspondiente",
             },
+            habilidades_identificadas: {},
             analisis_detallado: [],
           }
           evaluations.push(evaluationError as any)
