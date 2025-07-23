@@ -12,6 +12,7 @@ interface EvaluationConfig {
   curso: string
   rubrica: string
   preguntasObjetivas: string
+  aiModel: string // Nueva propiedad
 }
 
 function calculateFinalGrade(
@@ -154,21 +155,8 @@ Eres PROFESOR MIGUEL HERNÁNDEZ, docente chileno con 20 años de experiencia en 
 3. **ANÁLISIS PEDAGÓGICO**: Por qué es fortaleza o debilidad según criterios académicos
 4. **HABILIDADES IDENTIFICADAS**: Qué competencias específicas demuestra o necesita desarrollar
 
-**EJEMPLO DE RETROALIMENTACIÓN ESPECÍFICA CORRECTA:**
-❌ MAL: "Buen uso del color"
-✅ BIEN: "En la sección central de tu obra, el contraste entre el azul cobalto y el naranja cadmio crea un punto focal efectivo que dirige la mirada del espectador hacia el elemento principal. Esta decisión cromática demuestra comprensión de la teoría del color complementario y habilidad para jerarquizar elementos visuales."
-
-**HABILIDADES QUE DEBES IDENTIFICAR Y EVALUAR:**
-- **Técnicas Artísticas**: Manejo de materiales, control motor fino, aplicación de técnicas específicas
-- **Pensamiento Crítico**: Análisis, síntesis, evaluación de información
-- **Creatividad**: Originalidad, fluidez de ideas, flexibilidad conceptual
-- **Comunicación Visual**: Claridad del mensaje, uso de símbolos, narrativa visual
-- **Competencias Disciplinares**: Conocimiento específico del área (historia del arte, conceptos científicos, etc.)
-- **Metacognición**: Reflexión sobre el propio proceso creativo/académico
-
 ### FORMATO DE RESPUESTA OBLIGATORIO ###
 Responde ÚNICAMENTE con este JSON, sin texto adicional:
-
 {
   "puntaje_obtenido": [número entero],
   "habilidades_identificadas": {
@@ -211,26 +199,10 @@ Responde ÚNICAMENTE con este JSON, sin texto adicional:
     "sugerencia_pedagogica": "[Estrategias didácticas específicas, recursos recomendados, y enfoques metodológicos para abordar las necesidades identificadas]",
     "proyeccion_desarrollo": "[Análisis del potencial del estudiante y áreas prioritarias para su desarrollo futuro]"
   }
-}
-
-### EJEMPLOS DE ESPECIFICIDAD REQUERIDA ###
-
-**Para Obra Visual:**
-- "En el tercio superior izquierdo de tu composición, utilizas trazos verticales con lápiz 2B que crean una textura rugosa efectiva para representar la corteza del árbol. La presión variable que aplicas (más intensa en la base, más suave hacia las ramas) demuestra control técnico del grafito y comprensión de cómo crear volumen mediante valores tonales."
-
-**Para Texto Académico:**
-- "En tu segundo párrafo, cuando escribes 'La fotosíntesis permite que las plantas conviertan la luz solar en energía química', demuestras comprensión del concepto básico. Sin embargo, la explicación se queda en un nivel superficial ya que no mencionas los reactivos específicos (CO2 + H2O) ni los productos (glucosa + O2), lo que limitaría tu puntaje en el criterio de 'precisión científica'."
-
-### RECORDATORIO FINAL ###
-- CERO generalidades o comentarios vagos
-- CADA observación debe tener ubicación específica
-- CADA fortaleza/oportunidad debe incluir análisis técnico detallado
-- IDENTIFICA habilidades específicas del siglo XXI
-- USA terminología técnica apropiada para el nivel educativo
-- CONECTA cada observación con criterios pedagógicos chilenos/latinoamericanos`
+}`
 
   const data = await callMistralAPI({
-    model: "mistral-large-latest",
+    model: config.aiModel, // Usar el modelo seleccionado por el usuario
     messages: [{ role: "user", content: prompt }],
     response_format: { type: "json_object" },
   })
@@ -294,11 +266,9 @@ export async function POST(request: NextRequest) {
           analisis_profesor: aiResult.analisis_profesor,
           habilidades_identificadas: aiResult.habilidades_identificadas,
           analisis_detallado: aiResult.analisis_detallado,
-          bonificacion: 0,
-          justificacionDecimas: "",
         }
 
-        evaluations.push(evaluation)
+        evaluations.push(evaluation as any)
       } catch (error) {
         console.error(`Error processing file ${file.name}:`, error)
         if (error instanceof Error) {
@@ -310,30 +280,8 @@ export async function POST(request: NextRequest) {
             notaFinal: 1.0,
             puntajeObtenido: 0,
             configuracion: config,
-            feedback_estudiante: {
-              resumen: `Error técnico al procesar el archivo: ${error.message}. Verifica que el archivo esté en formato correcto (JPG, PNG, PDF) y sea legible.`,
-              fortalezas: [],
-              oportunidades: [
-                {
-                  descripcion: "Resolución de problema técnico",
-                  cita: "El archivo no pudo ser procesado correctamente por el sistema OCR. Esto puede deberse a baja calidad de imagen, formato no compatible, o texto ilegible.",
-                  habilidad_a_desarrollar: "Competencia digital",
-                  sugerencia_tecnica:
-                    "Asegúrate de que las imágenes tengan buena resolución (mínimo 300 DPI), buen contraste, y texto claramente legible.",
-                },
-              ],
-              siguiente_paso_sugerido:
-                "Vuelve a subir el archivo asegurándote de que esté en formato JPG, PNG o PDF, con texto legible y buena calidad de imagen.",
-            },
-            analisis_profesor: {
-              desempeno_general: "No se pudo evaluar debido a error técnico en el procesamiento del archivo",
-              patrones_observados:
-                "Error sistemático en la lectura del archivo, posiblemente por formato o calidad inadecuada",
-              sugerencia_pedagogica:
-                "Proporcionar instrucciones claras a los estudiantes sobre formatos de archivo aceptables y calidad mínima requerida",
-              proyeccion_desarrollo:
-                "Una vez resuelto el problema técnico, se podrá realizar la evaluación correspondiente",
-            },
+            feedback_estudiante: { resumen: `Error procesando archivo: ${error.message}` },
+            analisis_profesor: { desempeno_general: "Error en procesamiento" },
             habilidades_identificadas: {},
             analisis_detallado: [],
           }

@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Switch } from "@/components/ui/switch"
 import {
   Upload,
   FileText,
@@ -34,6 +35,8 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
+  Zap,
+  Settings,
 } from "lucide-react"
 
 interface EvaluationConfig {
@@ -43,6 +46,7 @@ interface EvaluationConfig {
   notaAprobacion: number
   flexibility: number
   fecha: string
+  aiModel: string // Nueva propiedad para el modelo de IA
 }
 
 interface FilePreview {
@@ -50,6 +54,8 @@ interface FilePreview {
   file: File
   preview?: string
   type: "image" | "pdf" | "other"
+  originalSize?: number
+  compressedSize?: number
 }
 
 interface StudentGroup {
@@ -86,6 +92,27 @@ interface EvaluationProgress {
 
 type GroupingMode = "single" | "multiple" | null
 
+// Función para comprimir imágenes (requiere instalar: npm install browser-image-compression)
+const compressImage = async (file: File): Promise<File> => {
+  try {
+    // Importación dinámica para evitar errores de SSR
+    const imageCompression = (await import("browser-image-compression")).default
+
+    const options = {
+      maxSizeMB: 1, // Máximo 1MB
+      maxWidthOrHeight: 1920, // Máximo 1920px de ancho/alto
+      useWebWorker: true, // Usar Web Worker para no bloquear la UI
+      quality: 0.7, // Calidad del 70%
+    }
+
+    const compressedFile = await imageCompression(file, options)
+    return compressedFile
+  } catch (error) {
+    console.warn("Error comprimiendo imagen, usando archivo original:", error)
+    return file
+  }
+}
+
 export default function GeniusEvaluator() {
   const [activeTab, setActiveTab] = useState("evaluate")
   const [isLoading, setIsLoading] = useState(false)
@@ -96,6 +123,7 @@ export default function GeniusEvaluator() {
   const [draggedFile, setDraggedFile] = useState<string | null>(null)
   const [selectedEvaluation, setSelectedEvaluation] = useState<StudentEvaluation | null>(null)
   const [evaluationProgress, setEvaluationProgress] = useState<EvaluationProgress | null>(null)
+  const [optimizeImages, setOptimizeImages] = useState(true) // Nueva opción de optimización
 
   const [currentEvaluation, setCurrentEvaluation] = useState({
     nombrePrueba: "",
@@ -111,6 +139,7 @@ export default function GeniusEvaluator() {
     notaAprobacion: 4.0,
     flexibility: 5,
     fecha: new Date().toISOString().split("T")[0],
+    aiModel: "mistral-large-latest", // Modelo por defecto
   })
 
   useEffect(() => {
@@ -129,15 +158,30 @@ export default function GeniusEvaluator() {
     const id = `file_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     let preview = undefined
     let type: "image" | "pdf" | "other" = "other"
+    let processedFile = file
+    const originalSize = file.size
 
     if (file.type.startsWith("image/")) {
       type = "image"
-      preview = URL.createObjectURL(file)
+
+      // Comprimir imagen si la optimización está activada
+      if (optimizeImages) {
+        processedFile = await compressImage(file)
+      }
+
+      preview = URL.createObjectURL(processedFile)
     } else if (file.type === "application/pdf") {
       type = "pdf"
     }
 
-    return { id, file, preview, type }
+    return {
+      id,
+      file: processedFile,
+      preview,
+      type,
+      originalSize,
+      compressedSize: processedFile.size,
+    }
   }
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -145,6 +189,14 @@ export default function GeniusEvaluator() {
     if (!files.length) return
 
     const newPreviews: FilePreview[] = []
+
+    // Mostrar indicador de procesamiento para archivos grandes
+    const hasLargeFiles = files.some((file) => file.size > 5 * 1024 * 1024) // 5MB
+    if (hasLargeFiles && optimizeImages) {
+      // Aquí podrías mostrar un toast o indicador de que se están optimizando las imágenes
+      console.log("Optimizando imágenes grandes...")
+    }
+
     for (const file of files) {
       const filePreview = await createFilePreview(file)
       newPreviews.push(filePreview)
@@ -549,6 +601,14 @@ export default function GeniusEvaluator() {
     }
   }
 
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return "0 Bytes"
+    const k = 1024
+    const sizes = ["Bytes", "KB", "MB", "GB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+  }
+
   const FilePreviewCard = ({
     filePreview,
     groupId,
@@ -582,6 +642,15 @@ export default function GeniusEvaluator() {
         <span className="text-xs text-center truncate w-full" title={filePreview.file.name}>
           {filePreview.file.name}
         </span>
+        {/* Mostrar información de compresión si está disponible */}
+        {filePreview.originalSize &&
+          filePreview.compressedSize &&
+          filePreview.originalSize !== filePreview.compressedSize && (
+            <div className="text-xs text-green-600 text-center">
+              <Zap className="w-3 h-3 inline mr-1" />
+              {formatFileSize(filePreview.originalSize)} → {formatFileSize(filePreview.compressedSize)}
+            </div>
+          )}
       </div>
       {showRemove && (
         <button
@@ -873,7 +942,10 @@ export default function GeniusEvaluator() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Configuración de Evaluación</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings className="w-5 h-5" />
+                  Configuración de Evaluación
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -936,6 +1008,43 @@ export default function GeniusEvaluator() {
                   </div>
                 </div>
 
+                {/* NUEVO: Selector de Modelo de IA */}
+                <div className="space-y-2">
+                  <Label>Modelo de IA para Evaluación</Label>
+                  <Select
+                    value={config.aiModel}
+                    onValueChange={(value) => setConfig((prev) => ({ ...prev, aiModel: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="mistral-small-latest">
+                        <div className="flex items-center gap-2">
+                          <Zap className="w-4 h-4 text-green-500" />
+                          <span>Rápido y Eficiente (Mistral Small)</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="mistral-large-latest">
+                        <div className="flex items-center gap-2">
+                          <Brain className="w-4 h-4 text-blue-500" />
+                          <span>Potente y Detallado (Mistral Large)</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="mistral-next" disabled>
+                        <div className="flex items-center gap-2">
+                          <Settings className="w-4 h-4 text-gray-400" />
+                          <span>Turbo (Próximamente)</span>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-sm text-gray-500">
+                    {config.aiModel === "mistral-small-latest" && "⚡ Evaluaciones más rápidas con excelente calidad"}
+                    {config.aiModel === "mistral-large-latest" && "🧠 Análisis más profundo y detallado (más lento)"}
+                  </p>
+                </div>
+
                 <div className="space-y-2">
                   <Label>Nivel de Flexibilidad de la IA: {config.flexibility}/10</Label>
                   <Slider
@@ -975,6 +1084,19 @@ export default function GeniusEvaluator() {
                       <span>Seleccionar Archivos</span>
                     </Button>
                   </Label>
+                </div>
+
+                {/* NUEVO: Switch de Optimización de Imágenes */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div className="space-y-1">
+                    <Label htmlFor="optimize-images" className="text-sm font-medium">
+                      Optimizar imágenes para una evaluación más rápida
+                    </Label>
+                    <p className="text-xs text-gray-500">
+                      Reduce el tamaño de las imágenes automáticamente para acelerar el procesamiento
+                    </p>
+                  </div>
+                  <Switch id="optimize-images" checked={optimizeImages} onCheckedChange={setOptimizeImages} />
                 </div>
 
                 {filePreviews.length > 0 && (
