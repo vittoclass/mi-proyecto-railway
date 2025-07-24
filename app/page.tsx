@@ -769,20 +769,29 @@ export default function GeniusEvaluatorX() {
 
   useEffect(() => {
   const fetchEvaluations = async () => {
-    const { data: savedData, error } = await supabase
-      .from("evaluaciones")
-      .select("data")
-      .eq("usuario_id", "usuario_demo")
-      .order("fecha", { ascending: false })
-      .limit(1)
+    try {
+      const { data: savedData, error } = await supabase
+        .from("evaluaciones")
+        .select("data")
+        .eq("usuario_id", "usuario_demo")
+        .order("fecha", { ascending: false })
+        .limit(1)
 
-    if (savedData && savedData[0]?.data) {
-      setEvaluations(savedData[0].data)
+      if (error) {
+        console.error("Error loading saved config:", error)
+        return
+      }
+
+      if (savedData && savedData[0]?.data) {
+        setEvaluations(savedData[0].data)
+      }
+    } catch (err) {
+      console.error("Unexpected error loading config:", err)
     }
   }
 
   fetchEvaluations()
-}).limit(1)
+}, [])).limit(1)
     const savedFolders = localStorage.getItem("genius-student-folders")
     const savedProcessEvaluations = localStorage.getItem("genius-process-evaluations")
     const savedAdministrativeFiles = localStorage.getItem("genius-administrative-files")
