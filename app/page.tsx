@@ -26,6 +26,7 @@ export default function Home() {
   const [evaluacion, setEvaluacion] = useState("")
   const [retroalimentacion, setRetroalimentacion] = useState("")
   const [puntaje, setPuntaje] = useState("")
+  const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const logoInputRef = useRef<HTMLInputElement>(null)
   const dragCounter = useRef(0)
@@ -41,15 +42,19 @@ export default function Home() {
           .limit(1)
 
         if (error) {
-          console.error("Error loading saved config:", error)
+          console.error("Error al cargar los datos:", error.message)
+          setError("Hubo un problema al conectar con la base de datos.")
           return
         }
 
-        if (savedData && savedData[0]?.data) {
+        if (savedData && savedData[0]?.data?.length > 0) {
           setEvaluations(savedData[0].data)
+        } else {
+          setEvaluations([])
         }
-      } catch (err) {
-        console.error("Unexpected error loading config:", err)
+      } catch (err: any) {
+        console.error("Error inesperado:", err.message)
+        setError("Error inesperado al cargar las evaluaciones.")
       }
     }
 
@@ -89,8 +94,31 @@ export default function Home() {
   }
 
   return (
-    <main>
-      {/* Tu interfaz va aquí */}
+    <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
+      <h1>Evaluaciones guardadas</h1>
+
+      {error && <p style={{ color: "red" }}>{error}</p>}
+
+      {evaluations.length === 0 && !error && (
+        <p>No hay evaluaciones registradas aún.</p>
+      )}
+
+      {evaluations.length > 0 && (
+        <ul>
+          {evaluations.map((evalItem, idx) => (
+            <li key={idx} style={{ marginBottom: "1rem", borderBottom: "1px solid #ccc", paddingBottom: "1rem" }}>
+              <p><strong>Nombre:</strong> {evalItem.nombre || "N/A"}</p>
+              <p><strong>Curso:</strong> {evalItem.curso || "N/A"}</p>
+              <p><strong>Fecha:</strong> {evalItem.fecha || "N/A"}</p>
+              <p><strong>Evaluación:</strong> {evalItem.evaluacion || "N/A"}</p>
+              <p><strong>Retroalimentación:</strong> {evalItem.retroalimentacion || "N/A"}</p>
+              <p><strong>Puntaje:</strong> {evalItem.puntaje || "N/A"}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Aquí continúa tu interfaz profesional */}
     </main>
   )
 }
