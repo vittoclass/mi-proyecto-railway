@@ -1,24 +1,3 @@
-### **¡Encontramos el problema\!**
-
-El error `ReferenceError: copyToClipboard is not defined` es la clave. Es un error muy específico que nos dice exactamente qué está mal.
-
-Este error ocurre porque el código que te dio **"chat v0"** para la interfaz (`page.tsx`) está incompleto. Incluye los botones "Copiar" y "Exportar CSV" en la pestaña de historial, pero **no incluye el código de las funciones `copyToClipboard` y `exportToCSV`** que hacen que esos botones funcionen.
-
-Cuando Railway intenta construir la aplicación, se da cuenta de que estas funciones no existen y por eso falla el despliegue.
-
------
-
-## La Solución Final y Definitiva
-
-He tomado el último código de `page.tsx` que te dio "chat v0" y le he agregado las funciones que faltaban. Esta versión combina todas las funcionalidades avanzadas (agrupación, cámara, optimización) con el código necesario para que los botones de exportación funcionen y el proyecto pueda construirse sin errores.
-
-**Esta vez, el despliegue funcionará.**
-
-### **Paso 1: Reemplaza el Código de `page.tsx`**
-
-Borra todo el contenido de tu archivo **`page.tsx`** y reemplázalo con este código **completo y corregido**:
-
-```tsx
 "use client"
 
 import type React from "react"
@@ -256,26 +235,28 @@ export default function GeniusEvaluator() {
       return;
     }
 
-    // From preview area to a group
     if (sourceGroupId === 'preview-area' && targetGroupId) {
       setFilePreviews(prev => prev.filter(f => f.id !== draggedFile));
       setStudentGroups(prev => prev.map(g => g.id === targetGroupId ? { ...g, files: [...g.files, draggedFileObj!] } : g));
-    }
-    // From a group to preview area
-    else if (sourceGroupId && !targetGroupId) {
-      setStudentGroups(prev => prev.map(g => g.id === sourceGroupId ? { ...g, files: g.files.filter(f => f.id !== draggedFile) } : g).filter(g => g.files.length > 0 || g.studentName.trim() !== ''));
-      setFilePreviews(prev => [...prev, draggedFileObj!]);
-    }
-    // From one group to another
-    else if (sourceGroupId && targetGroupId) {
-      let fileToMove: FilePreview;
+    } else if (sourceGroupId && !targetGroupId) {
+      let fileToMove: FilePreview | null = null;
+      setStudentGroups(prev => prev.map(g => {
+          if (g.id === sourceGroupId) {
+              fileToMove = g.files.find(f => f.id === draggedFile)!;
+              return { ...g, files: g.files.filter(f => f.id !== draggedFile) };
+          }
+          return g;
+      }).filter(g => g.files.length > 0 || g.studentName.trim() !== ''));
+      if(fileToMove) setFilePreviews(prev => [...prev, fileToMove!]);
+    } else if (sourceGroupId && targetGroupId) {
+      let fileToMove: FilePreview | null = null;
       setStudentGroups(prev => {
         const fromGroup = prev.find(g => g.id === sourceGroupId);
         fileToMove = fromGroup!.files.find(f => f.id === draggedFile)!;
 
         const newGroups = prev.map(g => {
           if (g.id === sourceGroupId) return { ...g, files: g.files.filter(f => f.id !== draggedFile) };
-          if (g.id === targetGroupId) return { ...g, files: [...g.files, fileToMove] };
+          if (g.id === targetGroupId) return { ...g, files: [...g.files, fileToMove!] };
           return g;
         });
         return newGroups.filter(g => g.files.length > 0 || g.studentName.trim() !== '');
@@ -290,36 +271,28 @@ export default function GeniusEvaluator() {
     if (!currentEvaluation.rubrica.trim()) { alert("Por favor, proporciona una rúbrica de evaluación."); return; }
 
     setIsLoading(true);
-    setEvaluationProgress({ total: groupsToEvaluate.length, completed: 0, current: "Iniciando...", successes: 0, failures: 0 });
+    const progressInitialState = { total: groupsToEvaluate.length, completed: 0, current: "Iniciando...", successes: 0, failures: 0 };
+    setEvaluationProgress(progressInitialState);
 
     const evaluationPromises = groupsToEvaluate.map((group, index) => {
-      const formData = new FormData();
-      group.files.forEach(fp => formData.append("files", fp.file));
-      formData.append("config", JSON.stringify({ ...config, ...currentEvaluation, studentName: group.studentName }));
+        const formData = new FormData();
+        group.files.forEach(fp => formData.append("files", fp.file));
+        formData.append("config", JSON.stringify({ ...config, ...currentEvaluation, studentName: group.studentName }));
 
-      return new Promise<StudentEvaluation>((resolve, reject) => {
         setEvaluationProgress(prev => prev ? { ...prev, current: `Enviando ${index + 1}/${groupsToEvaluate.length}: ${group.studentName}...` } : null);
-        fetch("/api/evaluate", { method: "POST", body: formData })
-          .then(res => {
-            if (!res.ok) return res.json().then(err => Promise.reject(err.error || 'Error desconocido del servidor'));
-            return res.json();
-          })
+        
+        return fetch("/api/evaluate", { method: "POST", body: formData })
+          .then(res => res.ok ? res.json() : res.json().then(err => Promise.reject(err)))
           .then(result => {
-            setEvaluationProgress(prev => prev ? { ...prev, completed: prev.completed + 1, successes: prev.successes + 1 } : null);
             if (result.success && result.evaluations.length > 0) {
               const evaluation = result.evaluations[0];
               evaluation.nombreEstudiante = group.studentName;
               evaluation.filesPreviews = group.files;
-              resolve(evaluation);
-            } else {
-              reject(new Error(result.error || "Fallo en la evaluación"));
+              return { status: 'fulfilled', value: evaluation };
             }
+            return Promise.reject(result);
           })
-          .catch(error => {
-            setEvaluationProgress(prev => prev ? { ...prev, completed: prev.completed + 1, failures: prev.failures + 1 } : null);
-            reject(error);
-          });
-      });
+          .catch(error => ({ status: 'rejected', reason: error.error || error.message || 'Error desconocido', groupName: group.studentName }));
     });
 
     const results = await Promise.allSettled(evaluationPromises);
@@ -328,12 +301,16 @@ export default function GeniusEvaluator() {
     const failedEvals: string[] = [];
 
     results.forEach((res, i) => {
-        if (res.status === 'fulfilled') {
-            successfulEvals.push(res.value);
+        const groupName = groupsToEvaluate[i].studentName;
+        if (res.status === 'fulfilled' && res.value.status === 'fulfilled') {
+            successfulEvals.push(res.value.value);
         } else {
-            failedEvals.push(`Error con ${groupsToEvaluate[i].studentName}: ${res.reason?.message || 'Error desconocido'}`);
+            const reason = res.status === 'rejected' ? res.reason : (res.value as any).reason;
+            failedEvals.push(`${groupName}: ${reason}`);
         }
     });
+    
+    setEvaluationProgress(prev => prev ? { ...prev, completed: prev.total, current: 'Finalizado' } : null);
 
     if (successfulEvals.length > 0) {
         saveEvaluations(successfulEvals);
@@ -351,6 +328,12 @@ export default function GeniusEvaluator() {
     setEvaluationProgress(null);
   };
   
+  const clearHistory = () => {
+    if (confirm("¿Borrar PERMANENTEMENTE todo el historial?")) {
+      saveEvaluations([]);
+    }
+  };
+
   const formatFileSize = (bytes?: number) => {
     if (bytes === undefined) return "";
     if (bytes === 0) return "0 Bytes";
@@ -360,52 +343,7 @@ export default function GeniusEvaluator() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
   
-  const exportToCSV = () => {
-    if (evaluations.length === 0) { return; }
-    const headers = ["Estudiante", "Curso", "Evaluación", "Nota Final", "Puntaje", "Fecha"];
-    const rows = evaluations.map((evaluation) => [
-      evaluation.nombreEstudiante,
-      evaluation.curso,
-      evaluation.nombrePrueba,
-      typeof evaluation.notaFinal === 'number' ? evaluation.notaFinal.toFixed(1) : 'N/A',
-      `${evaluation.puntajeObtenido}/${evaluation.configuracion?.puntajeMaximo || 'N/A'}`,
-      evaluation.configuracion?.fecha || 'N/A',
-    ]);
-    const csvContent = [headers, ...rows].map((row) => row.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `evaluaciones_${new Date().toISOString().split("T")[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const copyToClipboard = async () => {
-    if (evaluations.length === 0) { return; }
-    const headers = ["Estudiante", "Curso", "Evaluación", "Nota Final"];
-    const rows = evaluations.map((evaluation) => [
-      evaluation.nombreEstudiante,
-      evaluation.curso,
-      evaluation.nombrePrueba,
-      typeof evaluation.notaFinal === 'number' ? evaluation.notaFinal.toFixed(1) : 'N/A',
-    ]);
-    const tsvContent = [headers, ...rows].map((row) => row.join("\t")).join("\n");
-    try {
-      await navigator.clipboard.writeText(tsvContent);
-      alert("✅ Datos copiados al portapapeles");
-    } catch (error) {
-      alert("❌ Error al copiar los datos");
-    }
-  };
-
-  const clearHistory = () => {
-    if (confirm("¿Borrar PERMANENTEMENTE todo el historial?")) {
-      saveEvaluations([]);
-    }
-  };
-
-  const FilePreviewCard = ({ filePreview, onRemove, isDraggable = true }: { filePreview: FilePreview, onRemove?: () => void, isDraggable?: boolean }) => (
+  const FilePreviewCard = ({ filePreview, onRemove, isDraggable = true, inGroup = false }: { filePreview: FilePreview, onRemove?: () => void, isDraggable?: boolean, inGroup?: boolean }) => (
     <div className={`relative border rounded-lg p-2 bg-white ${isDraggable ? "cursor-move" : ""}`} draggable={isDraggable} onDragStart={(e) => isDraggable && handleDragStart(e, filePreview.id)}>
       <div className="flex flex-col items-center space-y-1 text-center">
         {filePreview.type === "image" && filePreview.preview ? <img src={filePreview.preview} alt={filePreview.file.name} className="w-20 h-20 object-cover rounded-md" /> : <FileIcon className="w-20 h-20 text-gray-300" />}
@@ -420,17 +358,17 @@ export default function GeniusEvaluator() {
   
   const StudentFeedbackTab = ({ evaluation }: { evaluation: StudentEvaluation }) => (
     <div className="space-y-6">
-      <div className="bg-blue-50 p-4 rounded-lg"><h3 className="font-semibold text-blue-900 mb-2">📋 Resumen de tu Evaluación</h3><p className="text-blue-800">{evaluation.feedback_estudiante?.resumen || "Sin resumen disponible."}</p></div>
-      <div className="text-center"><div className="inline-flex items-center gap-4 bg-gray-100 px-6 py-4 rounded-lg"><span className="text-lg font-medium">Tu Nota Final:</span><Badge variant="secondary" className="text-2xl px-4 py-2">{typeof evaluation.notaFinal === 'number' ? evaluation.notaFinal.toFixed(1) : "N/A"}</Badge></div></div>
-      <div>
-        <h3 className="font-semibold text-green-700 mb-3 flex items-center gap-2"><CheckCircle className="w-5 h-5" />🌟 Tus Fortalezas</h3>
-        <div className="space-y-3">{evaluation.feedback_estudiante?.fortalezas?.map((fortaleza: any, index: number) => <div key={index} className="bg-green-50 p-4 rounded-lg border-l-4 border-green-400"><p className="font-medium text-green-800">{fortaleza.descripcion}</p><p className="text-sm text-green-700 mt-2 italic">"{fortaleza.cita}"</p></div>) || <p className="text-gray-500 italic">No se identificaron fortalezas específicas.</p>}</div>
-      </div>
-      <div>
-        <h3 className="font-semibold text-orange-700 mb-3 flex items-center gap-2"><AlertCircle className="w-5 h-5" />🚀 Áreas para Mejorar</h3>
-        <div className="space-y-3">{evaluation.feedback_estudiante?.oportunidades?.map((oportunidad: any, index: number) => <div key={index} className="bg-orange-50 p-4 rounded-lg border-l-4 border-orange-400"><p className="font-medium text-orange-800">{oportunidad.descripcion}</p><p className="text-sm text-orange-700 mt-2 italic">"{oportunidad.cita}"</p>{oportunidad.sugerencia_tecnica && <div className="mt-3 p-2 bg-blue-100 rounded text-sm"><strong className="text-blue-800">💡 Consejo:</strong><span className="text-blue-700 ml-1">{oportunidad.sugerencia_tecnica}</span></div>}</div>) || <p className="text-gray-500 italic">No se identificaron áreas específicas de mejora.</p>}</div>
-      </div>
-      {evaluation.feedback_estudiante?.siguiente_paso_sugerido && <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-400"><h3 className="font-semibold text-blue-800 mb-2 flex items-center gap-2"><Brain className="w-5 h-5" />🎯 Tu Próximo Desafío</h3><p className="text-blue-700">{evaluation.feedback_estudiante.siguiente_paso_sugerido}</p></div>}
+        <div className="bg-blue-50 p-4 rounded-lg"><h3 className="font-semibold text-blue-900 mb-2">📋 Resumen de Evaluación</h3><p className="text-blue-800">{evaluation.feedback_estudiante?.resumen || "Sin resumen disponible."}</p></div>
+        <div className="text-center"><div className="inline-flex items-center gap-4 bg-gray-100 px-6 py-4 rounded-lg"><span className="text-lg font-medium">Nota Final:</span><Badge variant="secondary" className="text-2xl px-4 py-2">{typeof evaluation.notaFinal === 'number' ? evaluation.notaFinal.toFixed(1) : "N/A"}</Badge></div></div>
+        <div>
+            <h3 className="font-semibold text-green-700 mb-3 flex items-center gap-2"><CheckCircle className="w-5 h-5" />Fortalezas</h3>
+            <div className="space-y-3">{evaluation.feedback_estudiante?.fortalezas?.map((fortaleza: any, index: number) => <div key={index} className="bg-green-50 p-4 rounded-lg border-l-4 border-green-400"><p className="font-medium text-green-800">{fortaleza.descripcion}</p><p className="text-sm text-green-700 mt-2 italic">"{fortaleza.cita}"</p></div>) || <p className="text-gray-500 italic">No se identificaron fortalezas específicas.</p>}</div>
+        </div>
+        <div>
+            <h3 className="font-semibold text-orange-700 mb-3 flex items-center gap-2"><AlertCircle className="w-5 h-5" />Áreas para Mejorar</h3>
+            <div className="space-y-3">{evaluation.feedback_estudiante?.oportunidades?.map((oportunidad: any, index: number) => <div key={index} className="bg-orange-50 p-4 rounded-lg border-l-4 border-orange-400"><p className="font-medium text-orange-800">{oportunidad.descripcion}</p><p className="text-sm text-orange-700 mt-2 italic">"{oportunidad.cita}"</p>{oportunidad.sugerencia_tecnica && <div className="mt-3 p-2 bg-blue-100 rounded text-sm"><strong className="text-blue-800">💡 Consejo:</strong><span className="text-blue-700 ml-1">{oportunidad.sugerencia_tecnica}</span></div>}</div>) || <p className="text-gray-500 italic">No se identificaron áreas específicas de mejora.</p>}</div>
+        </div>
+        {evaluation.feedback_estudiante?.siguiente_paso_sugerido && <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-400"><h3 className="font-semibold text-blue-800 mb-2 flex items-center gap-2"><Brain className="w-5 h-5" />Próximo Desafío</h3><p className="text-blue-700">{evaluation.feedback_estudiante.siguiente_paso_sugerido}</p></div>}
     </div>
   );
 
@@ -498,7 +436,7 @@ export default function GeniusEvaluator() {
                     <div className="space-y-2"><Label htmlFor="puntaje-maximo">Puntaje Máximo</Label><Input id="puntaje-maximo" type="number" min="1" value={config.puntajeMaximo} onChange={(e) => setConfig((prev) => ({ ...prev, puntajeMaximo: Number(e.target.value) }))} /></div>
                     <div className="space-y-2"><Label htmlFor="nota-aprobacion">Nota Aprobación</Label><Input id="nota-aprobacion" type="number" step="0.1" value={config.notaAprobacion} onChange={(e) => setConfig((prev) => ({ ...prev, notaAprobacion: Number(e.target.value) }))} /></div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2"><Label>Modelo de IA</Label><Select value={config.aiModel} onValueChange={(value) => setConfig((prev) => ({ ...prev, aiModel: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="mistral-small-latest"><div className="flex items-center gap-2"><Zap className="w-4 h-4 text-green-500" /><span>Rápido y Eficiente</span></div></SelectItem><SelectItem value="mistral-large-latest"><div className="flex items-center gap-2"><Brain className="w-4 h-4 text-blue-500" /><span>Potente y Detallado</span></div></SelectItem></SelectContent></Select></div>
                     <div className="space-y-2"><Label>Flexibilidad de IA: {config.flexibility}/10</Label><Slider value={[config.flexibility]} onValueChange={(value) => setConfig((prev) => ({ ...prev, flexibility: value[0] }))} max={10} step={1} /><div className="flex justify-between text-xs text-gray-500"><span>Estricto</span><span>Flexible</span></div></div>
                 </div>
@@ -519,7 +457,7 @@ export default function GeniusEvaluator() {
                 
                 {filePreviews.length > 0 && (
                   <div className="space-y-4 pt-4 border-t">
-                    <div onDragOver={handleDragOver} onDrop={e => handleDrop(e, 'preview-area')}>
+                    <div onDragOver={handleDragOver} onDrop={e => handleDrop(e, null)}>
                       <Label className="text-sm font-medium mb-2 block">Archivos Cargados ({filePreviews.length})</Label>
                       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 p-2 border rounded-lg min-h-[120px] bg-white">
                         {filePreviews.map(fp => <FilePreviewCard key={fp.id} filePreview={fp} onRemove={() => removeFilePreview(fp.id)} />)}
@@ -567,7 +505,7 @@ export default function GeniusEvaluator() {
               </CardContent>
             </Card>
 
-            <Button onClick={evaluateDocuments} disabled={isLoading || studentGroups.length === 0 || !currentEvaluation.rubrica.trim()} className="w-full text-lg py-6" >
+            <Button onClick={evaluateDocuments} disabled={isLoading || (filePreviews.length === 0 && studentGroups.length === 0) || !currentEvaluation.rubrica.trim()} className="w-full text-lg py-6" >
               {isLoading ? (<><Clock className="w-5 h-5 mr-2 animate-spin" />{loadingMessage}</>) : (<><Brain className="w-5 h-5 mr-2" /> Iniciar Evaluación</>)}
             </Button>
           </TabsContent>
