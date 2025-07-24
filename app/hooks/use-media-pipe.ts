@@ -1,72 +1,60 @@
+// app/hooks/use-media-pipe.ts
 "use client"
 
-import { useEffect, useRef, useState, useCallback } from "react"
+import { useEffect, useState, useCallback } from "react"
+import { ObjectDetector, FilesetResolver } from "@mediapipe/tasks-vision"
 
 interface DetectedObject {
   label: string
-  confidence: number
-  boundingBox: {
-    x: number
-    y: number
-    width: number
-    height: number
-  }
+  boundingBox: { x: number; y: number; width: number; height: number }
 }
 
-interface MediaPipeHookReturn {
-  isLoading: boolean
-  isReady: boolean
-  error: string | null
-  detectedObjects: DetectedObject[]
-  processFrame: (video: HTMLVideoElement, canvas: HTMLCanvasElement) => void
-  cleanup: () => void
-  initialize: () => void
-}
-
-export const useMediaPipe = (): MediaPipeHookReturn => {
-  const [isLoading, setIsLoading] = useState(false)
-  const [isReady, setIsReady] = useState(false)
+export const useMediaPipe = () => {
+  const [objectDetector, setObjectDetector] = useState<ObjectDetector | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [detectedObjects, setDetectedObjects] = useState<DetectedObject[]>([])
 
   const initialize = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
     try {
-      // Simulación de carga (en producción usarías la librería real)
-      console.log("Inicializando MediaPipe (simulación)...")
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-      console.log("MediaPipe listo (simulación).")
-      setIsReady(true)
-      setIsLoading(false)
+      const vision = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+      )
+      const detector = await ObjectDetector.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: `https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite`,
+          delegate: "GPU",
+        },
+        scoreThreshold: 0.5,
+        runningMode: "VIDEO",
+        categoryAllowlist: ["book"], // 'book' es la categoría que MediaPipe usa para documentos/papeles
+      })
+      setObjectDetector(detector)
     } catch (err) {
-      setError("Error al cargar MediaPipe")
+      console.error("Error al inicializar MediaPipe:", err)
+      setError("No se pudo cargar la IA de la cámara.")
+    } finally {
       setIsLoading(false)
     }
   }, [])
 
-  const processFrame = useCallback((video: HTMLVideoElement) => {
-    if (!isReady) return
+  const detectObjects = useCallback(
+    (video: HTMLVideoElement): DetectedObject[] => {
+      if (!objectDetector || video.readyState < 2) return []
 
-    const simulateDetection = () => {
-      const random = Math.random()
-      const objects: DetectedObject[] = []
-      if (random > 0.3) { // 70% de probabilidad de detectar algo
-        objects.push({
-          label: random > 0.7 ? "book" : "paper",
-          confidence: 0.7 + Math.random() * 0.3,
-          boundingBox: { x: 100, y: 100, width: 400, height: 300 },
-        })
-      }
-      setDetectedObjects(objects)
-    }
-    simulateDetection()
-  }, [isReady])
+      const detections = objectDetector.detectForVideo(video, Date.now())
+      return (
+        detections.detections.map((detection) => ({
+          label: detection.categories[0].categoryName,
+          boundingBox: detection.boundingBox!,
+        })) || []
+      )
+    },
+    [objectDetector],
+  )
 
-  const cleanup = useCallback(() => {
-    setDetectedObjects([])
-    setIsReady(false)
-  }, [])
+  useEffect(() => {
+    initialize()
+  }, [initialize])
 
-  return { isLoading, isReady, error, detectedObjects, processFrame, cleanup, initialize }
+  return { isLoading, error, detectObjects }
 }
