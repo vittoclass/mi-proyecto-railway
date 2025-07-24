@@ -1,5 +1,229 @@
 "use client"
 
+import { useEffect, useState, useCallback, useRef } from "react"
+import { ObjectDetector, FilesetResolver } from "@mediapipe/tasks-vision"
+
+interface DetectedObject {
+  label: string
+  boundingBox: { x: number; y: number; width: number; height: number }
+}
+
+export const useMediaPipe = (): { isLoading: boolean; error: string | null; detectObjects: (video: HTMLVideoElement) => DetectedObject[] } => {
+  const objectDetectorRef = useRef<ObjectDetector | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const initialize = useCallback(async () => {
+    try {
+      const vision = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm"
+      );
+      const detector = await ObjectDetector.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: `https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite`,
+          delegate: "GPU",
+        },
+        scoreThreshold: 0.5,
+        runningMode: "VIDEO",
+        categoryAllowlist: ["book"],
+      });
+      objectDetectorRef.current = detector;
+    } catch (err) {
+      console.error("Error al inicializar MediaPipe:", err);
+      setError("No se pudo cargar la IA de la cámara.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
+
+  const detectObjects = useCallback(
+    (video: HTMLVideoElement): DetectedObject[] => {
+      if (!objectDetectorRef.current || video.readyState < 2) return [];
+
+      const detections = objectDetectorRef.current.detectForVideo(video, Date.now());
+      return (
+        detections?.detections.map((detection) => ({
+          label: detection.categories[0].categoryName,
+          boundingBox: detection.boundingBox!,
+        })) || []
+      );
+    },
+    [],
+  );
+
+  return { isLoading, error, detectObjects };
+};
+```
+
+#### Archivo 2: El Cuerpo de la Cámara (Modal Visual)
+
+1.  Dentro de la carpeta `app/components`, crea una carpeta llamada **`ui`** si no existe.
+2.  Dentro de `ui`, crea un nuevo archivo llamado **`smart-camera-modal.tsx`**.
+3.  Pega este código dentro:
+
+<!-- end list -->
+
+```tsx
+// Ruta: app/components/ui/smart-camera-modal.tsx
+"use client"
+
+import { useEffect, useRef, useState, useCallback } from "react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { useMediaPipe } from "@/hooks/use-media-pipe" // Asegúrate que la ruta sea correcta
+import { Loader2, CheckCircle, CameraOff, AlertTriangle } from "lucide-react"
+
+interface SmartCameraModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onCapture: (file: File) => void
+}
+
+export const SmartCameraModal = ({ isOpen, onClose, onCapture }: SmartCameraModalProps) => {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [capturedImage, setCapturedImage] = useState<string | null>(null)
+  const [feedbackMessage, setFeedbackMessage] = useState("Buscando documento...")
+  const [isCaptureEnabled, setIsCaptureEnabled] = useState(false)
+  const detectionBoxRef = useRef<HTMLDivElement>(null)
+  const animationFrameId = useRef<number>()
+  
+  const { isLoading, error, detectObjects } = useMediaPipe()
+
+  const stopCamera = useCallback(() => {
+    if (videoRef.current?.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream
+      stream.getTracks().forEach((track) => track.stop())
+      videoRef.current.srcObject = null
+    }
+  }, [])
+
+  const startCamera = useCallback(async () => {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+          videoRef.current.play()
+        }
+      } catch (err) {
+        console.error("Error al acceder a la cámara:", err)
+        setFeedbackMessage("❌ Permiso de cámara denegado.")
+      }
+    } else {
+        setFeedbackMessage("❌ La cámara no es compatible con este navegador.")
+    }
+  }, [])
+  
+  useEffect(() => {
+    if (isOpen) {
+      startCamera()
+    }
+    return () => stopCamera()
+  }, [isOpen, startCamera, stopCamera])
+
+  const detectionLoop = useCallback(() => {
+    if (isOpen && !isLoading && !error && videoRef.current && detectionBoxRef.current && !capturedImage) {
+        const detected = detectObjects(videoRef.current)
+        if (detected.length > 0 && detected.some(d => d.label === 'book')) {
+            const doc = detected[0];
+            const { x, y, width, height } = doc.boundingBox;
+            const video = videoRef.current;
+            const box = detectionBoxRef.current;
+
+            box.style.display = 'block';
+            box.style.left = `${(x / video.videoWidth) * 100}%`;
+            box.style.top = `${(y / video.videoHeight) * 100}%`;
+            box.style.width = `${(width / video.videoWidth) * 100}%`;
+            box.style.height = `${(height / video.videoHeight) * 100}%`;
+
+            setFeedbackMessage("✅ Documento detectado. ¡Mantén la cámara estable!");
+            setIsCaptureEnabled(true);
+        } else {
+            if(detectionBoxRef.current) detectionBoxRef.current.style.display = 'none';
+            setFeedbackMessage("Apunte al documento...");
+            setIsCaptureEnabled(false);
+        }
+        animationFrameId.current = requestAnimationFrame(detectionLoop)
+    }
+  }, [detectObjects, capturedImage, isOpen, isLoading, error])
+  
+  useEffect(() => {
+      if (isOpen && !isLoading && !error) {
+          detectionLoop();
+      }
+      return () => {
+          if(animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
+      }
+  }, [isOpen, isLoading, error, detectionLoop])
+
+  const handleCapture = () => {
+    if (videoRef.current && canvasRef.current) {
+      const canvas = canvasRef.current; 
+      const video = videoRef.current;
+      canvas.width = video.videoWidth; 
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext('2d');
+      context?.drawImage(video, 0, 0, canvas.width, canvas.height);
+      setCapturedImage(canvas.toDataURL('image/jpeg'));
+      stopCamera();
+    }
+  }
+
+  const handleAccept = () => {
+    if (capturedImage && canvasRef.current) {
+      canvasRef.current.toBlob((blob) => {
+        if (blob) {
+          onCapture(new File([blob], `captura-${Date.now()}.jpg`, { type: 'image/jpeg' }));
+          handleClose();
+        }
+      }, 'image/jpeg');
+    }
+  }
+
+  const handleRetake = () => { setCapturedImage(null); startCamera(); }
+  const handleClose = () => { setCapturedImage(null); onClose(); }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent className="max-w-4xl p-4 sm:p-6">
+        <DialogHeader><DialogTitle>Cámara Inteligente</DialogTitle></DialogHeader>
+        <div className="relative bg-black rounded-lg aspect-video">
+          {capturedImage ? <img src={capturedImage} alt="Captura" className="rounded-lg w-full h-full object-contain" /> : <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-contain rounded-lg" />}
+          <canvas ref={canvasRef} className="hidden" />
+          <div ref={detectionBoxRef} className="absolute border-4 border-green-400 rounded-lg transition-all duration-200 pointer-events-none" style={{ display: 'none' }} />
+          
+          {isLoading && <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center rounded-lg"><Loader2 className="w-8 h-8 text-white animate-spin" /><p className="mt-2 text-white">Cargando IA de la cámara...</p></div>}
+          {error && <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center rounded-lg"><CameraOff className="w-12 h-12 text-red-400 mb-2"/><p className="text-red-400 text-center max-w-xs">{error}</p></div>}
+          
+          {!capturedImage && !isLoading && !error && (
+            <div className={`absolute bottom-4 left-4 p-2 rounded-lg text-white text-sm flex items-center gap-2 transition-colors ${isCaptureEnabled ? 'bg-green-600' : 'bg-black bg-opacity-50'}`}>
+              {isCaptureEnabled ? <CheckCircle className="w-4 h-4" /> : <Loader2 className="w-4 h-4 animate-spin" />}
+              <span>{feedbackMessage}</span>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          {capturedImage ? (<><Button onClick={handleRetake} variant="outline">Tomar de Nuevo</Button><Button onClick={handleAccept}>Aceptar y Usar Foto</Button></>) 
+          : (<Button onClick={handleCapture} disabled={isLoading || !!error || !isCaptureEnabled} size="lg">Tomar Foto</Button>)}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+```
+
+### **Paso 3: Actualizar la Interfaz Principal (`page.tsx`)**
+
+Ahora, reemplaza **todo el contenido** de tu archivo principal **`app/page.tsx`** con esta versión final y corregida que integra todo correctamente.
+
+```tsx
+"use client"
+
 import type React from "react"
 import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
@@ -17,33 +241,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Switch } from "@/components/ui/switch"
 import { SmartCameraModal } from "@/components/ui/smart-camera-modal"
 import {
-  Upload,
-  FileText,
-  Brain,
-  Download,
-  Copy,
-  Trash2,
-  BarChart3,
-  GraduationCap,
-  Clock,
-  X,
-  Plus,
-  Eye,
-  Loader2,
-  FileIcon,
-  Users,
-  User,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-  Zap,
-  Settings,
-  Camera,
+  Upload, FileText, Brain, Download, Copy, Trash2, BarChart3, GraduationCap, Clock, X, Plus, Eye, Loader2, FileIcon, Users, User, CheckCircle, XCircle, AlertCircle, Zap, Settings, Camera,
 } from "lucide-react"
-
-
-// --- CONFIGURACIÓN DE LA PÁGINA ---
-export const dynamic = 'force-dynamic'; // <-- ESTA ES LA LÍNEA DE CORRECCIÓN IMPORTANTE
 
 // --- INTERFACES ---
 interface EvaluationConfig {
@@ -63,7 +262,6 @@ interface EvaluationProgress {
 }
 type GroupingMode = "single" | "multiple" | null;
 
-// --- FUNCIONES AUXILIARES ---
 const compressImage = async (file: File): Promise<File> => {
   try {
     const imageCompression = (await import("browser-image-compression")).default;
@@ -76,15 +274,14 @@ const compressImage = async (file: File): Promise<File> => {
 };
 
 const formatFileSize = (bytes?: number) => {
-    if (bytes === undefined) return "";
-    if (bytes === 0) return "0 Bytes";
-    const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  if (bytes === undefined) return "";
+  if (bytes === 0) return "0 Bytes";
+  const k = 1024;
+  const sizes = ["Bytes", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 };
 
-// --- COMPONENTE PRINCIPAL ---
 export default function GeniusEvaluator() {
   const [activeTab, setActiveTab] = useState("evaluate");
   const [isLoading, setIsLoading] = useState(false);
@@ -130,33 +327,15 @@ export default function GeniusEvaluator() {
 
   const saveEvaluations = useCallback((newEvals: StudentEvaluation[]) => {
     setEvaluations(prevEvals => {
-      const updatedEvals = [...prevEvals, ...newEvals];
-      localStorage.setItem("evaluations", JSON.stringify(updatedEvals));
-      return updatedEvals;
+        const updatedEvals = [...prevEvals, ...newEvals];
+        localStorage.setItem("evaluations", JSON.stringify(updatedEvals));
+        return updatedEvals;
     });
   }, []);
 
-  const createFilePreview = async (file: File): Promise<FilePreview> => {
-    const id = `file_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    let preview = undefined;
-    let type: "image" | "pdf" | "other" = "other";
-    let processedFile = file;
-    const originalSize = file.size;
-    if (file.type.startsWith("image/")) {
-      type = "image";
-      if (optimizeImages) {
-        processedFile = await compressImage(file);
-      }
-      preview = URL.createObjectURL(processedFile);
-    } else if (file.type === "application/pdf") {
-      type = "pdf";
-    }
-    return { id, file: processedFile, preview, type, originalSize, compressedSize: processedFile.size };
-  };
-  
   const addFilesToPreviews = useCallback(async (files: File[]) => {
     if (!files.length) return;
-    const newPreviews = await Promise.all(files.map(createFilePreview));
+    const newPreviews = await Promise.all(files.map(file => createFilePreview(file)));
     setFilePreviews(prev => [...prev, ...newPreviews]);
     setGroupingMode(null);
     setStudentGroups([]);
@@ -205,8 +384,8 @@ export default function GeniusEvaluator() {
       const results = await Promise.all(extractionPromises);
       setStudentGroups(prev =>
         prev.map(group => {
-          const foundResult = results.find(r => r.status === 'fulfilled' && r.value.groupId === group.id);
-          return { ...group, studentName: foundResult && foundResult.status === 'fulfilled' ? foundResult.value.name : '', isExtractingName: false };
+          const foundResult = results.find(r => r.groupId === group.id);
+          return { ...group, studentName: foundResult ? foundResult.name : '', isExtractingName: false };
         })
       );
     }
@@ -233,131 +412,99 @@ export default function GeniusEvaluator() {
     let draggedFileObj: FilePreview | null = null;
 
     if (filePreviews.some(f => f.id === draggedFile)) {
-      sourceGroupId = 'preview-area';
-      draggedFileObj = filePreviews.find(f => f.id === draggedFile) || null;
+        sourceGroupId = 'preview-area';
+        draggedFileObj = filePreviews.find(f => f.id === draggedFile) || null;
     } else {
-      for (const group of studentGroups) {
-        const file = group.files.find(f => f.id === draggedFile);
-        if (file) {
-          sourceGroupId = group.id;
-          draggedFileObj = file;
-          break;
+        for (const group of studentGroups) {
+            const file = group.files.find(f => f.id === draggedFile);
+            if (file) {
+                sourceGroupId = group.id;
+                draggedFileObj = file;
+                break;
+            }
         }
-      }
     }
     
     if (!draggedFileObj || sourceGroupId === targetGroupId) {
-      setDraggedFile(null);
-      return;
+        setDraggedFile(null);
+        return;
     }
 
     if (sourceGroupId === 'preview-area' && targetGroupId) {
-      setFilePreviews(prev => prev.filter(f => f.id !== draggedFile));
-      setStudentGroups(prev => prev.map(g => g.id === targetGroupId ? { ...g, files: [...g.files, draggedFileObj!] } : g));
-    } else if (sourceGroupId && !targetGroupId) {
-      let fileToMove: FilePreview | null = null;
-      setStudentGroups(prev => prev.map(g => {
-          if (g.id === sourceGroupId) {
-              fileToMove = g.files.find(f => f.id === draggedFile)!;
-              return { ...g, files: g.files.filter(f => f.id !== draggedFile) };
-          }
-          return g;
-      }).filter(g => g.files.length > 0 || g.studentName.trim() !== ''));
-      if(fileToMove) setFilePreviews(prev => [...prev, fileToMove!]);
+        setFilePreviews(prev => prev.filter(f => f.id !== draggedFile));
+        setStudentGroups(prev => prev.map(g => g.id === targetGroupId ? { ...g, files: [...g.files, draggedFileObj!] } : g));
     } else if (sourceGroupId && targetGroupId) {
-      let fileToMove: FilePreview | null = null;
-      setStudentGroups(prev => {
-        const fromGroup = prev.find(g => g.id === sourceGroupId);
-        fileToMove = fromGroup!.files.find(f => f.id === draggedFile)!;
+        let fileToMove: FilePreview | null = null;
+        setStudentGroups(prev => {
+            const fromGroup = prev.find(g => g.id === sourceGroupId);
+            fileToMove = fromGroup!.files.find(f => f.id === draggedFile)!;
 
-        const newGroups = prev.map(g => {
-          if (g.id === sourceGroupId) return { ...g, files: g.files.filter(f => f.id !== draggedFile) };
-          if (g.id === targetGroupId) return { ...g, files: [...g.files, fileToMove!] };
-          return g;
+            const newGroups = prev.map(g => {
+                if (g.id === sourceGroupId) return { ...g, files: g.files.filter(f => f.id !== draggedFile) };
+                if (g.id === targetGroupId) return { ...g, files: [...g.files, fileToMove!] };
+                return g;
+            });
+            return newGroups.filter(g => g.files.length > 0 || (groupingMode === 'multiple' && g.studentName.trim() !== ''));
         });
-        return newGroups.filter(g => g.files.length > 0 || g.studentName.trim() !== '');
-      });
     }
     setDraggedFile(null);
   };
   
   const evaluateDocuments = async () => {
-    const groupsToEvaluate = studentGroups.filter(g => g.files.length > 0 && g.studentName.trim());
+    const groupsToEvaluate = studentGroups.filter(g => g.files.length > 0);
+    if (groupsToEvaluate.some(g => !g.studentName.trim())) { alert("Por favor, asegúrate de que todos los grupos tengan un nombre de estudiante."); return; }
     if (groupsToEvaluate.length === 0) { alert("Por favor, crea grupos con nombres y archivos para evaluar."); return; }
     if (!currentEvaluation.rubrica.trim()) { alert("Por favor, proporciona una rúbrica de evaluación."); return; }
 
     setIsLoading(true);
-    const progressInitialState = { total: groupsToEvaluate.length, completed: 0, current: "Iniciando...", successes: 0, failures: 0 };
-    setEvaluationProgress(progressInitialState);
+    setEvaluationProgress({ total: groupsToEvaluate.length, completed: 0, current: "Iniciando...", successes: 0, failures: 0 });
 
-    const evaluationPromises = groupsToEvaluate.map((group, index) => {
+    const evaluationPromises = groupsToEvaluate.map(group => {
       const formData = new FormData();
       group.files.forEach(fp => formData.append("files", fp.file));
-      const configWithDetails = {
-        ...config,
-        nombrePrueba: currentEvaluation.nombrePrueba,
-        curso: currentEvaluation.curso,
-        rubrica: currentEvaluation.rubrica,
-        preguntasObjetivas: currentEvaluation.preguntasObjetivas
-      };
-      formData.append("config", JSON.stringify(configWithDetails));
-      
-      return fetch("/api/evaluate", { method: "POST", body: formData })
-        .then(async (res) => {
-            const result = await res.json();
-            if (!res.ok) {
-                return Promise.reject(result.error || 'Error desconocido del servidor');
-            }
-            if (result.success && result.evaluations.length > 0) {
-                const evaluation = result.evaluations[0];
-                evaluation.nombreEstudiante = group.studentName;
-                evaluation.filesPreviews = group.files;
-                return { status: 'fulfilled', value: evaluation, groupName: group.studentName };
-            }
-            return Promise.reject(result.error || "Fallo en la evaluación");
-        })
-        .catch(error => ({ status: 'rejected', reason: error.toString(), groupName: group.studentName }));
-    });
-    
-    let completedCount = 0;
-    const totalCount = evaluationPromises.length;
-    
-    evaluationPromises.forEach(promise => {
-        promise.then(result => {
-            const newCompleted = completedCount + 1;
-            completedCount = newCompleted;
-            const isSuccess = result.status === 'fulfilled';
-            setEvaluationProgress(prev => prev ? {
-                ...prev,
-                completed: newCompleted,
-                successes: prev.successes + (isSuccess ? 1 : 0),
-                failures: prev.failures + (!isSuccess ? 1 : 0),
-                current: `${isSuccess ? 'Éxito' : 'Fallo'}: ${result.groupName} (${newCompleted}/${totalCount})`
-            } : null);
-        });
-    });
+      formData.append("config", JSON.stringify({ ...config, ...currentEvaluation }));
 
+      return fetch("/api/evaluate", { method: "POST", body: formData })
+        .then(res => res.ok ? res.json() : res.json().then(err => Promise.reject(err)))
+        .then(result => {
+          if (result.success && result.evaluations.length > 0) {
+            const evaluation = result.evaluations[0];
+            evaluation.nombreEstudiante = group.studentName;
+            evaluation.filesPreviews = group.files;
+            return { status: 'fulfilled', value: evaluation, groupName: group.studentName };
+          }
+          return Promise.reject(result);
+        })
+        .catch(error => ({ status: 'rejected', reason: error.error || error.message || 'Error desconocido', groupName: group.studentName }));
+    });
+    
     const results = await Promise.allSettled(evaluationPromises);
     
     const successfulEvals: StudentEvaluation[] = [];
     const failedEvals: string[] = [];
 
     results.forEach((res, i) => {
-        if (res.status === 'fulfilled' && res.value.status === 'fulfilled') {
-            successfulEvals.push(res.value.value);
-        } else {
-            const reason = res.status === 'rejected' ? res.reason : (res.value as any).reason;
-            failedEvals.push(`${groupsToEvaluate[i].studentName}: ${reason}`);
-        }
+        setEvaluationProgress(prev => {
+            if (!prev) return null;
+            const groupName = groupsToEvaluate[i].studentName;
+            const newCompleted = prev.completed + 1;
+            if (res.status === 'fulfilled' && res.value.status === 'fulfilled') {
+                return {...prev, completed: newCompleted, successes: prev.successes + 1, current: `Éxito: ${groupName}`};
+            } else {
+                const reason = res.status === 'rejected' ? res.reason : (res.value as any).reason;
+                failedEvals.push(`${groupName}: ${reason}`);
+                return {...prev, completed: newCompleted, failures: prev.failures + 1, current: `Fallo: ${groupName}`};
+            }
+        });
     });
-
+    
     if (successfulEvals.length > 0) {
         saveEvaluations(successfulEvals);
         setActiveTab("results");
     }
     
     let message = `Evaluación finalizada.\n\nÉxitos: ${successfulEvals.length}\nFallos: ${failedEvals.length}`;
-    if (failedEvals.length > 0) message += `\n\nErrores:\n${failedEvals.join("\n")}`;
+    if (failedEvals.length > 0) message += `\n\nErrores:\n- ${failedEvals.join("\n- ")}`;
     alert(message);
     
     setStudentGroups([]);
@@ -367,52 +514,14 @@ export default function GeniusEvaluator() {
     setEvaluationProgress(null);
   };
   
-  const exportToCSV = () => {
-    if (evaluations.length === 0) { return; }
-    const headers = ["Estudiante", "Curso", "Evaluación", "Nota Final", "Puntaje", "Fecha"];
-    const rows = evaluations.map((evaluation) => [
-      evaluation.nombreEstudiante,
-      evaluation.curso,
-      evaluation.nombrePrueba,
-      typeof evaluation.notaFinal === 'number' ? evaluation.notaFinal.toFixed(1) : 'N/A',
-      `${evaluation.puntajeObtenido}/${evaluation.configuracion?.puntajeMaximo || 'N/A'}`,
-      evaluation.configuracion?.fecha || 'N/A',
-    ]);
-    const csvContent = [headers, ...rows].map((row) => row.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `evaluaciones_${new Date().toISOString().split("T")[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const copyToClipboard = async () => {
-    if (evaluations.length === 0) { return; }
-    const headers = ["Estudiante", "Curso", "Evaluación", "Nota Final"];
-    const rows = evaluations.map((evaluation) => [
-      evaluation.nombreEstudiante,
-      evaluation.curso,
-      evaluation.nombrePrueba,
-      typeof evaluation.notaFinal === 'number' ? evaluation.notaFinal.toFixed(1) : 'N/A',
-    ]);
-    const tsvContent = [headers, ...rows].map((row) => row.join("\t")).join("\n");
-    try {
-      await navigator.clipboard.writeText(tsvContent);
-      alert("✅ Datos copiados al portapapeles");
-    } catch (error) {
-      alert("❌ Error al copiar los datos");
-    }
-  };
-  
   const clearHistory = () => {
     if (confirm("¿Borrar PERMANENTEMENTE todo el historial?")) {
       saveEvaluations([]);
     }
   };
 
-  const FilePreviewCard = ({ filePreview, groupId, onRemove, isDraggable = true }: { filePreview: FilePreview, onRemove?: () => void, groupId?: string, isDraggable?: boolean }) => (
+  // --- SUB-COMPONENTS ---
+  const FilePreviewCard = ({ filePreview, onRemove, isDraggable = true, inGroup = false }: { filePreview: FilePreview, onRemove?: () => void, isDraggable?: boolean, inGroup?: boolean }) => (
     <div className={`relative border rounded-lg p-2 bg-white ${isDraggable ? "cursor-move" : ""}`} draggable={isDraggable} onDragStart={(e) => isDraggable && handleDragStart(e, filePreview.id)}>
       <div className="flex flex-col items-center space-y-1 text-center">
         {filePreview.type === "image" && filePreview.preview ? <img src={filePreview.preview} alt={filePreview.file.name} className="w-20 h-20 object-cover rounded-md" /> : <FileIcon className="w-20 h-20 text-gray-300" />}
@@ -454,7 +563,8 @@ export default function GeniusEvaluator() {
         {evaluation.analisis_profesor && <div className="bg-gray-50 p-4 rounded-lg"><h3 className="font-semibold text-gray-700 mb-3">📝 Notas del Profesor</h3><div className="space-y-3 text-sm"><div><strong>Desempeño General:</strong><p className="text-gray-600 mt-1">{evaluation.analisis_profesor.desempeno_general}</p></div><div><strong>Patrones Observados:</strong><p className="text-gray-600 mt-1">{evaluation.analisis_profesor.patrones_observados}</p></div><div><strong>Sugerencia Pedagógica:</strong><p className="text-gray-600 mt-1">{evaluation.analisis_profesor.sugerencia_pedagogica}</p></div></div></div>}
     </div>
   );
-
+  
+  // --- RENDERIZADO PRINCIPAL ---
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 sm:p-6 md:p-8">
       <div className="max-w-7xl mx-auto">
@@ -466,7 +576,7 @@ export default function GeniusEvaluator() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="evaluate" className="flex items-center gap-2"><Brain className="w-4 h-4" /> Evaluar</TabsTrigger>
-            <TabsTrigger value="results" className="flex items-center gap-2"><BarChart3 className="w-4 h-4" /> Resultados</TabsTrigger>
+            <TabsTrigger value="results" className="flex items-center gap-2"><BarChart3 className="w-4 h-4" /> Resultados ({evaluations.length})</TabsTrigger>
             <TabsTrigger value="history" className="flex items-center gap-2"><FileText className="w-4 h-4" /> Historial</TabsTrigger>
           </TabsList>
           
@@ -479,8 +589,8 @@ export default function GeniusEvaluator() {
                       <h3 className="font-semibold text-blue-900">Evaluación en Progreso</h3>
                       <Badge variant="secondary">{evaluationProgress.completed}/{evaluationProgress.total}</Badge>
                     </div>
-                    <Progress value={(evaluationProgress.completed / evaluationProgress.total) * 100} className="w-full" />
-                    <p className="text-sm text-blue-700">{evaluationProgress.current}</p>
+                    <Progress value={(evaluationProgress.completed / evaluationProgress.total) * 100} className="w-full h-3" />
+                    <p className="text-sm text-blue-700 text-center">{evaluationProgress.current}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -511,7 +621,7 @@ export default function GeniusEvaluator() {
                 </div>
               </CardContent>
             </Card>
-
+            
             <Card>
               <CardHeader><CardTitle>3. Cargar y Organizar Documentos</CardTitle></CardHeader>
               <CardContent className="space-y-4">
@@ -524,33 +634,29 @@ export default function GeniusEvaluator() {
                 </div>
                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"><div className="space-y-0.5"><Label htmlFor="optimize-images">Optimizar Imágenes</Label><p className="text-xs text-gray-500">Acelera el proceso reduciendo el tamaño.</p></div><Switch id="optimize-images" checked={optimizeImages} onCheckedChange={setOptimizeImages} /></div>
                 
-                <div 
-                  className="border-t pt-4"
-                  onDragOver={handleDragOver}
-                  onDrop={(e) => handleDrop(e, 'preview-area')}
-                >
-                    <Label className="text-sm font-medium mb-2 block">Archivos por Organizar ({filePreviews.length})</Label>
-                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 p-2 border rounded-lg min-h-[120px] bg-white/50">
-                      {filePreviews.map(fp => <FilePreviewCard key={fp.id} filePreview={fp} onRemove={() => removeFilePreview(fp.id)} />)}
-                    </div>
-                </div>
-
-                {filePreviews.length > 0 && !groupingMode && (
-                  <Alert><AlertCircle className="h-4 w-4" /><AlertDescription>
-                      <strong>Los archivos corresponden a:</strong>
-                      <div className="flex gap-4 mt-2">
-                          <Button onClick={() => handleGroupingModeSelect("single")} variant="outline" size="sm"><User className="w-4 h-4 mr-2" />Un Solo Estudiante</Button>
-                          <Button onClick={() => handleGroupingModeSelect("multiple")} variant="outline" size="sm"><Users className="w-4 h-4 mr-2" />Varios Estudiantes</Button>
+                {filePreviews.length > 0 && (
+                  <div className="space-y-4 pt-4 border-t">
+                    <div onDragOver={handleDragOver} onDrop={e => handleDrop(e, null)}>
+                      <Label className="text-sm font-medium mb-2 block">Archivos por Organizar ({filePreviews.length})</Label>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 p-2 border rounded-lg min-h-[120px] bg-white/50">
+                        {filePreviews.map(fp => <FilePreviewCard key={fp.id} filePreview={fp} onRemove={() => removeFilePreview(fp.id)} isDraggable={groupingMode === "multiple"} />)}
                       </div>
-                  </AlertDescription></Alert>
+                    </div>
+                    {!groupingMode && (
+                      <Alert><AlertCircle className="h-4 w-4" /><AlertDescription>
+                          <strong>Los archivos corresponden a:</strong>
+                          <div className="flex gap-4 mt-2">
+                              <Button onClick={() => handleGroupingModeSelect("single")} variant="outline" size="sm"><User className="w-4 h-4 mr-2" />Un Solo Estudiante</Button>
+                              <Button onClick={() => handleGroupingModeSelect("multiple")} variant="outline" size="sm"><Users className="w-4 h-4 mr-2" />Varios Estudiantes</Button>
+                          </div>
+                      </AlertDescription></Alert>
+                    )}
+                  </div>
                 )}
 
                 {studentGroups.length > 0 && (
                 <div className="space-y-4 pt-4 border-t">
-                    <div className="flex justify-between items-center">
-                        <Label className="text-sm font-medium">Grupos de Estudiantes ({studentGroups.length})</Label>
-                        {groupingMode === "multiple" && (<Button onClick={addNewStudentGroup} variant="outline" size="sm"><Plus className="w-4 h-4 mr-2" />Añadir Grupo</Button>)}
-                    </div>
+                    <div className="flex justify-between items-center"><Label className="text-sm font-medium">Grupos de Estudiantes ({studentGroups.length})</Label>{groupingMode === "multiple" && (<Button onClick={addNewStudentGroup} variant="outline" size="sm"><Plus className="w-4 h-4 mr-2" />Añadir Grupo</Button>)}</div>
                     {studentGroups.map(group => (
                         <div key={group.id} className="border rounded-lg p-4 bg-gray-50 min-h-[140px]" onDragOver={handleDragOver} onDrop={e => handleDrop(e, group.id)}>
                         <div className="flex items-center gap-4 mb-2">
@@ -578,13 +684,13 @@ export default function GeniusEvaluator() {
               </CardContent>
             </Card>
 
-            <Button onClick={evaluateDocuments} disabled={isLoading || studentGroups.length === 0 || !currentEvaluation.rubrica.trim()} className="w-full text-lg py-6" >
+            <Button onClick={evaluateDocuments} disabled={isLoading || (filePreviews.length > 0 && studentGroups.length === 0) || !currentEvaluation.rubrica.trim()} className="w-full text-lg py-6" >
               {isLoading ? (<><Clock className="w-5 h-5 mr-2 animate-spin" />{loadingMessage}</>) : (<><Brain className="w-5 h-5 mr-2" /> Iniciar Evaluación</>)}
             </Button>
           </TabsContent>
 
           <TabsContent value="results" className="space-y-6 pt-6">
-            <Card>
+             <Card>
                 <CardHeader><CardTitle>Resultados Obtenidos</CardTitle></CardHeader>
                 <CardContent>
                     {!evaluations || evaluations.length === 0 ? (

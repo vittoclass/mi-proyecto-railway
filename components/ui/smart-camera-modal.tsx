@@ -1,11 +1,11 @@
-// app/components/ui/smart-camera-modal.tsx
+// Ruta: app/components/ui/smart-camera-modal.tsx
 "use client"
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { useMediaPipe } from "@/hooks/use-media-pipe"
-import { Loader2, CheckCircle, CameraOff } from "lucide-react"
+import { useMediaPipe } from "@/hooks/use-media-pipe" // Asegúrate que la ruta sea correcta
+import { Loader2, CheckCircle, CameraOff, AlertTriangle } from "lucide-react"
 
 interface SmartCameraModalProps {
   isOpen: boolean
@@ -17,11 +17,11 @@ export const SmartCameraModal = ({ isOpen, onClose, onCapture }: SmartCameraModa
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [capturedImage, setCapturedImage] = useState<string | null>(null)
-  const [feedbackMessage, setFeedbackMessage] = useState("Apunte al documento...")
+  const [feedbackMessage, setFeedbackMessage] = useState("Buscando documento...")
   const [isCaptureEnabled, setIsCaptureEnabled] = useState(false)
   const detectionBoxRef = useRef<HTMLDivElement>(null)
   const animationFrameId = useRef<number>()
-
+  
   const { isLoading, error, detectObjects } = useMediaPipe()
 
   const stopCamera = useCallback(() => {
@@ -59,21 +59,23 @@ export const SmartCameraModal = ({ isOpen, onClose, onCapture }: SmartCameraModa
   const detectionLoop = useCallback(() => {
     if (isOpen && !isLoading && !error && videoRef.current && detectionBoxRef.current && !capturedImage) {
         const detected = detectObjects(videoRef.current)
-        if (detected.length > 0 && detected[0].label === 'book') {
+        if (detected.length > 0 && detected.some(d => d.label === 'book')) {
             const doc = detected[0];
             const { x, y, width, height } = doc.boundingBox;
             const video = videoRef.current;
             const box = detectionBoxRef.current;
+
             box.style.display = 'block';
             box.style.left = `${(x / video.videoWidth) * 100}%`;
             box.style.top = `${(y / video.videoHeight) * 100}%`;
             box.style.width = `${(width / video.videoWidth) * 100}%`;
             box.style.height = `${(height / video.videoHeight) * 100}%`;
+
             setFeedbackMessage("✅ Documento detectado. ¡Mantén la cámara estable!");
             setIsCaptureEnabled(true);
         } else {
             if(detectionBoxRef.current) detectionBoxRef.current.style.display = 'none';
-            setFeedbackMessage("Buscando documento...");
+            setFeedbackMessage("Apunte al documento...");
             setIsCaptureEnabled(false);
         }
         animationFrameId.current = requestAnimationFrame(detectionLoop)
@@ -88,7 +90,6 @@ export const SmartCameraModal = ({ isOpen, onClose, onCapture }: SmartCameraModa
           if(animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
       }
   }, [isOpen, isLoading, error, detectionLoop])
-
 
   const handleCapture = () => {
     if (videoRef.current && canvasRef.current) {
