@@ -1,224 +1,5 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
-import { ObjectDetector, FilesetResolver } from "@mediapipe/tasks-vision"
-
-interface DetectedObject {
-  label: string
-  boundingBox: { x: number; y: number; width: number; height: number }
-}
-
-export const useMediaPipe = () => {
-  const [objectDetector, setObjectDetector] = useState<ObjectDetector | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const initialize = useCallback(async () => {
-    try {
-      const vision = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
-      )
-      const detector = await ObjectDetector.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath: `https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite`,
-          delegate: "GPU",
-        },
-        scoreThreshold: 0.5,
-        runningMode: "VIDEO",
-        categoryAllowlist: ["book"], // 'book' es la categoría que MediaPipe usa para documentos/papeles
-      })
-      setObjectDetector(detector)
-    } catch (err) {
-      console.error("Error al inicializar MediaPipe:", err)
-      setError("No se pudo cargar la IA de la cámara.")
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
-
-  const detectObjects = useCallback(
-    (video: HTMLVideoElement): DetectedObject[] => {
-      if (!objectDetector || video.readyState < 2) return []
-
-      const detections = objectDetector.detectForVideo(video, Date.now())
-      return (
-        detections.detections.map((detection) => ({
-          label: detection.categories[0].categoryName,
-          boundingBox: detection.boundingBox!,
-        })) || []
-      )
-    },
-    [objectDetector],
-  )
-
-  useEffect(() => {
-    initialize()
-  }, [initialize])
-
-  return { isLoading, error, detectObjects }
-}
-```
-
-### **Paso 3: Actualizar el Componente Visual de la Cámara**
-
-Ahora, reemplaza todo el contenido de tu archivo en **`app/components/ui/smart-camera-modal.tsx`** con esta versión corregida que se conecta con la IA real y funciona en móviles.
-
-```typescript
-// app/components/ui/smart-camera-modal.tsx
-"use client"
-
-import { useEffect, useRef, useState, useCallback } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { useMediaPipe } from "@/hooks/use-media-pipe"
-import { Loader2, CheckCircle, CameraOff } from "lucide-react"
-
-interface SmartCameraModalProps {
-  isOpen: boolean
-  onClose: () => void
-  onCapture: (file: File) => void
-}
-
-export const SmartCameraModal = ({ isOpen, onClose, onCapture }: SmartCameraModalProps) => {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [capturedImage, setCapturedImage] = useState<string | null>(null)
-  const [feedbackMessage, setFeedbackMessage] = useState("Apunte al documento...")
-  const [isCaptureEnabled, setIsCaptureEnabled] = useState(false)
-  const detectionBoxRef = useRef<HTMLDivElement>(null)
-  const animationFrameId = useRef<number>()
-
-  const { isLoading, error, detectObjects } = useMediaPipe()
-
-  const stopCamera = useCallback(() => {
-    if (videoRef.current?.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream
-      stream.getTracks().forEach((track) => track.stop())
-      videoRef.current.srcObject = null
-    }
-  }, [])
-
-  const startCamera = useCallback(async () => {
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          videoRef.current.play()
-        }
-      } catch (err) {
-        console.error("Error al acceder a la cámara:", err)
-        setFeedbackMessage("❌ Permiso de cámara denegado.")
-      }
-    } else {
-        setFeedbackMessage("❌ La cámara no es compatible con este navegador.")
-    }
-  }, [])
-  
-  useEffect(() => {
-    if (isOpen) {
-      startCamera()
-    }
-    return () => stopCamera()
-  }, [isOpen, startCamera, stopCamera])
-
-  const detectionLoop = useCallback(() => {
-    if (isOpen && !isLoading && !error && videoRef.current && detectionBoxRef.current && !capturedImage) {
-        const detected = detectObjects(videoRef.current)
-        if (detected.length > 0 && detected[0].label === 'book') {
-            const doc = detected[0];
-            const { x, y, width, height } = doc.boundingBox;
-            const video = videoRef.current;
-            const box = detectionBoxRef.current;
-            box.style.display = 'block';
-            box.style.left = `${(x / video.videoWidth) * 100}%`;
-            box.style.top = `${(y / video.videoHeight) * 100}%`;
-            box.style.width = `${(width / video.videoWidth) * 100}%`;
-            box.style.height = `${(height / video.videoHeight) * 100}%`;
-            setFeedbackMessage("✅ Documento detectado. ¡Mantén la cámara estable!");
-            setIsCaptureEnabled(true);
-        } else {
-            if(detectionBoxRef.current) detectionBoxRef.current.style.display = 'none';
-            setFeedbackMessage("Buscando documento...");
-            setIsCaptureEnabled(false);
-        }
-        animationFrameId.current = requestAnimationFrame(detectionLoop)
-    }
-  }, [detectObjects, capturedImage, isOpen, isLoading, error])
-  
-  useEffect(() => {
-      if (isOpen && !isLoading && !error) {
-          detectionLoop();
-      }
-      return () => {
-          if(animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
-      }
-  }, [isOpen, isLoading, error, detectionLoop])
-
-
-  const handleCapture = () => {
-    if (videoRef.current && canvasRef.current) {
-      const canvas = canvasRef.current; 
-      const video = videoRef.current;
-      canvas.width = video.videoWidth; 
-      canvas.height = video.videoHeight;
-      const context = canvas.getContext('2d');
-      context?.drawImage(video, 0, 0, canvas.width, canvas.height);
-      setCapturedImage(canvas.toDataURL('image/jpeg'));
-      stopCamera();
-    }
-  }
-
-  const handleAccept = () => {
-    if (capturedImage && canvasRef.current) {
-      canvasRef.current.toBlob((blob) => {
-        if (blob) {
-          onCapture(new File([blob], `captura-${Date.now()}.jpg`, { type: 'image/jpeg' }));
-          handleClose();
-        }
-      }, 'image/jpeg');
-    }
-  }
-
-  const handleRetake = () => { setCapturedImage(null); startCamera(); }
-  const handleClose = () => { setCapturedImage(null); onClose(); }
-
-  return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl p-4 sm:p-6">
-        <DialogHeader><DialogTitle>Cámara Inteligente</DialogTitle></DialogHeader>
-        <div className="relative bg-black rounded-lg aspect-video">
-          {capturedImage ? <img src={capturedImage} alt="Captura" className="rounded-lg w-full h-full object-contain" /> : <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-contain rounded-lg" />}
-          <canvas ref={canvasRef} className="hidden" />
-          <div ref={detectionBoxRef} className="absolute border-4 border-green-400 rounded-lg transition-all duration-200 pointer-events-none" style={{ display: 'none' }} />
-          
-          {isLoading && <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center rounded-lg"><Loader2 className="w-8 h-8 text-white animate-spin" /><p className="mt-2 text-white">Cargando IA de la cámara...</p></div>}
-          {error && <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center rounded-lg"><CameraOff className="w-12 h-12 text-red-400 mb-2"/><p className="text-red-400 text-center max-w-xs">{error}</p></div>}
-          
-          {!capturedImage && !isLoading && !error && (
-            <div className={`absolute bottom-4 left-4 p-2 rounded-lg text-white text-sm flex items-center gap-2 transition-colors ${isCaptureEnabled ? 'bg-green-600' : 'bg-black bg-opacity-50'}`}>
-              {isCaptureEnabled ? <CheckCircle className="w-4 h-4" /> : <Loader2 className="w-4 h-4 animate-spin" />}
-              <span>{feedbackMessage}</span>
-            </div>
-          )}
-        </div>
-        <DialogFooter>
-          {capturedImage ? (<><Button onClick={handleRetake} variant="outline">Tomar de Nuevo</Button><Button onClick={handleAccept}>Aceptar y Usar Foto</Button></>) 
-          : (<Button onClick={handleCapture} disabled={isLoading || !!error || !isCaptureEnabled} size="lg">Tomar Foto</Button>)}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-```
-
-### **Paso 3: Reemplazar la Interfaz Principal (`page.tsx`)**
-
-Finalmente, reemplaza todo el contenido de tu archivo **`page.tsx`** con esta versión final. Contiene la lógica correcta para manejar el estado, la subida de archivos de la cámara, y mostrar los resultados sin que la página quede en blanco.
-
-```tsx
-"use client"
-
 import type React from "react"
 import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
@@ -236,7 +17,28 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Switch } from "@/components/ui/switch"
 import { SmartCameraModal } from "@/components/ui/smart-camera-modal"
 import {
-  Upload, FileText, Brain, Download, Copy, Trash2, BarChart3, GraduationCap, Clock, X, Plus, Eye, Loader2, FileIcon, Users, User, CheckCircle, XCircle, AlertCircle, Zap, Settings, Camera,
+  Upload,
+  FileText,
+  Brain,
+  Download,
+  Copy,
+  Trash2,
+  BarChart3,
+  GraduationCap,
+  Clock,
+  X,
+  Plus,
+  Eye,
+  Loader2,
+  FileIcon,
+  Users,
+  User,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  Zap,
+  Settings,
+  Camera,
 } from "lucide-react"
 
 // --- INTERFACES ---
@@ -257,6 +59,7 @@ interface EvaluationProgress {
 }
 type GroupingMode = "single" | "multiple" | null;
 
+// --- FUNCIONES AUXILIARES ---
 const compressImage = async (file: File): Promise<File> => {
   try {
     const imageCompression = (await import("browser-image-compression")).default;
@@ -268,6 +71,16 @@ const compressImage = async (file: File): Promise<File> => {
   }
 };
 
+const formatFileSize = (bytes?: number) => {
+    if (bytes === undefined) return "";
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+};
+
+// --- COMPONENTE PRINCIPAL ---
 export default function GeniusEvaluator() {
   const [activeTab, setActiveTab] = useState("evaluate");
   const [isLoading, setIsLoading] = useState(false);
@@ -320,13 +133,15 @@ export default function GeniusEvaluator() {
 
   const createFilePreview = async (file: File): Promise<FilePreview> => {
     const id = `file_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    let preview = undefined;
+    let preview: string | undefined = undefined;
     let type: "image" | "pdf" | "other" = "other";
     let processedFile = file;
     const originalSize = file.size;
     if (file.type.startsWith("image/")) {
       type = "image";
-      if (optimizeImages) processedFile = await compressImage(file);
+      if (optimizeImages) {
+        processedFile = await compressImage(file);
+      }
       preview = URL.createObjectURL(processedFile);
     } else if (file.type === "application/pdf") {
       type = "pdf";
@@ -390,7 +205,7 @@ export default function GeniusEvaluator() {
         })
       );
     }
-    setFilePreviews([]); // Move files from preview area to groups
+    setFilePreviews([]);
   };
   
   const updateStudentName = (groupId: string, name: string) => {
@@ -413,106 +228,99 @@ export default function GeniusEvaluator() {
     let draggedFileObj: FilePreview | null = null;
 
     if (filePreviews.some(f => f.id === draggedFile)) {
-        sourceGroupId = 'preview-area';
-        draggedFileObj = filePreviews.find(f => f.id === draggedFile) || null;
+      sourceGroupId = 'preview-area';
+      draggedFileObj = filePreviews.find(f => f.id === draggedFile) || null;
     } else {
-        for (const group of studentGroups) {
-            const file = group.files.find(f => f.id === draggedFile);
-            if (file) {
-                sourceGroupId = group.id;
-                draggedFileObj = file;
-                break;
-            }
+      for (const group of studentGroups) {
+        const file = group.files.find(f => f.id === draggedFile);
+        if (file) {
+          sourceGroupId = group.id;
+          draggedFileObj = file;
+          break;
         }
+      }
     }
     
     if (!draggedFileObj || sourceGroupId === targetGroupId) {
-        setDraggedFile(null);
-        return;
+      setDraggedFile(null);
+      return;
     }
 
     // Move from preview area to a group
     if (sourceGroupId === 'preview-area' && targetGroupId) {
-        setFilePreviews(prev => prev.filter(f => f.id !== draggedFile));
-        setStudentGroups(prev => prev.map(g => g.id === targetGroupId ? { ...g, files: [...g.files, draggedFileObj!] } : g));
+      setFilePreviews(prev => prev.filter(f => f.id !== draggedFile));
+      setStudentGroups(prev => prev.map(g => g.id === targetGroupId ? { ...g, files: [...g.files, draggedFileObj!] } : g));
     }
     // From a group to preview area
     else if (sourceGroupId && !targetGroupId) {
-        setStudentGroups(prev => prev.map(g => g.id === sourceGroupId ? { ...g, files: g.files.filter(f => f.id !== draggedFile) } : g).filter(g => g.files.length > 0));
-        setFilePreviews(prev => [...prev, draggedFileObj!]);
+      setStudentGroups(prev => prev.map(g => g.id === sourceGroupId ? { ...g, files: g.files.filter(f => f.id !== draggedFile) } : g).filter(g => g.files.length > 0 || g.studentName.trim() !== ''));
+      setFilePreviews(prev => [...prev, draggedFileObj!]);
     }
     // From one group to another
     else if (sourceGroupId && targetGroupId) {
-        let fileToMove: FilePreview;
-        setStudentGroups(prev => {
-            const fromGroup = prev.find(g => g.id === sourceGroupId);
-            fileToMove = fromGroup!.files.find(f => f.id === draggedFile)!;
+      setStudentGroups(prev => {
+        const newGroups = [...prev];
+        const sourceGroup = newGroups.find(g => g.id === sourceGroupId);
+        const targetGroup = newGroups.find(g => g.id === targetGroupId);
 
-            const newGroups = prev.map(g => {
-                if (g.id === sourceGroupId) return { ...g, files: g.files.filter(f => f.id !== draggedFile) };
-                if (g.id === targetGroupId) return { ...g, files: [...g.files, fileToMove] };
-                return g;
-            });
-            return newGroups.filter(g => g.files.length > 0);
-        });
+        if (sourceGroup && targetGroup) {
+          const fileToMove = sourceGroup.files.find(f => f.id === draggedFile)!;
+          sourceGroup.files = sourceGroup.files.filter(f => f.id !== draggedFile);
+          targetGroup.files = [...targetGroup.files, fileToMove];
+        }
+        return newGroups.filter(g => g.files.length > 0 || g.studentName.trim() !== '');
+      });
     }
     setDraggedFile(null);
   };
   
   const evaluateDocuments = async () => {
     const groupsToEvaluate = studentGroups.filter(g => g.files.length > 0 && g.studentName.trim());
-    if (groupsToEvaluate.length === 0) {
-      alert("Por favor, crea grupos con nombres y archivos para evaluar."); return;
-    }
+    if (groupsToEvaluate.length === 0) { alert("Por favor, crea grupos con nombres y archivos para evaluar."); return; }
+    if (!currentEvaluation.rubrica.trim()) { alert("Por favor, proporciona una rúbrica de evaluación."); return; }
 
     setIsLoading(true);
     setEvaluationProgress({ total: groupsToEvaluate.length, completed: 0, current: "Iniciando...", successes: 0, failures: 0 });
 
     const evaluationPromises = groupsToEvaluate.map((group, index) => {
+      setEvaluationProgress(prev => prev ? { ...prev, current: `Enviando ${index + 1}/${groupsToEvaluate.length}: ${group.studentName}...` } : null);
       const formData = new FormData();
       group.files.forEach(fp => formData.append("files", fp.file));
-      formData.append("config", JSON.stringify({ ...config, ...currentEvaluation, studentName: group.studentName }));
+      formData.append("config", JSON.stringify({ ...config, ...currentEvaluation }));
 
-      return new Promise<StudentEvaluation>((resolve, reject) => {
-        setEvaluationProgress(prev => prev ? { ...prev, current: `Evaluando ${index + 1}/${groupsToEvaluate.length}: ${group.studentName}...` } : null);
-        fetch("/api/evaluate", { method: "POST", body: formData })
-          .then(res => {
-            if (!res.ok) return res.json().then(err => Promise.reject(err));
-            return res.json();
-          })
-          .then(result => {
-            if (result.success && result.evaluations.length > 0) {
-              const evaluation = result.evaluations[0];
-              evaluation.nombreEstudiante = group.studentName;
-              evaluation.filesPreviews = group.files;
-              setEvaluationProgress(prev => prev ? { ...prev, completed: prev.completed + 1, successes: prev.successes + 1 } : null);
-              resolve(evaluation);
-            } else {
-              reject(new Error(result.error || "Fallo en la evaluación"));
-            }
-          })
-          .catch(error => {
-            setEvaluationProgress(prev => prev ? { ...prev, completed: prev.completed + 1, failures: prev.failures + 1 } : null);
-            reject(error);
-          });
-      });
+      return fetch("/api/evaluate", { method: "POST", body: formData })
+        .then(res => {
+          if (!res.ok) return res.json().then(err => Promise.reject(err.error || 'Error desconocido del servidor'));
+          return res.json();
+        })
+        .then(result => {
+          if (result.success && result.evaluations.length > 0) {
+            const evaluation = result.evaluations[0];
+            evaluation.nombreEstudiante = group.studentName;
+            evaluation.filesPreviews = group.files;
+            return { status: 'fulfilled', value: evaluation };
+          }
+          return Promise.reject(result.error || "Fallo en la evaluación");
+        })
+        .catch(error => ({ status: 'rejected', reason: error, groupName: group.studentName }));
     });
 
     const results = await Promise.allSettled(evaluationPromises);
-    
     const successfulEvals: StudentEvaluation[] = [];
     const failedEvals: string[] = [];
 
-    results.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-            successfulEvals.push(result.value);
+    results.forEach((res, i) => {
+        const groupName = groupsToEvaluate[i].studentName;
+        if (res.status === 'fulfilled' && res.value.status === 'fulfilled') {
+            successfulEvals.push(res.value.value);
         } else {
-            failedEvals.push(`Error con ${groupsToEvaluate[index].studentName}: ${result.reason?.message || 'Error desconocido'}`);
+            const reason = res.status === 'rejected' ? res.reason : (res.value as any).reason;
+            failedEvals.push(`${groupName}: ${reason}`);
         }
     });
 
     if (successfulEvals.length > 0) {
-        saveEvaluations([...evaluations, ...successfulEvals]);
+        saveEvaluations(successfulEvals);
         setActiveTab("results");
     }
     
@@ -526,14 +334,11 @@ export default function GeniusEvaluator() {
     setIsLoading(false);
     setEvaluationProgress(null);
   };
-  
-  const formatFileSize = (bytes?: number) => {
-    if (bytes === undefined) return "";
-    if (bytes === 0) return "0 Bytes";
-    const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+
+  const clearHistory = () => {
+    if (confirm("¿Borrar PERMANENTEMENTE todo el historial?")) {
+      saveEvaluations([]);
+    }
   };
 
   const FilePreviewCard = ({ filePreview, onRemove, isDraggable = true }: { filePreview: FilePreview, onRemove?: () => void, isDraggable?: boolean }) => (
@@ -548,7 +353,7 @@ export default function GeniusEvaluator() {
       {onRemove && (<button onClick={onRemove} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center hover:bg-red-600"><X className="w-3 h-3" /></button>)}
     </div>
   );
-  
+
   const StudentFeedbackTab = ({ evaluation }: { evaluation: StudentEvaluation }) => (
     <div className="space-y-6">
       <div className="bg-blue-50 p-4 rounded-lg"><h3 className="font-semibold text-blue-900 mb-2">📋 Resumen de tu Evaluación</h3><p className="text-blue-800">{evaluation.feedback_estudiante?.resumen || "Sin resumen disponible."}</p></div>
@@ -589,9 +394,9 @@ export default function GeniusEvaluator() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="evaluate"><Brain className="w-4 h-4 mr-2" />Evaluar</TabsTrigger>
-            <TabsTrigger value="results"><BarChart3 className="w-4 h-4 mr-2" />Resultados</TabsTrigger>
-            <TabsTrigger value="history"><FileText className="w-4 h-4 mr-2" />Historial</TabsTrigger>
+            <TabsTrigger value="evaluate" className="flex items-center gap-2"><Brain className="w-4 h-4" /> Evaluar</TabsTrigger>
+            <TabsTrigger value="results" className="flex items-center gap-2"><BarChart3 className="w-4 h-4" /> Resultados</TabsTrigger>
+            <TabsTrigger value="history" className="flex items-center gap-2"><FileText className="w-4 h-4" /> Historial</TabsTrigger>
           </TabsList>
           
           <TabsContent value="evaluate" className="space-y-6 pt-6">
@@ -621,13 +426,13 @@ export default function GeniusEvaluator() {
             </Card>
 
             <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2"><Settings className="w-5 h-5" />2. Configuración de Evaluación y Rendimiento</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="flex items-center gap-2"><Settings className="w-5 h-5" />2. Configuración y Optimización</CardTitle></CardHeader>
               <CardContent className="space-y-6 pt-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="space-y-2"><Label>Sistema de Calificación</Label><Select value={config.sistema} onValueChange={(value) => setConfig((prev) => ({ ...prev, sistema: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="chile_2_7">Chile (2.0 - 7.0)</SelectItem><SelectItem value="latam_1_10">Estándar (1 - 10)</SelectItem><SelectItem value="porcentual_0_100">Porcentual (0 - 100)</SelectItem></SelectContent></Select></div>
-                  <div className="space-y-2"><Label htmlFor="nivel-exigencia">Exigencia (%)</Label><Input id="nivel-exigencia" type="number" min="1" max="100" value={config.nivelExigencia} onChange={(e) => setConfig((prev) => ({ ...prev, nivelExigencia: Number(e.target.value) }))} /></div>
-                  <div className="space-y-2"><Label htmlFor="puntaje-maximo">Puntaje Máximo</Label><Input id="puntaje-maximo" type="number" min="1" value={config.puntajeMaximo} onChange={(e) => setConfig((prev) => ({ ...prev, puntajeMaximo: Number(e.target.value) }))} /></div>
-                  <div className="space-y-2"><Label htmlFor="nota-aprobacion">Nota Aprobación</Label><Input id="nota-aprobacion" type="number" step="0.1" value={config.notaAprobacion} onChange={(e) => setConfig((prev) => ({ ...prev, notaAprobacion: Number(e.target.value) }))} /></div>
+                    <div className="space-y-2"><Label>Sistema de Calificación</Label><Select value={config.sistema} onValueChange={(value) => setConfig((prev) => ({ ...prev, sistema: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="chile_2_7">Chile (2.0 - 7.0)</SelectItem><SelectItem value="latam_1_10">Estándar (1 - 10)</SelectItem><SelectItem value="porcentual_0_100">Porcentual (0 - 100)</SelectItem></SelectContent></Select></div>
+                    <div className="space-y-2"><Label htmlFor="nivel-exigencia">Exigencia (%)</Label><Input id="nivel-exigencia" type="number" min="1" max="100" value={config.nivelExigencia} onChange={(e) => setConfig((prev) => ({ ...prev, nivelExigencia: Number(e.target.value) }))} /></div>
+                    <div className="space-y-2"><Label htmlFor="puntaje-maximo">Puntaje Máximo</Label><Input id="puntaje-maximo" type="number" min="1" value={config.puntajeMaximo} onChange={(e) => setConfig((prev) => ({ ...prev, puntajeMaximo: Number(e.target.value) }))} /></div>
+                    <div className="space-y-2"><Label htmlFor="nota-aprobacion">Nota Aprobación</Label><Input id="nota-aprobacion" type="number" step="0.1" value={config.notaAprobacion} onChange={(e) => setConfig((prev) => ({ ...prev, notaAprobacion: Number(e.target.value) }))} /></div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2"><Label>Modelo de IA</Label><Select value={config.aiModel} onValueChange={(value) => setConfig((prev) => ({ ...prev, aiModel: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="mistral-small-latest"><div className="flex items-center gap-2"><Zap className="w-4 h-4 text-green-500" /><span>Rápido y Eficiente</span></div></SelectItem><SelectItem value="mistral-large-latest"><div className="flex items-center gap-2"><Brain className="w-4 h-4 text-blue-500" /><span>Potente y Detallado</span></div></SelectItem></SelectContent></Select></div>
@@ -652,7 +457,7 @@ export default function GeniusEvaluator() {
                   <div className="space-y-4 pt-4 border-t">
                     <div onDragOver={handleDragOver} onDrop={e => handleDrop(e, 'preview-area')}>
                       <Label className="text-sm font-medium mb-2 block">Archivos Cargados ({filePreviews.length})</Label>
-                      <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-8 gap-2 p-2 border rounded-lg min-h-[120px] bg-white">
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 p-2 border rounded-lg min-h-[120px] bg-white">
                         {filePreviews.map(fp => <FilePreviewCard key={fp.id} filePreview={fp} onRemove={() => removeFilePreview(fp.id)} />)}
                       </div>
                     </div>
@@ -680,7 +485,7 @@ export default function GeniusEvaluator() {
                             </div>
                             <Badge variant="secondary">{group.files.length} archivo(s)</Badge>
                         </div>
-                        <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-8 gap-2">
+                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
                             {group.files.map(fp => <FilePreviewCard key={fp.id} filePreview={fp} groupId={group.id} isDraggable={groupingMode === 'multiple'} showRemove={false} />)}
                         </div>
                         </div>
@@ -704,10 +509,86 @@ export default function GeniusEvaluator() {
           </TabsContent>
 
           <TabsContent value="results" className="space-y-6 pt-6">
-              {/* Resultados se mostrarán aquí */}
+            <Card>
+              <CardHeader><CardTitle>Resultados Obtenidos</CardTitle></CardHeader>
+              <CardContent>
+                  {!evaluations || evaluations.length === 0 ? (
+                      <div className="text-center py-8"><GraduationCap className="w-16 h-16 mx-auto text-gray-400 mb-4" /><p className="text-gray-600">Aún no hay resultados para mostrar.</p></div>
+                  ) : (
+                      <div className="space-y-4">
+                          {evaluations.map((evaluation) => (
+                              <Dialog key={evaluation.id}>
+                                  <DialogTrigger asChild>
+                                      <Card className="cursor-pointer hover:shadow-md transition-shadow">
+                                          <CardContent className="p-4 flex justify-between items-center">
+                                              <div>
+                                                  <p className="font-semibold">{evaluation.nombreEstudiante}</p>
+                                                  <p className="text-sm text-gray-500">{evaluation.nombrePrueba} - {evaluation.curso}</p>
+                                              </div>
+                                              <div className="flex items-center gap-4">
+                                                  <Badge variant="secondary" className="text-lg px-3 py-1">{typeof evaluation.notaFinal === 'number' ? evaluation.notaFinal.toFixed(1) : "N/A"}</Badge>
+                                                  <Eye className="w-5 h-5 text-gray-400" />
+                                              </div>
+                                          </CardContent>
+                                      </Card>
+                                  </DialogTrigger>
+                                  <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col">
+                                      <DialogHeader><DialogTitle className="flex items-center gap-2"><GraduationCap className="w-5 h-5" />Reporte de {evaluation.nombreEstudiante}</DialogTitle></DialogHeader>
+                                      <div className="overflow-y-auto p-1 pr-4">
+                                          <Tabs defaultValue="student" className="w-full">
+                                              <TabsList className="grid w-full grid-cols-2">
+                                                  <TabsTrigger value="student">Retroalimentación (Estudiante)</TabsTrigger>
+                                                  <TabsTrigger value="teacher">Análisis (Profesor)</TabsTrigger>
+                                              </TabsList>
+                                              <TabsContent value="student" className="mt-4"><StudentFeedbackTab evaluation={evaluation} /></TabsContent>
+                                              <TabsContent value="teacher" className="mt-4"><TeacherAnalysisTab evaluation={evaluation} /></TabsContent>
+                                          </Tabs>
+                                      </div>
+                                  </DialogContent>
+                                </Dialog>
+                          ))}
+                      </div>
+                  )}
+              </CardContent>
+            </Card>
           </TabsContent>
+          
           <TabsContent value="history" className="space-y-6 pt-6">
-              {/* Historial se mostrará aquí */}
+             <Card>
+              <CardHeader>
+                <CardTitle className="flex justify-between items-center">
+                  <span>Historial Completo</span>
+                  <div className="flex gap-2">
+                    <Button onClick={copyToClipboard} variant="outline" size="sm"><Copy className="w-4 h-4 mr-2" /> Copiar</Button>
+                    <Button onClick={exportToCSV} variant="outline" size="sm"><Download className="w-4 h-4 mr-2" /> CSV</Button>
+                    <Button onClick={clearHistory} variant="destructive" size="sm"><Trash2 className="w-4 h-4 mr-2" /> Limpiar</Button>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {evaluations.length === 0 ? (
+                   <div className="text-center py-8"><FileText className="w-16 h-16 mx-auto text-gray-400 mb-4" /><p className="text-gray-600">No hay historial para mostrar.</p></div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead><tr className="border-b"><th className="p-2 text-left font-medium">Estudiante</th><th className="p-2 text-left font-medium">Curso</th><th className="p-2 text-left font-medium">Evaluación</th><th className="p-2 text-left font-medium">Nota</th><th className="p-2 text-left font-medium">Puntaje</th><th className="p-2 text-left font-medium">Fecha</th></tr></thead>
+                      <tbody>
+                        {evaluations.map((evaluation) => (
+                          <tr key={evaluation.id} className="border-b hover:bg-gray-50">
+                            <td className="p-2">{evaluation.nombreEstudiante}</td>
+                            <td className="p-2">{evaluation.curso}</td>
+                            <td className="p-2">{evaluation.nombrePrueba}</td>
+                            <td className="p-2"><Badge variant={evaluation.notaFinal >= 4.0 ? "default" : "destructive"} className="font-semibold">{typeof evaluation.notaFinal === 'number' ? evaluation.notaFinal.toFixed(1) : 'N/A'}</Badge></td>
+                            <td className="p-2">{evaluation.puntajeObtenido ?? 'N/A'}/{evaluation.configuracion?.puntajeMaximo || 'N/A'}</td>
+                            <td className="p-2">{evaluation.configuracion?.fecha || 'N/A'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
         
