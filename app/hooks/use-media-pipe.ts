@@ -1,4 +1,3 @@
-// Ruta: app/hooks/use-media-pipe.ts
 "use client"
 
 import { useEffect, useState, useCallback, useRef } from "react"
@@ -17,7 +16,7 @@ export const useMediaPipe = (): { isLoading: boolean; error: string | null; dete
   const initialize = useCallback(async () => {
     try {
       const vision = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm"
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
       );
       const detector = await ObjectDetector.createFromOptions(vision, {
         baseOptions: {

@@ -1,229 +1,5 @@
 "use client"
 
-import { useEffect, useState, useCallback, useRef } from "react"
-import { ObjectDetector, FilesetResolver } from "@mediapipe/tasks-vision"
-
-interface DetectedObject {
-  label: string
-  boundingBox: { x: number; y: number; width: number; height: number }
-}
-
-export const useMediaPipe = (): { isLoading: boolean; error: string | null; detectObjects: (video: HTMLVideoElement) => DetectedObject[] } => {
-  const objectDetectorRef = useRef<ObjectDetector | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const initialize = useCallback(async () => {
-    try {
-      const vision = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm"
-      );
-      const detector = await ObjectDetector.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath: `https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite`,
-          delegate: "GPU",
-        },
-        scoreThreshold: 0.5,
-        runningMode: "VIDEO",
-        categoryAllowlist: ["book"],
-      });
-      objectDetectorRef.current = detector;
-    } catch (err) {
-      console.error("Error al inicializar MediaPipe:", err);
-      setError("No se pudo cargar la IA de la cámara.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    initialize();
-  }, [initialize]);
-
-  const detectObjects = useCallback(
-    (video: HTMLVideoElement): DetectedObject[] => {
-      if (!objectDetectorRef.current || video.readyState < 2) return [];
-
-      const detections = objectDetectorRef.current.detectForVideo(video, Date.now());
-      return (
-        detections?.detections.map((detection) => ({
-          label: detection.categories[0].categoryName,
-          boundingBox: detection.boundingBox!,
-        })) || []
-      );
-    },
-    [],
-  );
-
-  return { isLoading, error, detectObjects };
-};
-```
-
-#### Archivo 2: El Cuerpo de la Cámara (Modal Visual)
-
-1.  Dentro de la carpeta `app/components`, crea una carpeta llamada **`ui`** si no existe.
-2.  Dentro de `ui`, crea un nuevo archivo llamado **`smart-camera-modal.tsx`**.
-3.  Pega este código dentro:
-
-<!-- end list -->
-
-```tsx
-// Ruta: app/components/ui/smart-camera-modal.tsx
-"use client"
-
-import { useEffect, useRef, useState, useCallback } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { useMediaPipe } from "@/hooks/use-media-pipe" // Asegúrate que la ruta sea correcta
-import { Loader2, CheckCircle, CameraOff, AlertTriangle } from "lucide-react"
-
-interface SmartCameraModalProps {
-  isOpen: boolean
-  onClose: () => void
-  onCapture: (file: File) => void
-}
-
-export const SmartCameraModal = ({ isOpen, onClose, onCapture }: SmartCameraModalProps) => {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [capturedImage, setCapturedImage] = useState<string | null>(null)
-  const [feedbackMessage, setFeedbackMessage] = useState("Buscando documento...")
-  const [isCaptureEnabled, setIsCaptureEnabled] = useState(false)
-  const detectionBoxRef = useRef<HTMLDivElement>(null)
-  const animationFrameId = useRef<number>()
-  
-  const { isLoading, error, detectObjects } = useMediaPipe()
-
-  const stopCamera = useCallback(() => {
-    if (videoRef.current?.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream
-      stream.getTracks().forEach((track) => track.stop())
-      videoRef.current.srcObject = null
-    }
-  }, [])
-
-  const startCamera = useCallback(async () => {
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          videoRef.current.play()
-        }
-      } catch (err) {
-        console.error("Error al acceder a la cámara:", err)
-        setFeedbackMessage("❌ Permiso de cámara denegado.")
-      }
-    } else {
-        setFeedbackMessage("❌ La cámara no es compatible con este navegador.")
-    }
-  }, [])
-  
-  useEffect(() => {
-    if (isOpen) {
-      startCamera()
-    }
-    return () => stopCamera()
-  }, [isOpen, startCamera, stopCamera])
-
-  const detectionLoop = useCallback(() => {
-    if (isOpen && !isLoading && !error && videoRef.current && detectionBoxRef.current && !capturedImage) {
-        const detected = detectObjects(videoRef.current)
-        if (detected.length > 0 && detected.some(d => d.label === 'book')) {
-            const doc = detected[0];
-            const { x, y, width, height } = doc.boundingBox;
-            const video = videoRef.current;
-            const box = detectionBoxRef.current;
-
-            box.style.display = 'block';
-            box.style.left = `${(x / video.videoWidth) * 100}%`;
-            box.style.top = `${(y / video.videoHeight) * 100}%`;
-            box.style.width = `${(width / video.videoWidth) * 100}%`;
-            box.style.height = `${(height / video.videoHeight) * 100}%`;
-
-            setFeedbackMessage("✅ Documento detectado. ¡Mantén la cámara estable!");
-            setIsCaptureEnabled(true);
-        } else {
-            if(detectionBoxRef.current) detectionBoxRef.current.style.display = 'none';
-            setFeedbackMessage("Apunte al documento...");
-            setIsCaptureEnabled(false);
-        }
-        animationFrameId.current = requestAnimationFrame(detectionLoop)
-    }
-  }, [detectObjects, capturedImage, isOpen, isLoading, error])
-  
-  useEffect(() => {
-      if (isOpen && !isLoading && !error) {
-          detectionLoop();
-      }
-      return () => {
-          if(animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
-      }
-  }, [isOpen, isLoading, error, detectionLoop])
-
-  const handleCapture = () => {
-    if (videoRef.current && canvasRef.current) {
-      const canvas = canvasRef.current; 
-      const video = videoRef.current;
-      canvas.width = video.videoWidth; 
-      canvas.height = video.videoHeight;
-      const context = canvas.getContext('2d');
-      context?.drawImage(video, 0, 0, canvas.width, canvas.height);
-      setCapturedImage(canvas.toDataURL('image/jpeg'));
-      stopCamera();
-    }
-  }
-
-  const handleAccept = () => {
-    if (capturedImage && canvasRef.current) {
-      canvasRef.current.toBlob((blob) => {
-        if (blob) {
-          onCapture(new File([blob], `captura-${Date.now()}.jpg`, { type: 'image/jpeg' }));
-          handleClose();
-        }
-      }, 'image/jpeg');
-    }
-  }
-
-  const handleRetake = () => { setCapturedImage(null); startCamera(); }
-  const handleClose = () => { setCapturedImage(null); onClose(); }
-
-  return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl p-4 sm:p-6">
-        <DialogHeader><DialogTitle>Cámara Inteligente</DialogTitle></DialogHeader>
-        <div className="relative bg-black rounded-lg aspect-video">
-          {capturedImage ? <img src={capturedImage} alt="Captura" className="rounded-lg w-full h-full object-contain" /> : <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-contain rounded-lg" />}
-          <canvas ref={canvasRef} className="hidden" />
-          <div ref={detectionBoxRef} className="absolute border-4 border-green-400 rounded-lg transition-all duration-200 pointer-events-none" style={{ display: 'none' }} />
-          
-          {isLoading && <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center rounded-lg"><Loader2 className="w-8 h-8 text-white animate-spin" /><p className="mt-2 text-white">Cargando IA de la cámara...</p></div>}
-          {error && <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center rounded-lg"><CameraOff className="w-12 h-12 text-red-400 mb-2"/><p className="text-red-400 text-center max-w-xs">{error}</p></div>}
-          
-          {!capturedImage && !isLoading && !error && (
-            <div className={`absolute bottom-4 left-4 p-2 rounded-lg text-white text-sm flex items-center gap-2 transition-colors ${isCaptureEnabled ? 'bg-green-600' : 'bg-black bg-opacity-50'}`}>
-              {isCaptureEnabled ? <CheckCircle className="w-4 h-4" /> : <Loader2 className="w-4 h-4 animate-spin" />}
-              <span>{feedbackMessage}</span>
-            </div>
-          )}
-        </div>
-        <DialogFooter>
-          {capturedImage ? (<><Button onClick={handleRetake} variant="outline">Tomar de Nuevo</Button><Button onClick={handleAccept}>Aceptar y Usar Foto</Button></>) 
-          : (<Button onClick={handleCapture} disabled={isLoading || !!error || !isCaptureEnabled} size="lg">Tomar Foto</Button>)}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-```
-
-### **Paso 3: Actualizar la Interfaz Principal (`page.tsx`)**
-
-Ahora, reemplaza **todo el contenido** de tu archivo principal **`app/page.tsx`** con esta versión final y corregida que integra todo correctamente.
-
-```tsx
-"use client"
-
 import type React from "react"
 import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
@@ -333,9 +109,27 @@ export default function GeniusEvaluator() {
     });
   }, []);
 
+  const createFilePreview = async (file: File): Promise<FilePreview> => {
+    const id = `file_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    let preview = undefined;
+    let type: "image" | "pdf" | "other" = "other";
+    let processedFile = file;
+    const originalSize = file.size;
+    if (file.type.startsWith("image/")) {
+      type = "image";
+      if (optimizeImages) {
+        processedFile = await compressImage(file);
+      }
+      preview = URL.createObjectURL(processedFile);
+    } else if (file.type === "application/pdf") {
+      type = "pdf";
+    }
+    return { id, file: processedFile, preview, type, originalSize, compressedSize: processedFile.size };
+  };
+  
   const addFilesToPreviews = useCallback(async (files: File[]) => {
     if (!files.length) return;
-    const newPreviews = await Promise.all(files.map(file => createFilePreview(file)));
+    const newPreviews = await Promise.all(files.map(createFilePreview));
     setFilePreviews(prev => [...prev, ...newPreviews]);
     setGroupingMode(null);
     setStudentGroups([]);
@@ -412,47 +206,45 @@ export default function GeniusEvaluator() {
     let draggedFileObj: FilePreview | null = null;
 
     if (filePreviews.some(f => f.id === draggedFile)) {
-        sourceGroupId = 'preview-area';
-        draggedFileObj = filePreviews.find(f => f.id === draggedFile) || null;
+      sourceGroupId = 'preview-area';
+      draggedFileObj = filePreviews.find(f => f.id === draggedFile) || null;
     } else {
-        for (const group of studentGroups) {
-            const file = group.files.find(f => f.id === draggedFile);
-            if (file) {
-                sourceGroupId = group.id;
-                draggedFileObj = file;
-                break;
-            }
+      for (const group of studentGroups) {
+        const file = group.files.find(f => f.id === draggedFile);
+        if (file) {
+          sourceGroupId = group.id;
+          draggedFileObj = file;
+          break;
         }
+      }
     }
     
     if (!draggedFileObj || sourceGroupId === targetGroupId) {
-        setDraggedFile(null);
-        return;
+      setDraggedFile(null);
+      return;
     }
 
     if (sourceGroupId === 'preview-area' && targetGroupId) {
-        setFilePreviews(prev => prev.filter(f => f.id !== draggedFile));
-        setStudentGroups(prev => prev.map(g => g.id === targetGroupId ? { ...g, files: [...g.files, draggedFileObj!] } : g));
+      setFilePreviews(prev => prev.filter(f => f.id !== draggedFile));
+      setStudentGroups(prev => prev.map(g => g.id === targetGroupId ? { ...g, files: [...g.files, draggedFileObj!] } : g));
     } else if (sourceGroupId && targetGroupId) {
-        let fileToMove: FilePreview | null = null;
-        setStudentGroups(prev => {
-            const fromGroup = prev.find(g => g.id === sourceGroupId);
-            fileToMove = fromGroup!.files.find(f => f.id === draggedFile)!;
-
-            const newGroups = prev.map(g => {
-                if (g.id === sourceGroupId) return { ...g, files: g.files.filter(f => f.id !== draggedFile) };
-                if (g.id === targetGroupId) return { ...g, files: [...g.files, fileToMove!] };
-                return g;
-            });
-            return newGroups.filter(g => g.files.length > 0 || (groupingMode === 'multiple' && g.studentName.trim() !== ''));
+      let fileToMove: FilePreview | null = null;
+      setStudentGroups(prev => {
+        const fromGroup = prev.find(g => g.id === sourceGroupId);
+        fileToMove = fromGroup!.files.find(f => f.id === draggedFile)!;
+        const newGroups = prev.map(g => {
+          if (g.id === sourceGroupId) return { ...g, files: g.files.filter(f => f.id !== draggedFile) };
+          if (g.id === targetGroupId) return { ...g, files: [...g.files, fileToMove!] };
+          return g;
         });
+        return newGroups.filter(g => g.files.length > 0 || (groupingMode === 'multiple' && g.studentName.trim() !== ''));
+      });
     }
     setDraggedFile(null);
   };
   
   const evaluateDocuments = async () => {
-    const groupsToEvaluate = studentGroups.filter(g => g.files.length > 0);
-    if (groupsToEvaluate.some(g => !g.studentName.trim())) { alert("Por favor, asegúrate de que todos los grupos tengan un nombre de estudiante."); return; }
+    const groupsToEvaluate = studentGroups.filter(g => g.files.length > 0 && g.studentName.trim());
     if (groupsToEvaluate.length === 0) { alert("Por favor, crea grupos con nombres y archivos para evaluar."); return; }
     if (!currentEvaluation.rubrica.trim()) { alert("Por favor, proporciona una rúbrica de evaluación."); return; }
 
@@ -478,26 +270,28 @@ export default function GeniusEvaluator() {
         .catch(error => ({ status: 'rejected', reason: error.error || error.message || 'Error desconocido', groupName: group.studentName }));
     });
     
+    let processedCount = 0;
+    const totalCount = evaluationPromises.length;
+    evaluationPromises.forEach(p => p.finally(() => {
+      processedCount++;
+      setEvaluationProgress(prev => prev ? {...prev, completed: processedCount} : null);
+    }));
+
     const results = await Promise.allSettled(evaluationPromises);
     
     const successfulEvals: StudentEvaluation[] = [];
     const failedEvals: string[] = [];
 
-    results.forEach((res, i) => {
-        setEvaluationProgress(prev => {
-            if (!prev) return null;
-            const groupName = groupsToEvaluate[i].studentName;
-            const newCompleted = prev.completed + 1;
-            if (res.status === 'fulfilled' && res.value.status === 'fulfilled') {
-                return {...prev, completed: newCompleted, successes: prev.successes + 1, current: `Éxito: ${groupName}`};
-            } else {
-                const reason = res.status === 'rejected' ? res.reason : (res.value as any).reason;
-                failedEvals.push(`${groupName}: ${reason}`);
-                return {...prev, completed: newCompleted, failures: prev.failures + 1, current: `Fallo: ${groupName}`};
-            }
-        });
+    results.forEach((res) => {
+        if (res.status === 'fulfilled' && res.value.status === 'fulfilled') {
+            successfulEvals.push(res.value.value);
+        } else {
+            const reason = res.status === 'rejected' ? res.reason : (res.value as any).reason;
+            const groupName = res.status === 'fulfilled' ? (res.value as any).groupName : 'Desconocido';
+            failedEvals.push(`${groupName}: ${reason}`);
+        }
     });
-    
+
     if (successfulEvals.length > 0) {
         saveEvaluations(successfulEvals);
         setActiveTab("results");
@@ -520,8 +314,7 @@ export default function GeniusEvaluator() {
     }
   };
 
-  // --- SUB-COMPONENTS ---
-  const FilePreviewCard = ({ filePreview, onRemove, isDraggable = true, inGroup = false }: { filePreview: FilePreview, onRemove?: () => void, isDraggable?: boolean, inGroup?: boolean }) => (
+  const FilePreviewCard = ({ filePreview, onRemove, isDraggable = true }: { filePreview: FilePreview, onRemove?: () => void, isDraggable?: boolean }) => (
     <div className={`relative border rounded-lg p-2 bg-white ${isDraggable ? "cursor-move" : ""}`} draggable={isDraggable} onDragStart={(e) => isDraggable && handleDragStart(e, filePreview.id)}>
       <div className="flex flex-col items-center space-y-1 text-center">
         {filePreview.type === "image" && filePreview.preview ? <img src={filePreview.preview} alt={filePreview.file.name} className="w-20 h-20 object-cover rounded-md" /> : <FileIcon className="w-20 h-20 text-gray-300" />}
@@ -563,8 +356,7 @@ export default function GeniusEvaluator() {
         {evaluation.analisis_profesor && <div className="bg-gray-50 p-4 rounded-lg"><h3 className="font-semibold text-gray-700 mb-3">📝 Notas del Profesor</h3><div className="space-y-3 text-sm"><div><strong>Desempeño General:</strong><p className="text-gray-600 mt-1">{evaluation.analisis_profesor.desempeno_general}</p></div><div><strong>Patrones Observados:</strong><p className="text-gray-600 mt-1">{evaluation.analisis_profesor.patrones_observados}</p></div><div><strong>Sugerencia Pedagógica:</strong><p className="text-gray-600 mt-1">{evaluation.analisis_profesor.sugerencia_pedagogica}</p></div></div></div>}
     </div>
   );
-  
-  // --- RENDERIZADO PRINCIPAL ---
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 sm:p-6 md:p-8">
       <div className="max-w-7xl mx-auto">
@@ -621,7 +413,7 @@ export default function GeniusEvaluator() {
                 </div>
               </CardContent>
             </Card>
-            
+
             <Card>
               <CardHeader><CardTitle>3. Cargar y Organizar Documentos</CardTitle></CardHeader>
               <CardContent className="space-y-4">
@@ -635,12 +427,10 @@ export default function GeniusEvaluator() {
                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"><div className="space-y-0.5"><Label htmlFor="optimize-images">Optimizar Imágenes</Label><p className="text-xs text-gray-500">Acelera el proceso reduciendo el tamaño.</p></div><Switch id="optimize-images" checked={optimizeImages} onCheckedChange={setOptimizeImages} /></div>
                 
                 {filePreviews.length > 0 && (
-                  <div className="space-y-4 pt-4 border-t">
-                    <div onDragOver={handleDragOver} onDrop={e => handleDrop(e, null)}>
-                      <Label className="text-sm font-medium mb-2 block">Archivos por Organizar ({filePreviews.length})</Label>
-                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 p-2 border rounded-lg min-h-[120px] bg-white/50">
-                        {filePreviews.map(fp => <FilePreviewCard key={fp.id} filePreview={fp} onRemove={() => removeFilePreview(fp.id)} isDraggable={groupingMode === "multiple"} />)}
-                      </div>
+                  <div className="space-y-4 pt-4 border-t" onDragOver={handleDragOver} onDrop={e => handleDrop(e, null)}>
+                    <Label className="text-sm font-medium mb-2 block">Archivos por Organizar ({filePreviews.length})</Label>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 p-2 border rounded-lg min-h-[120px] bg-white/50">
+                      {filePreviews.map(fp => <FilePreviewCard key={fp.id} filePreview={fp} onRemove={() => removeFilePreview(fp.id)} />)}
                     </div>
                     {!groupingMode && (
                       <Alert><AlertCircle className="h-4 w-4" /><AlertDescription>
@@ -690,7 +480,7 @@ export default function GeniusEvaluator() {
           </TabsContent>
 
           <TabsContent value="results" className="space-y-6 pt-6">
-             <Card>
+            <Card>
                 <CardHeader><CardTitle>Resultados Obtenidos</CardTitle></CardHeader>
                 <CardContent>
                     {!evaluations || evaluations.length === 0 ? (

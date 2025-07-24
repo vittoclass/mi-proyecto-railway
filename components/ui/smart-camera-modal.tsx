@@ -1,10 +1,9 @@
-// Ruta: app/components/ui/smart-camera-modal.tsx
 "use client"
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { useMediaPipe } from "@/hooks/use-media-pipe" // Asegúrate que la ruta sea correcta
+import { useMediaPipe } from "@/hooks/use-media-pipe"
 import { Loader2, CheckCircle, CameraOff, AlertTriangle } from "lucide-react"
 
 interface SmartCameraModalProps {
