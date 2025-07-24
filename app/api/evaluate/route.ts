@@ -1,5 +1,3 @@
-[⚠️ Suspicious Content] // Contenido para app/api/evaluate/route.ts
-
 import { type NextRequest, NextResponse } from "next/server"
 
 // --- INTERFACES Y FUNCIONES AUXILIARES ---
