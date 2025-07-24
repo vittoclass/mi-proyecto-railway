@@ -41,6 +41,10 @@ import {
   Camera,
 } from "lucide-react"
 
+
+// --- CONFIGURACIÓN DE LA PÁGINA ---
+export const dynamic = 'force-dynamic'; // <-- ESTA ES LA LÍNEA DE CORRECCIÓN IMPORTANTE
+
 // --- INTERFACES ---
 interface EvaluationConfig {
   sistema: string; nivelExigencia: number; puntajeMaximo: number; notaAprobacion: number; flexibility: number; fecha: string; aiModel: string;
@@ -59,6 +63,7 @@ interface EvaluationProgress {
 }
 type GroupingMode = "single" | "multiple" | null;
 
+// --- FUNCIONES AUXILIARES ---
 const compressImage = async (file: File): Promise<File> => {
   try {
     const imageCompression = (await import("browser-image-compression")).default;
@@ -70,9 +75,20 @@ const compressImage = async (file: File): Promise<File> => {
   }
 };
 
+const formatFileSize = (bytes?: number) => {
+    if (bytes === undefined) return "";
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+};
+
+// --- COMPONENTE PRINCIPAL ---
 export default function GeniusEvaluator() {
   const [activeTab, setActiveTab] = useState("evaluate");
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("Evaluando...");
   const [evaluations, setEvaluations] = useState<StudentEvaluation[]>([]);
   const [filePreviews, setFilePreviews] = useState<FilePreview[]>([]);
   const [studentGroups, setStudentGroups] = useState<StudentGroup[]>([]);
@@ -137,7 +153,7 @@ export default function GeniusEvaluator() {
     }
     return { id, file: processedFile, preview, type, originalSize, compressedSize: processedFile.size };
   };
-
+  
   const addFilesToPreviews = useCallback(async (files: File[]) => {
     if (!files.length) return;
     const newPreviews = await Promise.all(files.map(createFilePreview));
@@ -189,8 +205,8 @@ export default function GeniusEvaluator() {
       const results = await Promise.all(extractionPromises);
       setStudentGroups(prev =>
         prev.map(group => {
-          const foundResult = results.find(r => r.groupId === group.id);
-          return { ...group, studentName: foundResult ? foundResult.name : '', isExtractingName: false };
+          const foundResult = results.find(r => r.status === 'fulfilled' && r.value.groupId === group.id);
+          return { ...group, studentName: foundResult && foundResult.status === 'fulfilled' ? foundResult.value.name : '', isExtractingName: false };
         })
       );
     }
@@ -275,24 +291,50 @@ export default function GeniusEvaluator() {
     setEvaluationProgress(progressInitialState);
 
     const evaluationPromises = groupsToEvaluate.map((group, index) => {
-        const formData = new FormData();
-        group.files.forEach(fp => formData.append("files", fp.file));
-        formData.append("config", JSON.stringify({ ...config, ...currentEvaluation, studentName: group.studentName }));
-
-        setEvaluationProgress(prev => prev ? { ...prev, current: `Enviando ${index + 1}/${groupsToEvaluate.length}: ${group.studentName}...` } : null);
-        
-        return fetch("/api/evaluate", { method: "POST", body: formData })
-          .then(res => res.ok ? res.json() : res.json().then(err => Promise.reject(err)))
-          .then(result => {
-            if (result.success && result.evaluations.length > 0) {
-              const evaluation = result.evaluations[0];
-              evaluation.nombreEstudiante = group.studentName;
-              evaluation.filesPreviews = group.files;
-              return { status: 'fulfilled', value: evaluation };
+      const formData = new FormData();
+      group.files.forEach(fp => formData.append("files", fp.file));
+      const configWithDetails = {
+        ...config,
+        nombrePrueba: currentEvaluation.nombrePrueba,
+        curso: currentEvaluation.curso,
+        rubrica: currentEvaluation.rubrica,
+        preguntasObjetivas: currentEvaluation.preguntasObjetivas
+      };
+      formData.append("config", JSON.stringify(configWithDetails));
+      
+      return fetch("/api/evaluate", { method: "POST", body: formData })
+        .then(async (res) => {
+            const result = await res.json();
+            if (!res.ok) {
+                return Promise.reject(result.error || 'Error desconocido del servidor');
             }
-            return Promise.reject(result);
-          })
-          .catch(error => ({ status: 'rejected', reason: error.error || error.message || 'Error desconocido', groupName: group.studentName }));
+            if (result.success && result.evaluations.length > 0) {
+                const evaluation = result.evaluations[0];
+                evaluation.nombreEstudiante = group.studentName;
+                evaluation.filesPreviews = group.files;
+                return { status: 'fulfilled', value: evaluation, groupName: group.studentName };
+            }
+            return Promise.reject(result.error || "Fallo en la evaluación");
+        })
+        .catch(error => ({ status: 'rejected', reason: error.toString(), groupName: group.studentName }));
+    });
+    
+    let completedCount = 0;
+    const totalCount = evaluationPromises.length;
+    
+    evaluationPromises.forEach(promise => {
+        promise.then(result => {
+            const newCompleted = completedCount + 1;
+            completedCount = newCompleted;
+            const isSuccess = result.status === 'fulfilled';
+            setEvaluationProgress(prev => prev ? {
+                ...prev,
+                completed: newCompleted,
+                successes: prev.successes + (isSuccess ? 1 : 0),
+                failures: prev.failures + (!isSuccess ? 1 : 0),
+                current: `${isSuccess ? 'Éxito' : 'Fallo'}: ${result.groupName} (${newCompleted}/${totalCount})`
+            } : null);
+        });
     });
 
     const results = await Promise.allSettled(evaluationPromises);
@@ -301,16 +343,13 @@ export default function GeniusEvaluator() {
     const failedEvals: string[] = [];
 
     results.forEach((res, i) => {
-        const groupName = groupsToEvaluate[i].studentName;
         if (res.status === 'fulfilled' && res.value.status === 'fulfilled') {
             successfulEvals.push(res.value.value);
         } else {
             const reason = res.status === 'rejected' ? res.reason : (res.value as any).reason;
-            failedEvals.push(`${groupName}: ${reason}`);
+            failedEvals.push(`${groupsToEvaluate[i].studentName}: ${reason}`);
         }
     });
-    
-    setEvaluationProgress(prev => prev ? { ...prev, completed: prev.total, current: 'Finalizado' } : null);
 
     if (successfulEvals.length > 0) {
         saveEvaluations(successfulEvals);
@@ -328,22 +367,52 @@ export default function GeniusEvaluator() {
     setEvaluationProgress(null);
   };
   
+  const exportToCSV = () => {
+    if (evaluations.length === 0) { return; }
+    const headers = ["Estudiante", "Curso", "Evaluación", "Nota Final", "Puntaje", "Fecha"];
+    const rows = evaluations.map((evaluation) => [
+      evaluation.nombreEstudiante,
+      evaluation.curso,
+      evaluation.nombrePrueba,
+      typeof evaluation.notaFinal === 'number' ? evaluation.notaFinal.toFixed(1) : 'N/A',
+      `${evaluation.puntajeObtenido}/${evaluation.configuracion?.puntajeMaximo || 'N/A'}`,
+      evaluation.configuracion?.fecha || 'N/A',
+    ]);
+    const csvContent = [headers, ...rows].map((row) => row.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `evaluaciones_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const copyToClipboard = async () => {
+    if (evaluations.length === 0) { return; }
+    const headers = ["Estudiante", "Curso", "Evaluación", "Nota Final"];
+    const rows = evaluations.map((evaluation) => [
+      evaluation.nombreEstudiante,
+      evaluation.curso,
+      evaluation.nombrePrueba,
+      typeof evaluation.notaFinal === 'number' ? evaluation.notaFinal.toFixed(1) : 'N/A',
+    ]);
+    const tsvContent = [headers, ...rows].map((row) => row.join("\t")).join("\n");
+    try {
+      await navigator.clipboard.writeText(tsvContent);
+      alert("✅ Datos copiados al portapapeles");
+    } catch (error) {
+      alert("❌ Error al copiar los datos");
+    }
+  };
+  
   const clearHistory = () => {
     if (confirm("¿Borrar PERMANENTEMENTE todo el historial?")) {
       saveEvaluations([]);
     }
   };
 
-  const formatFileSize = (bytes?: number) => {
-    if (bytes === undefined) return "";
-    if (bytes === 0) return "0 Bytes";
-    const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-  };
-  
-  const FilePreviewCard = ({ filePreview, onRemove, isDraggable = true, inGroup = false }: { filePreview: FilePreview, onRemove?: () => void, isDraggable?: boolean, inGroup?: boolean }) => (
+  const FilePreviewCard = ({ filePreview, groupId, onRemove, isDraggable = true }: { filePreview: FilePreview, onRemove?: () => void, groupId?: string, isDraggable?: boolean }) => (
     <div className={`relative border rounded-lg p-2 bg-white ${isDraggable ? "cursor-move" : ""}`} draggable={isDraggable} onDragStart={(e) => isDraggable && handleDragStart(e, filePreview.id)}>
       <div className="flex flex-col items-center space-y-1 text-center">
         {filePreview.type === "image" && filePreview.preview ? <img src={filePreview.preview} alt={filePreview.file.name} className="w-20 h-20 object-cover rounded-md" /> : <FileIcon className="w-20 h-20 text-gray-300" />}
@@ -358,15 +427,15 @@ export default function GeniusEvaluator() {
   
   const StudentFeedbackTab = ({ evaluation }: { evaluation: StudentEvaluation }) => (
     <div className="space-y-6">
-        <div className="bg-blue-50 p-4 rounded-lg"><h3 className="font-semibold text-blue-900 mb-2">📋 Resumen de Evaluación</h3><p className="text-blue-800">{evaluation.feedback_estudiante?.resumen || "Sin resumen disponible."}</p></div>
+        <div className="bg-blue-50 p-4 rounded-lg"><h3 className="font-semibold text-blue-900 mb-2">📋 Resumen de Evaluación</h3><p className="text-blue-800">{evaluation.feedback_estudiante?.resumen || "N/A"}</p></div>
         <div className="text-center"><div className="inline-flex items-center gap-4 bg-gray-100 px-6 py-4 rounded-lg"><span className="text-lg font-medium">Nota Final:</span><Badge variant="secondary" className="text-2xl px-4 py-2">{typeof evaluation.notaFinal === 'number' ? evaluation.notaFinal.toFixed(1) : "N/A"}</Badge></div></div>
         <div>
             <h3 className="font-semibold text-green-700 mb-3 flex items-center gap-2"><CheckCircle className="w-5 h-5" />Fortalezas</h3>
-            <div className="space-y-3">{evaluation.feedback_estudiante?.fortalezas?.map((fortaleza: any, index: number) => <div key={index} className="bg-green-50 p-4 rounded-lg border-l-4 border-green-400"><p className="font-medium text-green-800">{fortaleza.descripcion}</p><p className="text-sm text-green-700 mt-2 italic">"{fortaleza.cita}"</p></div>) || <p className="text-gray-500 italic">No se identificaron fortalezas específicas.</p>}</div>
+            <div className="space-y-3">{evaluation.feedback_estudiante?.fortalezas?.map((fortaleza: any, index: number) => <div key={index} className="bg-green-50 p-4 rounded-lg border-l-4 border-green-400"><p className="font-medium text-green-800">{fortaleza.descripcion}</p><p className="text-sm text-green-700 mt-2 italic">"{fortaleza.cita}"</p></div>) || <p>N/A</p>}</div>
         </div>
         <div>
             <h3 className="font-semibold text-orange-700 mb-3 flex items-center gap-2"><AlertCircle className="w-5 h-5" />Áreas para Mejorar</h3>
-            <div className="space-y-3">{evaluation.feedback_estudiante?.oportunidades?.map((oportunidad: any, index: number) => <div key={index} className="bg-orange-50 p-4 rounded-lg border-l-4 border-orange-400"><p className="font-medium text-orange-800">{oportunidad.descripcion}</p><p className="text-sm text-orange-700 mt-2 italic">"{oportunidad.cita}"</p>{oportunidad.sugerencia_tecnica && <div className="mt-3 p-2 bg-blue-100 rounded text-sm"><strong className="text-blue-800">💡 Consejo:</strong><span className="text-blue-700 ml-1">{oportunidad.sugerencia_tecnica}</span></div>}</div>) || <p className="text-gray-500 italic">No se identificaron áreas específicas de mejora.</p>}</div>
+            <div className="space-y-3">{evaluation.feedback_estudiante?.oportunidades?.map((oportunidad: any, index: number) => <div key={index} className="bg-orange-50 p-4 rounded-lg border-l-4 border-orange-400"><p className="font-medium text-orange-800">{oportunidad.descripcion}</p><p className="text-sm text-orange-700 mt-2 italic">"{oportunidad.cita}"</p>{oportunidad.sugerencia_tecnica && <div className="mt-3 p-2 bg-blue-100 rounded text-sm"><strong className="text-blue-800">💡 Consejo:</strong><span className="text-blue-700 ml-1">{oportunidad.sugerencia_tecnica}</span></div>}</div>) || <p>N/A</p>}</div>
         </div>
         {evaluation.feedback_estudiante?.siguiente_paso_sugerido && <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-400"><h3 className="font-semibold text-blue-800 mb-2 flex items-center gap-2"><Brain className="w-5 h-5" />Próximo Desafío</h3><p className="text-blue-700">{evaluation.feedback_estudiante.siguiente_paso_sugerido}</p></div>}
     </div>
@@ -376,11 +445,11 @@ export default function GeniusEvaluator() {
     <div className="space-y-6">
         <div>
             <h3 className="font-semibold text-purple-700 mb-4 flex items-center gap-2"><Brain className="w-5 h-5" />Análisis de Habilidades</h3>
-            <div className="grid gap-4">{evaluation.analisis_habilidades && Object.keys(evaluation.analisis_habilidades).length > 0 ? Object.entries(evaluation.analisis_habilidades).map(([habilidad, datos]: [string, any]) => <div key={habilidad} className="border rounded-lg p-4"><div className="flex justify-between items-start mb-2"><h4 className="font-medium">{habilidad}</h4><Badge variant={datos.nivel === "Destacado" ? "default" : datos.nivel === "Competente" ? "secondary" : "outline"}>{datos.nivel}</Badge></div><p className="text-sm text-gray-600 mb-2"><strong>Evidencia:</strong> {datos.evidencia_especifica}</p><p className="text-sm text-gray-500"><strong>Justificación:</strong> {datos.justificacion_pedagogica}</p></div>) : <p className="text-gray-500 italic">No se registraron habilidades específicas.</p>}</div>
+            <div className="grid gap-4">{evaluation.analisis_habilidades && Object.keys(evaluation.analisis_habilidades).length > 0 ? Object.entries(evaluation.analisis_habilidades).map(([habilidad, datos]: [string, any]) => <div key={habilidad} className="border rounded-lg p-4"><div className="flex justify-between items-start mb-2"><h4 className="font-medium">{habilidad}</h4><Badge variant={datos.nivel === "Destacado" ? "default" : datos.nivel === "Competente" ? "secondary" : "outline"}>{datos.nivel}</Badge></div><p className="text-sm text-gray-600 mb-2"><strong>Evidencia:</strong> {datos.evidencia_especifica}</p><p className="text-sm text-gray-500"><strong>Justificación:</strong> {datos.justificacion_pedagogica}</p></div>) : <p>N/A</p>}</div>
         </div>
         <div>
             <h3 className="font-semibold text-blue-700 mb-4 flex items-center gap-2"><BarChart3 className="w-5 h-5" />Evaluación por Rúbrica</h3>
-            <div className="space-y-3">{evaluation.analisis_detallado?.map((criterio: any, index: number) => <div key={index} className="border rounded-lg p-4 bg-gray-50"><div className="flex justify-between items-start mb-3"><h4 className="font-medium text-gray-900">{criterio.criterio}</h4><Badge variant="outline" className="font-mono">{criterio.puntaje}</Badge></div><div className="space-y-2"><div><span className="text-sm font-medium text-green-700">Evidencia:</span><p className="text-sm text-gray-600 mt-1">{criterio.evidencia}</p></div><div><span className="text-sm font-medium text-blue-700">Justificación:</span><p className="text-sm text-gray-600 mt-1">{criterio.justificacion}</p></div></div></div>) || <p className="text-gray-500 italic">No se registró análisis detallado por criterios.</p>}</div>
+            <div className="space-y-3">{evaluation.analisis_detallado?.map((criterio: any, index: number) => <div key={index} className="border rounded-lg p-4 bg-gray-50"><div className="flex justify-between items-start mb-3"><h4 className="font-medium text-gray-900">{criterio.criterio}</h4><Badge variant="outline" className="font-mono">{criterio.puntaje}</Badge></div><div className="space-y-2"><div><span className="text-sm font-medium text-green-700">Evidencia:</span><p className="text-sm text-gray-600 mt-1">{criterio.evidencia}</p></div><div><span className="text-sm font-medium text-blue-700">Justificación:</span><p className="text-sm text-gray-600 mt-1">{criterio.justificacion}</p></div></div></div>) || <p>N/A</p>}</div>
         </div>
         {evaluation.analisis_profesor && <div className="bg-gray-50 p-4 rounded-lg"><h3 className="font-semibold text-gray-700 mb-3">📝 Notas del Profesor</h3><div className="space-y-3 text-sm"><div><strong>Desempeño General:</strong><p className="text-gray-600 mt-1">{evaluation.analisis_profesor.desempeno_general}</p></div><div><strong>Patrones Observados:</strong><p className="text-gray-600 mt-1">{evaluation.analisis_profesor.patrones_observados}</p></div><div><strong>Sugerencia Pedagógica:</strong><p className="text-gray-600 mt-1">{evaluation.analisis_profesor.sugerencia_pedagogica}</p></div></div></div>}
     </div>
@@ -455,29 +524,33 @@ export default function GeniusEvaluator() {
                 </div>
                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"><div className="space-y-0.5"><Label htmlFor="optimize-images">Optimizar Imágenes</Label><p className="text-xs text-gray-500">Acelera el proceso reduciendo el tamaño.</p></div><Switch id="optimize-images" checked={optimizeImages} onCheckedChange={setOptimizeImages} /></div>
                 
-                {filePreviews.length > 0 && (
-                  <div className="space-y-4 pt-4 border-t">
-                    <div onDragOver={handleDragOver} onDrop={e => handleDrop(e, null)}>
-                      <Label className="text-sm font-medium mb-2 block">Archivos Cargados ({filePreviews.length})</Label>
-                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 p-2 border rounded-lg min-h-[120px] bg-white">
-                        {filePreviews.map(fp => <FilePreviewCard key={fp.id} filePreview={fp} onRemove={() => removeFilePreview(fp.id)} />)}
-                      </div>
+                <div 
+                  className="border-t pt-4"
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, 'preview-area')}
+                >
+                    <Label className="text-sm font-medium mb-2 block">Archivos por Organizar ({filePreviews.length})</Label>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 p-2 border rounded-lg min-h-[120px] bg-white/50">
+                      {filePreviews.map(fp => <FilePreviewCard key={fp.id} filePreview={fp} onRemove={() => removeFilePreview(fp.id)} />)}
                     </div>
-                    {!groupingMode && (
-                      <Alert><AlertCircle className="h-4 w-4" /><AlertDescription>
-                          <strong>Los archivos corresponden a:</strong>
-                          <div className="flex gap-4 mt-2">
-                              <Button onClick={() => handleGroupingModeSelect("single")} variant="outline" size="sm"><User className="w-4 h-4 mr-2" />Un Solo Estudiante</Button>
-                              <Button onClick={() => handleGroupingModeSelect("multiple")} variant="outline" size="sm"><Users className="w-4 h-4 mr-2" />Varios Estudiantes</Button>
-                          </div>
-                      </AlertDescription></Alert>
-                    )}
-                  </div>
+                </div>
+
+                {filePreviews.length > 0 && !groupingMode && (
+                  <Alert><AlertCircle className="h-4 w-4" /><AlertDescription>
+                      <strong>Los archivos corresponden a:</strong>
+                      <div className="flex gap-4 mt-2">
+                          <Button onClick={() => handleGroupingModeSelect("single")} variant="outline" size="sm"><User className="w-4 h-4 mr-2" />Un Solo Estudiante</Button>
+                          <Button onClick={() => handleGroupingModeSelect("multiple")} variant="outline" size="sm"><Users className="w-4 h-4 mr-2" />Varios Estudiantes</Button>
+                      </div>
+                  </AlertDescription></Alert>
                 )}
 
                 {studentGroups.length > 0 && (
                 <div className="space-y-4 pt-4 border-t">
-                    <CardHeader className="p-0 mb-2"><CardTitle className="flex justify-between items-center"><span>Organización de Estudiantes</span>{groupingMode === "multiple" && (<Button onClick={addNewStudentGroup} variant="outline" size="sm"><Plus className="w-4 h-4 mr-2" />Añadir Grupo</Button>)}</CardTitle></CardHeader>
+                    <div className="flex justify-between items-center">
+                        <Label className="text-sm font-medium">Grupos de Estudiantes ({studentGroups.length})</Label>
+                        {groupingMode === "multiple" && (<Button onClick={addNewStudentGroup} variant="outline" size="sm"><Plus className="w-4 h-4 mr-2" />Añadir Grupo</Button>)}
+                    </div>
                     {studentGroups.map(group => (
                         <div key={group.id} className="border rounded-lg p-4 bg-gray-50 min-h-[140px]" onDragOver={handleDragOver} onDrop={e => handleDrop(e, group.id)}>
                         <div className="flex items-center gap-4 mb-2">
@@ -505,7 +578,7 @@ export default function GeniusEvaluator() {
               </CardContent>
             </Card>
 
-            <Button onClick={evaluateDocuments} disabled={isLoading || (filePreviews.length === 0 && studentGroups.length === 0) || !currentEvaluation.rubrica.trim()} className="w-full text-lg py-6" >
+            <Button onClick={evaluateDocuments} disabled={isLoading || studentGroups.length === 0 || !currentEvaluation.rubrica.trim()} className="w-full text-lg py-6" >
               {isLoading ? (<><Clock className="w-5 h-5 mr-2 animate-spin" />{loadingMessage}</>) : (<><Brain className="w-5 h-5 mr-2" /> Iniciar Evaluación</>)}
             </Button>
           </TabsContent>
