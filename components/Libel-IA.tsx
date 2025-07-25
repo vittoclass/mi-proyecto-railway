@@ -34,12 +34,6 @@ const formSchema = z.object({
 })
 
 export default function LibelIA() {
-  // --- LÍNEAS DE DIAGNÓSTICO AÑADIDAS AQUÍ ---
-  console.log("--- VERIFICACIÓN DE VARIABLES EN EL NAVEGADOR ---");
-  console.log("URL de Supabase que ve el navegador:", process.env.NEXT_PUBLIC_SUPABASE_URL);
-  console.log("KEY de Supabase que ve el navegador:", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-  // ------------------------------------
-
   const [fileToEvaluate, setFileToEvaluate] = useState<File | null>(null)
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string>("")
   const [isProcessing, setIsProcessing] = useState(false)
