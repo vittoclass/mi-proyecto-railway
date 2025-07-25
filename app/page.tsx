@@ -1,6 +1,6 @@
-// En: app/page.tsx (Versión Corregida)
+// En: app/page.tsx
 
-import LibelIA from "@/components/Libel-IA"; // <-- Cambio aquí para que coincida con tu nuevo nombre
+import LibelIA from "@/components/Libel-IA";
 
 export default function HomePage() {
   return (
