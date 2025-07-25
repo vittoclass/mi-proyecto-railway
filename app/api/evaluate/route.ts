@@ -1,16 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
 
-// Función para llamar a la API de OpenAI (reemplaza la de Mistral)
+// --- Función para llamar a la API de OpenAI (sin cambios) ---
 async function callOpenAIVisionAPI(payload: any) {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) throw new Error("OPENAI_API_KEY no está configurada.")
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`
-    },
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
     body: JSON.stringify(payload),
   })
 
@@ -21,62 +18,65 @@ async function callOpenAIVisionAPI(payload: any) {
   return response.json()
 }
 
-
-// --- FUNCIÓN PRINCIPAL POST (AHORA CON ANÁLISIS DE IMAGEN) ---
+// --- FUNCIÓN PRINCIPAL POST (ACTUALIZADA) ---
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
-    const file = formData.get("file") as File
+    const files = formData.getAll("files") as File[] // Ahora recibimos múltiples archivos
     const rubrica = formData.get("rubrica") as string
+    const flexibilidad = formData.get("flexibilidad") as string // Nuevo parámetro
 
-    if (!file || !rubrica) {
-      return NextResponse.json({ success: false, error: "Faltan datos (archivo o rúbrica)." }, { status: 400 })
+    if (!files.length || !rubrica) {
+      return NextResponse.json({ success: false, error: "Faltan datos (archivos o rúbrica)." }, { status: 400 })
     }
 
-    // 1. Convertir la imagen a formato base64 para enviarla a la API
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const base64Image = buffer.toString('base64');
-    const mimeType = file.type;
-    const dataUrl = `data:${mimeType};base64,${base64Image}`;
+    // 1. Convertir TODAS las imágenes a formato base64
+    const image_urls = await Promise.all(
+        files.map(async (file) => {
+            const buffer = Buffer.from(await file.arrayBuffer());
+            const base64Image = buffer.toString('base64');
+            const mimeType = file.type;
+            return { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Image}` } };
+        })
+    );
 
-    // 2. Crear el prompt multimodal (Texto + Imagen)
+    // 2. Crear el prompt multimodal mejorado
     const prompt = `
-      Eres un profesor experto en arte y comunicación visual. Tu tarea es evaluar la siguiente imagen basándote estricta y únicamente en la rúbrica proporcionada.
+      Eres un profesor experto y justo, evaluando un trabajo compuesto por ${files.length} imagen(es).
       
       - RÚBRICA DE EVALUACIÓN: 
       """
       ${rubrica}
       """
       
+      - NIVEL DE FLEXIBILIDAD:
+      Debes evaluar con un nivel de flexibilidad de ${flexibilidad} en una escala de 1 a 5, donde 1 es extremadamente estricto y 5 es muy benevolente. Aplica esta flexibilidad al determinar el puntaje final.
+
       - ANÁLISIS REQUERIDO:
-      Analiza la imagen adjunta. En tu retroalimentación, sé específico, constructivo y menciona elementos visuales concretos de la imagen para justificar cada punto.
+      Analiza todas las imágenes adjuntas como un conjunto. En tu retroalimentación, sé específico y constructivo, mencionando elementos visuales de las imágenes para justificar tu evaluación.
       
       - FORMATO DE RESPUESTA OBLIGATORIO:
-      Responde únicamente con un objeto JSON válido, sin texto adicional antes o después. El JSON debe tener esta estructura exacta:
+      Responde únicamente con un objeto JSON válido, con esta estructura exacta:
       {
-        "retroalimentacion": "Un feedback detallado sobre la obra visual, justificando cada criterio de la rúbrica con ejemplos de la imagen.",
-        "puntaje": "El puntaje obtenido en formato 'X/Y' según la rúbrica."
+        "retroalimentacion": "Un feedback detallado y constructivo sobre la obra visual.",
+        "puntaje": "El puntaje obtenido en formato 'X/Y' según la rúbrica y la flexibilidad solicitada.",
+        "nota": "La calificación final calculada en una escala de 1.0 a 7.0, basada en un 60% de exigencia."
       }
     `
-    // 3. Llamar a la API de OpenAI con el modelo de visión
+    // 3. Llamar a la API de OpenAI con el modelo de visión y todas las imágenes
     const data = await callOpenAIVisionAPI({
-      model: "gpt-4o", // El modelo multimodal de OpenAI
+      model: "gpt-4o",
       messages: [
         {
           role: "user",
           content: [
             { type: "text", text: prompt },
-            {
-              type: "image_url",
-              image_url: {
-                "url": dataUrl,
-              },
-            },
+            ...image_urls // Añadimos el array de imágenes
           ],
         },
       ],
       response_format: { type: "json_object" },
-      max_tokens: 1000,
+      max_tokens: 1500,
     });
     
     const content = data?.choices?.[0]?.message?.content;
