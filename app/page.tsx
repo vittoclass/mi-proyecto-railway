@@ -22,10 +22,9 @@ const supabase = createClient(
 
 const formSchema = z.object({
   rubrica: z.string().min(10, "La rúbrica es necesaria para evaluar."),
-  // Los demás campos se manejarán dentro de cada grupo
 });
 
-// --- NUEVAS INTERFACES PARA EL FLUJO DE TRABAJO ---
+// --- INTERFACES PARA EL FLUJO DE TRABAJO ---
 interface FilePreview {
   id: string;
   file: File;
@@ -36,8 +35,11 @@ interface StudentGroup {
   id: string;
   studentName: string;
   files: FilePreview[];
+  // Nuevos estados para el resultado de la evaluación
   retroalimentacion?: string;
   puntaje?: string;
+  isEvaluated: boolean;
+  isEvaluating: boolean;
 }
 
 type WorkflowStep = "upload" | "grouping" | "evaluate";
@@ -48,26 +50,22 @@ export default function Page() {
     defaultValues: { rubrica: "" },
   });
 
-  // --- NUEVOS ESTADOS PARA GESTIONAR EL FLUJO ---
+  // --- ESTADOS PARA GESTIONAR EL FLUJO ---
   const [workflowStep, setWorkflowStep] = useState<WorkflowStep>("upload");
   const [filePreviews, setFilePreviews] = useState<FilePreview[]>([]);
   const [studentGroups, setStudentGroups] = useState<StudentGroup[]>([]);
-
-  // Estados existentes
-  const [isProcessing, setIsProcessing] = useState(false); // Un único estado de carga
+  const [isProcessing, setIsProcessing] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
 
-  // --- LÓGICA DE MANEJO DE ARCHIVOS (ACTUALIZADA) ---
-
-  // Procesa los archivos subidos (múltiples o uno solo)
+  // --- LÓGICA DE MANEJO DE ARCHIVOS ---
   const handleFiles = useCallback((files: FileList | File[]) => {
     const newFiles = Array.from(files).map(file => ({
-      id: `${file.name}-${file.lastModified}`,
+      id: `${file.name}-${file.lastModified}-${Math.random()}`,
       file,
       previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : null
     }));
     setFilePreviews(prev => [...prev, ...newFiles]);
-    setWorkflowStep("grouping"); // Avanza al siguiente paso
+    setWorkflowStep("grouping");
   }, []);
 
   const handleCapture = (file: File) => {
@@ -83,41 +81,32 @@ export default function Page() {
     setIsProcessing(true);
     let groups: StudentGroup[] = [];
 
-    if (mode === "multiple") { // Todos los archivos para un solo estudiante
+    if (mode === "multiple") {
       const group = {
-        id: `group-${Date.now()}`,
-        studentName: "Extrayendo nombre...",
-        files: filePreviews
+        id: `group-${Date.now()}`, studentName: "Extrayendo nombre...", files: filePreviews, isEvaluated: false, isEvaluating: false
       };
       groups.push(group);
-      
       const name = await extractNameForGroup(group);
       group.studentName = name || "Estudiante 1";
-
-    } else { // Un archivo por estudiante
-      // Creamos un grupo para cada archivo
+    } else {
       groups = filePreviews.map((fp, index) => ({
-        id: `group-${Date.now()}-${index}`,
-        studentName: "Extrayendo nombre...",
-        files: [fp]
+        id: `group-${Date.now()}-${index}`, studentName: "Extrayendo nombre...", files: [fp], isEvaluated: false, isEvaluating: false
       }));
-      // Extraemos los nombres en paralelo
       await Promise.all(groups.map(async (group, index) => {
           const name = await extractNameForGroup(group);
           group.studentName = name || `Estudiante ${index + 1}`;
       }));
     }
-
     setStudentGroups(groups);
-    setFilePreviews([]); // Limpiamos los archivos temporales
-    setWorkflowStep("evaluate"); // Avanzamos al paso final
+    setFilePreviews([]);
+    setWorkflowStep("evaluate");
     setIsProcessing(false);
   }
 
-  // Función helper para llamar a la API de extracción de nombre
   const extractNameForGroup = async (group: StudentGroup): Promise<string | null> => {
     const formData = new FormData();
-    group.files.forEach(fp => formData.append("files", fp.file));
+    // Para la extracción, usualmente el primer archivo es suficiente
+    formData.append("files", group.files[0].file);
     try {
         const response = await fetch('/api/extract-name', { method: 'POST', body: formData });
         const result = await response.json();
@@ -127,40 +116,54 @@ export default function Page() {
     }
   }
   
-  // --- LÓGICA DE EVALUACIÓN Y GUARDADO ---
+  // --- LÓGICA DE EVALUACIÓN MÚLTIPLE Y GUARDADO ---
   const onEvaluate = async (values: z.infer<typeof formSchema>) => {
     setIsProcessing(true);
-    
-    // TODO: Implementar la evaluación para cada grupo. Por ahora, evaluamos solo el primero.
-    const firstGroup = studentGroups[0];
-    if (!firstGroup) {
-      alert("No hay grupos para evaluar.");
-      setIsProcessing(false);
-      return;
-    }
 
-    const formData = new FormData();
-    formData.append("file", firstGroup.files[0].file); // Enviamos solo el primer archivo por simplicidad
-    formData.append("rubrica", values.rubrica);
+    for (const group of studentGroups) {
+      // Marcamos el grupo actual como "evaluando"
+      setStudentGroups(prev => prev.map(g => g.id === group.id ? { ...g, isEvaluating: true } : g));
+      
+      const formData = new FormData();
+      // Para la evaluación multimodal, es mejor enviar un solo archivo representativo.
+      // Si quisieras enviar todos, la API necesitaría ser ajustada.
+      formData.append("file", group.files[0].file); 
+      formData.append("rubrica", values.rubrica);
 
-    try {
-      const response = await fetch('/api/evaluate', { method: 'POST', body: formData });
-      const result = await response.json();
+      try {
+        const response = await fetch('/api/evaluate', { method: 'POST', body: formData });
+        const result = await response.json();
 
-      if (result.success) {
-        // Actualizamos el grupo con la información de la IA
-        setStudentGroups(prev => prev.map(g => g.id === firstGroup.id ? {...g, retroalimentacion: result.retroalimentacion, puntaje: result.puntaje } : g));
-        alert("Evaluación completada para el primer estudiante.");
-        // TODO: Implementar el botón para guardar en Supabase.
-      } else {
-        throw new Error(result.error);
+        if (result.success) {
+          // Actualizamos el grupo con el resultado y lo marcamos como evaluado
+          setStudentGroups(prev => prev.map(g => g.id === group.id ? {
+            ...g,
+            isEvaluating: false,
+            isEvaluated: true,
+            retroalimentacion: result.retroalimentacion,
+            puntaje: result.puntaje
+          } : g));
+        } else {
+          throw new Error(result.error);
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+        // Si hay un error, lo marcamos en el grupo y continuamos
+        setStudentGroups(prev => prev.map(g => g.id === group.id ? {
+          ...g,
+          isEvaluating: false,
+          isEvaluated: true, // Marcamos como evaluado para no reintentar
+          retroalimentacion: `Error en la evaluación: ${errorMessage}`,
+          puntaje: "N/A"
+        } : g));
       }
-    } catch (error) {
-      alert(`Error durante la evaluación: ${error instanceof Error ? error.message : "Error desconocido"}`);
-    } finally {
-      setIsProcessing(false);
     }
+    setIsProcessing(false);
+    alert("Proceso de evaluación completado para todos los estudiantes.");
   }
+  
+  // TODO: Crear una función onSaveAll que tome los studentGroups con datos
+  // y los guarde en lote en Supabase.
 
   return (
     <>
@@ -201,7 +204,7 @@ export default function Page() {
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                             {filePreviews.map(fp => (
                                 <div key={fp.id} className="relative group">
-                                    {fp.previewUrl ? <img src={fp.previewUrl} className="aspect-square w-full rounded-md object-cover"/> : <div className="aspect-square w-full rounded-md bg-gray-100 flex items-center justify-center"><FileIcon/></div>}
+                                    {fp.previewUrl ? <img src={fp.previewUrl} alt={fp.file.name} className="aspect-square w-full rounded-md object-cover"/> : <div className="aspect-square w-full rounded-md bg-gray-100 flex items-center justify-center"><FileIcon/></div>}
                                     <p className="text-xs truncate mt-1">{fp.file.name}</p>
                                     <Button size="sm" variant="destructive" className="absolute top-1 right-1 h-6 w-6 p-0 opacity-0 group-hover:opacity-100" onClick={() => removeFilePreview(fp.id)}><X className="h-4 w-4"/></Button>
                                 </div>
@@ -232,25 +235,25 @@ export default function Page() {
                         <CardHeader><CardTitle>Paso 3: Rúbrica y Evaluación</CardTitle></CardHeader>
                         <CardContent>
                              <FormField control={form.control} name="rubrica" render={({ field }) => (
-                                <FormItem><FormLabel>Rúbrica o Instrucciones Generales</FormLabel><FormControl><Textarea placeholder="Pega aquí la rúbrica que se aplicará a todos los estudiantes..." {...field} className="min-h-[150px]" /></FormControl><FormMessage /></FormItem>
+                                <FormItem><FormLabel>Rúbrica o Instrucciones Generales para Todos</FormLabel><FormControl><Textarea placeholder="Pega aquí la rúbrica que se aplicará a todos los estudiantes..." {...field} className="min-h-[150px]" /></FormControl><FormMessage /></FormItem>
                             )} />
                         </CardContent>
                     </Card>
 
                     <div className="space-y-4">
-                        {studentGroups.map(group => (
-                            <Card key={group.id}>
+                        <h3 className="text-xl font-semibold">Estudiantes a Evaluar:</h3>
+                        {studentGroups.map((group, index) => (
+                            <Card key={group.id} className={`${group.isEvaluating ? 'animate-pulse' : ''} ${group.isEvaluated ? 'bg-green-50' : ''}`}>
                                 <CardHeader>
                                     <Input value={group.studentName} onChange={(e) => setStudentGroups(prev => prev.map(g => g.id === group.id ? {...g, studentName: e.target.value} : g))} className="text-lg font-bold"/>
                                 </CardHeader>
                                 <CardContent>
-                                    <p className="text-sm mb-2 font-semibold">Archivos ({group.files.length}):</p>
-                                    {/* Aquí puedes mostrar los archivos del grupo */}
-                                    {group.retroalimentacion && (
-                                        <div className="mt-4 border-t pt-4">
+                                    {group.isEvaluating && <p className="text-blue-600 font-semibold">Evaluando...</p>}
+                                    {group.isEvaluated && (
+                                        <div className="mt-2 border-t pt-4">
                                             <h4 className="font-semibold">Resultado de la IA:</h4>
-                                            <p><strong>Puntaje:</strong> {group.puntaje}</p>
-                                            <p className="text-sm bg-gray-50 p-2 rounded-md mt-1">{group.retroalimentacion}</p>
+                                            <p className="font-bold">Puntaje: {group.puntaje}</p>
+                                            <p className="text-sm bg-gray-100 p-2 rounded-md mt-1">{group.retroalimentacion}</p>
                                         </div>
                                     )}
                                 </CardContent>
@@ -258,12 +261,14 @@ export default function Page() {
                         ))}
                     </div>
                     
-                    <div className="text-center">
+                    <div className="flex flex-col md:flex-row gap-4 justify-center pt-4">
                         <Button type="submit" disabled={isProcessing} className="w-full md:w-auto text-base py-6">
                             {isProcessing ? <Loader2 className="animate-spin mr-2" /> : <Sparkles className="mr-2 h-5 w-5" />}
-                            Evaluar con IA (BETA: solo primer grupo)
+                            {isProcessing ? 'Procesando Estudiantes...' : `Evaluar ${studentGroups.length} Estudiante(s)`}
                         </Button>
-                        {/* TODO: Implementar botón de guardado final */}
+                        <Button type="button" variant="secondary" disabled={isProcessing} className="w-full md:w-auto text-base py-6">
+                           <Save className="mr-2 h-5 w-5"/> Guardar Resultados
+                        </Button>
                     </div>
                 </form>
             </Form>
