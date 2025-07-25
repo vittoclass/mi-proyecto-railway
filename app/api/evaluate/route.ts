@@ -1,40 +1,28 @@
 import { type NextRequest, NextResponse } from "next/server"
 
-// --- COPIA Y PEGA AQUÍ LAS MISMAS FUNCIONES HELPER ---
-async function callMistralAPI(payload: any) {
-  const apiKey = process.env.MISTRAL_API_KEY
-  if (!apiKey) throw new Error("MISTRAL_API_KEY no está configurada.")
-  const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
+// Función para llamar a la API de OpenAI (reemplaza la de Mistral)
+async function callOpenAIVisionAPI(payload: any) {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) throw new Error("OPENAI_API_KEY no está configurada.")
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`
+    },
     body: JSON.stringify(payload),
   })
-  if (!response.ok) { // Manejo de errores mejorado
+
+  if (!response.ok) {
     const errorBody = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(`Mistral API error: ${errorBody.message || response.statusText}`)
+    throw new Error(`OpenAI API error: ${errorBody.error?.message || response.statusText}`)
   }
   return response.json()
 }
 
-async function ocrAzure(file: Buffer) {
-  const azureKey = process.env.AZURE_VISION_KEY
-  const azureEndpoint = process.env.AZURE_VISION_ENDPOINT
-  if (!azureKey || !azureEndpoint) throw new Error("AZURE_VISION_KEY o AZURE_VISION_ENDPOINT no están configuradas.")
-  const response = await fetch(`${azureEndpoint}vision/v3.2/ocr?language=es`, {
-    method: "POST",
-    headers: { "Ocp-Apim-Subscription-Key": azureKey, "Content-Type": "application/octet-stream" },
-    body: file,
-  })
-  if (!response.ok) throw new Error(`Azure OCR error: ${response.statusText}`)
-  const data = await response.json()
-  return (
-    data.regions
-      ?.flatMap((reg: any) => reg.lines.map((l: any) => l.words.map((w: any) => w.text).join(" ")))
-      .join("\n") || ""
-  )
-}
-// --- FIN DE LAS FUNCIONES COPIADAS ---
 
+// --- FUNCIÓN PRINCIPAL POST (AHORA CON ANÁLISIS DE IMAGEN) ---
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
@@ -45,54 +33,70 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Faltan datos (archivo o rúbrica)." }, { status: 400 })
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer())
-    const textoCrudoOCR = await ocrAzure(buffer)
+    // 1. Convertir la imagen a formato base64 para enviarla a la API
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const base64Image = buffer.toString('base64');
+    const mimeType = file.type;
+    const dataUrl = `data:${mimeType};base64,${base64Image}`;
 
-    if (!textoCrudoOCR.trim()) {
-      return NextResponse.json({ success: false, error: "OCR no pudo extraer texto del documento." }, { status: 400 })
-    }
-    
-    // El prompt sigue siendo el mismo
-    const prompt = `...` // (Tu prompt de evaluación aquí)
-
-    // --- LÓGICA DE REINTENTO Y MANEJO DE ERRORES MEJORADA ---
-    let attempts = 0;
-    while (attempts < 2) {
-      try {
-        const data = await callMistralAPI({
-          model: "mistral-large-latest",
-          messages: [{ role: "user", content: prompt }],
-          response_format: { type: "json_object" },
-        })
-
-        // **AQUÍ ESTÁ LA CORRECCIÓN CLAVE**
-        // Navegamos de forma segura por la respuesta de la IA
-        const content = data?.choices?.[0]?.message?.content;
-
-        if (!content) {
-          throw new Error("La IA devolvió una respuesta vacía o con formato incorrecto.");
-        }
-
-        const iaResult = JSON.parse(content);
-
-        if (iaResult.retroalimentacion && iaResult.puntaje) {
-          return NextResponse.json({ success: true, ...iaResult });
-        } else {
-          throw new Error("El JSON de la IA no contiene las propiedades esperadas.");
-        }
-      } catch (e) {
-        attempts++;
-        if (attempts >= 2) throw e; // Si fallamos en el último intento, lanzamos el error
-        await new Promise(resolve => setTimeout(resolve, 500)); // Pequeña pausa antes de reintentar
+    // 2. Crear el prompt multimodal (Texto + Imagen)
+    const prompt = `
+      Eres un profesor experto en arte y comunicación visual. Tu tarea es evaluar la siguiente imagen basándote estricta y únicamente en la rúbrica proporcionada.
+      
+      - RÚBRICA DE EVALUACIÓN: 
+      """
+      ${rubrica}
+      """
+      
+      - ANÁLISIS REQUERIDO:
+      Analiza la imagen adjunta. En tu retroalimentación, sé específico, constructivo y menciona elementos visuales concretos de la imagen para justificar cada punto.
+      
+      - FORMATO DE RESPUESTA OBLIGATORIO:
+      Responde únicamente con un objeto JSON válido, sin texto adicional antes o después. El JSON debe tener esta estructura exacta:
+      {
+        "retroalimentacion": "Un feedback detallado sobre la obra visual, justificando cada criterio de la rúbrica con ejemplos de la imagen.",
+        "puntaje": "El puntaje obtenido en formato 'X/Y' según la rúbrica."
       }
+    `
+    // 3. Llamar a la API de OpenAI con el modelo de visión
+    const data = await callOpenAIVisionAPI({
+      model: "gpt-4o", // El modelo multimodal de OpenAI
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            {
+              type: "image_url",
+              image_url: {
+                "url": dataUrl,
+              },
+            },
+          ],
+        },
+      ],
+      response_format: { type: "json_object" },
+      max_tokens: 1000,
+    });
+    
+    const content = data?.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error("La IA devolvió una respuesta vacía o con formato incorrecto.");
     }
+
+    const iaResult = JSON.parse(content);
+
+    return NextResponse.json({
+      success: true,
+      ...iaResult,
+    })
 
   } catch (error) {
-    console.error("Evaluation error:", error)
-    const errorMessage = error instanceof Error ? error.message : "Error desconocido durante la evaluación"
+    console.error("Multimodal evaluation error:", error)
+    const errorMessage = error instanceof Error ? error.message : "Error desconocido"
     return NextResponse.json({
       success: false,
-      error: `La IA falló al procesar la respuesta. Detalle: ${errorMessage}`,
+      error: `La IA de visión falló. Detalle: ${errorMessage}`,
     }, { status: 500 })
   }
 }
