@@ -1,5 +1,3 @@
-// En: components/Libel-IA.tsx
-
 'use client'
 
 import { useState, useRef } from "react"
@@ -26,11 +24,6 @@ const SmartCameraModal = dynamic(
   }
 )
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
 const formSchema = z.object({
   nombre: z.string().min(1, "El nombre es requerido."),
   curso: z.string().min(1, "El curso es requerido."),
@@ -41,6 +34,12 @@ const formSchema = z.object({
 })
 
 export default function LibelIA() {
+  // --- LÍNEAS DE DIAGNÓSTICO AÑADIDAS AQUÍ ---
+  console.log("--- VERIFICACIÓN DE VARIABLES EN EL NAVEGADOR ---");
+  console.log("URL de Supabase que ve el navegador:", process.env.NEXT_PUBLIC_SUPABASE_URL);
+  console.log("KEY de Supabase que ve el navegador:", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  // ------------------------------------
+
   const [fileToEvaluate, setFileToEvaluate] = useState<File | null>(null)
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string>("")
   const [isProcessing, setIsProcessing] = useState(false)
@@ -52,6 +51,14 @@ export default function LibelIA() {
     resolver: zodResolver(formSchema),
     defaultValues: { nombre: "", curso: "", rubrica: "", retroalimentacion: "", puntaje: "", nota: "" },
   })
+
+  // Función para crear el cliente de Supabase de forma segura
+  const getSupabaseClient = () => {
+    return createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+  }
 
   const handleFile = (file: File) => {
     setFileToEvaluate(file)
@@ -66,11 +73,12 @@ export default function LibelIA() {
       alert("Por favor, sube un archivo o usa la cámara primero.");
       return;
     }
-    setIsProcessing(true);
-    setEvaluationDone(false);
+    setIsProcessing(true)
+    setEvaluationDone(false)
+    const supabase = getSupabaseClient()
 
     try {
-      const filePath = `evaluaciones/${Date.now()}_${fileToEvaluate.name}`;
+      const filePath = `evaluaciones/${Date.now()}_${fileToEvaluate.name}`
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("imagenes")
         .upload(filePath, fileToEvaluate);
@@ -98,9 +106,9 @@ export default function LibelIA() {
       setEvaluationDone(true);
 
     } catch (error) {
-      alert(`Error durante la evaluación: ${error instanceof Error ? error.message : "Error desconocido"}`);
+      alert(`Error durante la evaluación: ${error instanceof Error ? error.message : "Error desconocido"}`)
     } finally {
-      setIsProcessing(false);
+      setIsProcessing(false)
     }
   }
 
@@ -112,7 +120,6 @@ export default function LibelIA() {
     <>
       <SmartCameraModal isOpen={isCameraOpen} onClose={() => setIsCameraOpen(false)} onCapture={handleFile} />
       <main className="p-4 md:p-8 max-w-4xl mx-auto font-sans">
-        {/* Aquí va el JSX de tu aplicación que ya conoces */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold">Evaluador IA</h1>
           <p className="text-gray-600">Evalúa un estudiante a la vez con análisis multimodal.</p>
