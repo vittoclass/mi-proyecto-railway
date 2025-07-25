@@ -23,7 +23,7 @@ const supabase = createClient(
 const formSchema = z.object({
   nombre: z.string().min(1, "El nombre es requerido."),
   curso: z.string().min(1, "El curso es requerido."),
-  rubrica: z.string().min(10, "La rúbrica es necesaria para evaluar."),
+  rubrica: z.string().min(10, "La rúbrica es necesaria y debe tener al menos 10 caracteres."),
   retroalimentacion: z.string(),
   puntaje: z.string(),
   nota: z.string(),
@@ -47,7 +47,7 @@ export default function Page() {
     if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl)
     setImagePreviewUrl(URL.createObjectURL(file))
     setEvaluationDone(false)
-    form.reset()
+    // No reseteamos el formulario aquí para no borrar la rúbrica
   }
 
   const onEvaluate = async (values: z.infer<typeof formSchema>) => {
@@ -60,6 +60,8 @@ export default function Page() {
 
     const formData = new FormData()
     formData.append("file", fileToEvaluate)
+    // **LA CORRECCIÓN CLAVE ESTÁ AQUÍ:**
+    // Nos aseguramos de leer el valor de la rúbrica directamente desde los datos del formulario.
     formData.append("rubrica", values.rubrica)
 
     try {
@@ -151,7 +153,13 @@ export default function Page() {
                     )} />
                   </div>
                   <FormField control={form.control} name="rubrica" render={({ field }) => (
-                      <FormItem><FormLabel>Rúbrica</FormLabel><FormControl><Textarea placeholder="Pega aquí la rúbrica..." {...field} className="min-h-[150px]" /></FormControl><FormMessage /></FormItem>
+                      <FormItem>
+                        <FormLabel>Rúbrica</FormLabel>
+                        <FormControl>
+                          <Textarea placeholder="Pega aquí la rúbrica..." {...field} className="min-h-[150px]" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
                   )} />
                 </CardContent>
               </Card>
