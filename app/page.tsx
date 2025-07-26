@@ -1,9 +1,9 @@
 // En: app/page.tsx
 
-import LibelIA from "@/components/Libel-IA";
+import EvaluatorClient from "@/components/EvaluatorClient";
 
 export default function HomePage() {
   return (
-    <LibelIA />
+    <EvaluatorClient />
   );
 }
