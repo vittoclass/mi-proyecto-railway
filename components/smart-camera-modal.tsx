@@ -1,122 +1,178 @@
-'use client';
+'use client'
 
-import { useState, useRef, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Camera, X } from 'lucide-react';
+import { useEffect, useRef, useState, useCallback } from "react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from "@/components/ui/drawer"
+import { Button } from "@/components/ui/button"
+import { useMediaPipe } from "@/hooks/use-media-pipe"
+import { Loader2, CheckCircle, CameraOff } from "lucide-react"
 
-export default function SmartCameraModal({ open, onClose, onCapture }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [vision, setVision] = useState<any>(null); // Para cargar MediaPipe dinámicamente
-
-  // Cargar @mediapipe/tasks-vision solo en el cliente y cuando se abre el modal
+// Hook para detectar si la pantalla es de escritorio o móvil
+function useMediaQuery(query: string) {
+  const [value, setValue] = useState(false)
   useEffect(() => {
-    if (open) {
-      setLoading(true);
-      setError(null);
+    function onChange(event: MediaQueryListEvent) { setValue(event.matches) }
+    const result = window.matchMedia(query);
+    result.addEventListener("change", onChange);
+    setValue(result.matches);
+    return () => result.removeEventListener("change", onChange)
+  }, [query])
+  return value
+}
 
-      async function loadVision() {
-        try {
-          const vision = await import('@mediapipe/tasks-vision');
-          setVision(vision);
-          startCamera();
-        } catch (err) {
-          console.error('Error al cargar MediaPipe:', err);
-          setError('No se pudo cargar la cámara. Intenta de nuevo.');
-        } finally {
-          setLoading(false);
-        }
-      }
+interface SmartCameraModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onCapture: (file: File) => void
+}
 
-      loadVision();
+export const SmartCameraModal = ({ isOpen, onClose, onCapture }: SmartCameraModalProps) => {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [capturedImage, setCapturedImage] = useState<string | null>(null)
+  const [feedbackMessage, setFeedbackMessage] = useState("Buscando documento...")
+  const [isCaptureEnabled, setIsCaptureEnabled] = useState(false)
+  const detectionBoxRef = useRef<HTMLDivElement>(null)
+  const animationFrameId = useRef<number>()
+  
+  const { isLoading, error, detectObjects } = useMediaPipe()
+  const isDesktop = useMediaQuery("(min-width: 768px)")
+
+  const stopCamera = useCallback(() => {
+    if (videoRef.current?.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream
+      stream.getTracks().forEach((track) => track.stop())
+      videoRef.current.srcObject = null
     }
+  }, [])
 
-    return () => {
-      if (videoRef.current) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        if (stream) {
-          stream.getTracks().forEach(track => track.stop());
-          videoRef.current.srcObject = null;
+  const startCamera = useCallback(async () => {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+          await videoRef.current.play()
         }
+      } catch (err) {
+        console.error("Error al acceder a la cámara:", err)
+        setFeedbackMessage("? Permiso de cámara denegado.")
       }
-    };
-  }, [open]);
-
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-    } catch (err) {
-      setError('No se pudo acceder a la cámara.');
-      console.error(err);
+    } else {
+        setFeedbackMessage("? La cámara no es compatible con este navegador.")
     }
-  };
-
-  const captureImage = () => {
-    if (!canvasRef.current || !videoRef.current) return;
-
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    const ctx = canvas.getContext('2d');
-
-    if (!ctx) return;
-
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    canvas.toBlob((blob) => {
-      if (blob) {
-        const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
-        onCapture(file);
-        onClose();
+  }, [])
+  
+  const detectionLoop = useCallback(() => {
+    if (isOpen && !isLoading && !error && videoRef.current && detectionBoxRef.current && !capturedImage) {
+        const detected = detectObjects(videoRef.current)
+        if (detected.length > 0 && detected.some(d => d.label === 'book')) {
+            const doc = detected[0];
+            const { x, y, width, height } = doc.boundingBox;
+            const video = videoRef.current;
+            const box = detectionBoxRef.current;
+            if (box.style.display !== 'block') box.style.display = 'block';
+            box.style.left = `${(x / video.videoWidth) * 100}%`;
+            box.style.top = `${(y / video.videoHeight) * 100}%`;
+            box.style.width = `${(width / video.videoWidth) * 100}%`;
+            box.style.height = `${(height / video.videoHeight) * 100}%`;
+            setFeedbackMessage("? Documento detectado. ¡Estable!");
+            setIsCaptureEnabled(true);
+        } else {
+            if (detectionBoxRef.current.style.display !== 'none') detectionBoxRef.current.style.display = 'none';
+            setFeedbackMessage("Apunte al documento...");
+            setIsCaptureEnabled(false);
+        }
+        animationFrameId.current = requestAnimationFrame(detectionLoop)
+    }
+  }, [detectObjects, capturedImage, isOpen, isLoading, error])
+  
+  useEffect(() => {
+      if (isOpen && !isLoading && !error && !capturedImage) {
+          startCamera()
+          detectionLoop();
+      } else {
+          stopCamera()
       }
-    }, 'image/jpeg');
-  };
+      return () => {
+          stopCamera()
+          if(animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
+      }
+  }, [isOpen, isLoading, error, capturedImage, startCamera, stopCamera, detectionLoop])
 
-  if (!open) return null;
+  const handleCapture = () => {
+    if (videoRef.current && canvasRef.current) {
+      const canvas = canvasRef.current; 
+      const video = videoRef.current;
+      canvas.width = video.videoWidth; 
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext('2d');
+      context?.drawImage(video, 0, 0, canvas.width, canvas.height);
+      setCapturedImage(canvas.toDataURL('image/jpeg'));
+    }
+  }
+
+  const handleAccept = () => {
+    if (capturedImage && canvasRef.current) {
+      canvasRef.current.toBlob((blob) => {
+        if (blob) {
+          onCapture(new File([blob], `captura-${Date.now()}.jpg`, { type: 'image/jpeg' }));
+          handleClose();
+        }
+      }, 'image/jpeg');
+    }
+  }
+
+  const handleRetake = () => { setCapturedImage(null); }
+  const handleClose = () => { setCapturedImage(null); onClose(); }
+
+  const CameraUI = (
+    <div className="relative bg-black rounded-lg aspect-video">
+        {capturedImage ? <img src={capturedImage} alt="Captura" className="rounded-lg w-full h-full object-contain" /> : <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-contain rounded-lg" />}
+        <canvas ref={canvasRef} className="hidden" />
+        <div ref={detectionBoxRef} className="absolute border-4 border-green-400 rounded-lg transition-all duration-200 pointer-events-none" style={{ display: 'none' }} />
+        {isLoading && <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center rounded-lg"><Loader2 className="w-8 h-8 text-white animate-spin" /><p className="mt-2 text-white">Cargando IA...</p></div>}
+        {error && <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center rounded-lg"><CameraOff className="w-12 h-12 text-red-400 mb-2"/><p className="text-red-400 text-center max-w-xs">{error}</p></div>}
+        {!capturedImage && !isLoading && !error && (
+        <div className={`absolute bottom-4 left-4 p-2 rounded-lg text-white text-sm flex items-center gap-2 transition-colors ${isCaptureEnabled ? 'bg-green-600' : 'bg-black bg-opacity-50'}`}>
+            {isCaptureEnabled ? <CheckCircle className="w-4 h-4" /> : <Loader2 className="w-4 h-4 animate-spin" />}
+            <span>{feedbackMessage}</span>
+        </div>
+        )}
+    </div>
+  )
+
+  const FooterButtons = (
+     <>
+        {capturedImage ? (<><Button onClick={handleRetake} variant="outline">Tomar de Nuevo</Button><Button onClick={handleAccept}>Aceptar y Usar Foto</Button></>) 
+        : (<Button onClick={handleCapture} disabled={isLoading || !!error || !isCaptureEnabled} size="lg">Tomar Foto</Button>)}
+     </>
+  )
+
+  const content = (
+    <>
+        <div className="px-4 md:px-0">{CameraUI}</div>
+        <div className="flex justify-end gap-2 p-4 pt-2 md:p-0 md:pt-4">{FooterButtons}</div>
+    </>
+  );
+
+  if (isDesktop) {
+    return (
+        <Dialog open={isOpen} onOpenChange={handleClose}>
+            <DialogContent className="max-w-4xl p-6">
+                <DialogHeader><DialogTitle>Cámara Inteligente</DialogTitle></DialogHeader>
+                <div className="flex flex-col gap-4">{content}</div>
+            </DialogContent>
+        </Dialog>
+    )
+  }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80">
-      <div className="bg-white rounded-lg shadow-xl w-11/12 max-w-lg overflow-hidden">
-        <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="text-lg font-semibold">Capturar con Cámara</h3>
-          <Button variant="ghost" size="icon" onClick={onClose}>
-            <X className="h-5 w-5" />
-          </Button>
-        </div>
-
-        <div className="p-4">
-          {error ? (
-            <div className="text-red-600 text-center mb-4">{error}</div>
-          ) : loading ? (
-            <div className="text-center mb-4">Cargando cámara...</div>
-          ) : (
-            <>
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full rounded-md mb-4"
-              />
-              <Button
-                onClick={captureImage}
-                className="w-full"
-                disabled={!vision}
-              >
-                <Camera className="mr-2 h-5 w-5" /> Capturar Foto
-              </Button>
-            </>
-          )}
-        </div>
-
-        <canvas ref={canvasRef} className="hidden" />
-      </div>
-    </div>
-  );
+    <Drawer open={isOpen} onOpenChange={handleClose}>
+        <DrawerContent>
+            <DrawerHeader><DrawerTitle>Cámara Inteligente</DrawerTitle></DrawerHeader>
+            <div className="flex flex-col gap-4">{content}</div>
+        </DrawerContent>
+    </Drawer>
+  )
 }
