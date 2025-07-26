@@ -1,6 +1,5 @@
-// En: app/page.tsx
-import LibelIA from "@/components/Libel-IA";
+import LibelIA from '../components/Libel-IA';
 
-export default function HomePage() {
+export default function Home() {
   return <LibelIA />;
 }

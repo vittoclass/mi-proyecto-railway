@@ -1,107 +1,122 @@
-'use client'
+'use client';
 
-import { useRef, useState, useCallback, useEffect } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Loader2, Camera as CameraIcon, Zap } from "lucide-react"
+import { useState, useRef, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Camera, X } from 'lucide-react';
 
-interface SmartCameraModalProps {
-  isOpen: boolean
-  onClose: () => void
-  onCapture: (file: File) => void
-}
+export default function SmartCameraModal({ open, onClose, onCapture }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [vision, setVision] = useState<any>(null); // Para cargar MediaPipe dinámicamente
 
-export const SmartCameraModal = ({ isOpen, onClose, onCapture }: SmartCameraModalProps) => {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [capturedImage, setCapturedImage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  // Cargar @mediapipe/tasks-vision solo en el cliente y cuando se abre el modal
+  useEffect(() => {
+    if (open) {
+      setLoading(true);
+      setError(null);
 
-  const stopCamera = useCallback(() => {
-    if (videoRef.current?.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream
-      stream.getTracks().forEach((track) => track.stop())
-      videoRef.current.srcObject = null
-    }
-  }, [])
-
-  const startCamera = useCallback(async () => {
-    try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } } })
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          await videoRef.current.play()
+      async function loadVision() {
+        try {
+          const vision = await import('@mediapipe/tasks-vision');
+          setVision(vision);
+          startCamera();
+        } catch (err) {
+          console.error('Error al cargar MediaPipe:', err);
+          setError('No se pudo cargar la cámara. Intenta de nuevo.');
+        } finally {
+          setLoading(false);
         }
-      } else {
-        setError("La cámara no es compatible con este navegador.")
+      }
+
+      loadVision();
+    }
+
+    return () => {
+      if (videoRef.current) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        if (stream) {
+          stream.getTracks().forEach(track => track.stop());
+          videoRef.current.srcObject = null;
+        }
+      }
+    };
+  }, [open]);
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
       }
     } catch (err) {
-      console.error("Error al acceder a la cámara:", err)
-      setError("Permiso de cámara denegado. Habilítalo en la configuración de tu navegador.")
+      setError('No se pudo acceder a la cámara.');
+      console.error(err);
     }
-  }, [])
-  
-  useEffect(() => {
-    if (isOpen && !capturedImage) {
-      startCamera()
-    } else {
-      stopCamera()
-    }
-    return () => stopCamera()
-  }, [isOpen, capturedImage, startCamera, stopCamera])
+  };
 
-  const handleCapture = () => {
-    if (videoRef.current && canvasRef.current) {
-      const canvas = canvasRef.current; 
-      const video = videoRef.current;
-      canvas.width = video.videoWidth; 
-      canvas.height = video.videoHeight;
-      const context = canvas.getContext('2d');
-      if (context) {
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        setCapturedImage(canvas.toDataURL('image/jpeg', 0.9));
-        stopCamera();
+  const captureImage = () => {
+    if (!canvasRef.current || !videoRef.current) return;
+
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) return;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob((blob) => {
+      if (blob) {
+        const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
+        onCapture(file);
+        onClose();
       }
-    }
-  }
+    }, 'image/jpeg');
+  };
 
-  const handleAccept = () => {
-    if (capturedImage && canvasRef.current) {
-      canvasRef.current.toBlob((blob) => {
-        if (blob) {
-          onCapture(new File([blob], `captura-${Date.now()}.jpg`, { type: 'image/jpeg' }));
-          handleClose();
-        }
-      }, 'image/jpeg', 0.9);
-    }
-  }
-
-  const handleRetake = () => { setCapturedImage(null); }
-  const handleClose = () => { setCapturedImage(null); onClose(); }
+  if (!open) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl p-4 sm:p-6">
-        <DialogHeader><DialogTitle>Capturar Documento</DialogTitle></DialogHeader>
-        <div className="relative bg-black rounded-lg aspect-video overflow-hidden">
-          {capturedImage ? <img src={capturedImage} alt="Captura" className="w-full h-full object-contain" /> : <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-contain" />}
-          <canvas ref={canvasRef} className="hidden" />
-          {error && <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center rounded-lg"><p className="text-red-400 text-center max-w-xs">{error}</p></div>}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80">
+      <div className="bg-white rounded-lg shadow-xl w-11/12 max-w-lg overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b">
+          <h3 className="text-lg font-semibold">Capturar con Cámara</h3>
+          <Button variant="ghost" size="icon" onClick={onClose}>
+            <X className="h-5 w-5" />
+          </Button>
         </div>
-        <DialogFooter>
-          {capturedImage ? (
-            <>
-              <Button onClick={handleRetake} variant="outline">Tomar de Nuevo</Button>
-              <Button onClick={handleAccept}>Aceptar y Usar Foto</Button>
-            </>
+
+        <div className="p-4">
+          {error ? (
+            <div className="text-red-600 text-center mb-4">{error}</div>
+          ) : loading ? (
+            <div className="text-center mb-4">Cargando cámara...</div>
           ) : (
-            <Button onClick={handleCapture} disabled={!!error} size="lg">
-              <CameraIcon className="mr-2"/> Tomar Foto
-            </Button>
+            <>
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full rounded-md mb-4"
+              />
+              <Button
+                onClick={captureImage}
+                className="w-full"
+                disabled={!vision}
+              >
+                <Camera className="mr-2 h-5 w-5" /> Capturar Foto
+              </Button>
+            </>
           )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
+        </div>
+
+        <canvas ref={canvasRef} className="hidden" />
+      </div>
+    </div>
+  );
 }
