@@ -7,7 +7,6 @@ import { Upload } from 'lucide-react';
 import { EvaluatorClient } from './EvaluatorClient';
 import { ThemeProvider } from './theme-provider';
 
-// ? Importación dinámica del modal de cámara
 const SmartCameraModal = dynamic(
   () => import('./smart-camera-modal'),
   {
@@ -147,7 +146,6 @@ export default function LibelIA() {
           </div>
         </div>
 
-        {/* Modal de cámara */}
         <SmartCameraModal
           open={showCamera}
           onClose={() => setShowCamera(false)}
