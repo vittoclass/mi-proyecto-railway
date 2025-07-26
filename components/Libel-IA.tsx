@@ -1,24 +1,28 @@
 'use client'
 
-import { useState, useRef } from "react";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { createClient } from '@supabase/supabase-js';
-import dynamic from 'next/dynamic';
+import { useState, useRef } from "react"
+import { useForm } from "react-hook-form"
+import { z } from "zod"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { createClient } from '@supabase/supabase-js'
+import dynamic from 'next/dynamic'
 
 // --- Componentes de UI ---
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Camera as CameraIcon, Loader2, Sparkles, FileUp, Save, X } from "lucide-react";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Camera as CameraIcon, Loader2, Sparkles, FileUp, Save, X } from "lucide-react"
 
+// --- IMPORTACIÓN DINÁMICA DE LA CÁMARA ---
 const SmartCameraModal = dynamic(
-  () => import('@/components/smart-camera-modal').then(mod => mod.SmartCameraModal),
-  { ssr: false, loading: () => <p>Cargando cámara...</p> }
-);
+  () => import('@/components/smart-camera-modal'),
+  { 
+    ssr: false,
+    loading: () => <p className="text-center">Cargando cámara...</p> 
+  }
+)
 
 const formSchema = z.object({
   nombre: z.string().min(1, "El nombre es requerido."),
@@ -27,7 +31,7 @@ const formSchema = z.object({
   retroalimentacion: z.string().optional(),
   puntaje: z.string().optional(),
   nota: z.string().optional(),
-});
+})
 
 interface FilePreview {
   id: string;
@@ -40,11 +44,12 @@ export default function LibelIA() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [evaluationDone, setEvaluationDone] = useState(false);
+  const [evaluationsHistory, setEvaluationsHistory] = useState<any[]>([]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: { nombre: "", curso: "", rubrica: "", retroalimentacion: "", puntaje: "", nota: "" },
-  });
+  })
 
   const getSupabaseClient = () => createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -75,23 +80,19 @@ export default function LibelIA() {
     const supabase = getSupabaseClient();
 
     try {
-      // 1. Subir TODOS los archivos a Supabase en paralelo
       const uploadPromises = filesToEvaluate.map(fp => {
         const filePath = `evaluaciones/${Date.now()}_${fp.file.name}`;
         return supabase.storage.from("imagenes").upload(filePath, fp.file);
       });
       const uploadResults = await Promise.all(uploadPromises);
       
-      // Manejar errores de subida
       const uploadError = uploadResults.find(res => res.error);
       if (uploadError) throw new Error(`Error al subir a Supabase: ${uploadError.error.message}`);
 
-      // 2. Obtener TODAS las URLs públicas
       const imageUrls = uploadResults.map(res => {
         return supabase.storage.from("imagenes").getPublicUrl(res.data!.path).data.publicUrl;
       });
 
-      // 3. Enviar un JSON limpio a la API con todas las URLs
       const response = await fetch('/api/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -160,7 +161,52 @@ export default function LibelIA() {
         {filesToEvaluate.length > 0 && (
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onEvaluate)} className="space-y-6">
-              {/* ... El resto del formulario (Datos y Rúbrica, Resultado) se mantiene igual ... */}
+              <Card>
+                <CardHeader><CardTitle>2. Datos y Rúbrica</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField control={form.control} name="nombre" render={({ field }) => (
+                      <FormItem><FormLabel>Nombre del Estudiante</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormMessage>
+                    )} />
+                    <FormField control={form.control} name="curso" render={({ field }) => (
+                      <FormItem><FormLabel>Curso</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormMessage>
+                    )} />
+                  </div>
+                  <FormField control={form.control} name="rubrica" render={({ field }) => (
+                      <FormItem><FormLabel>Rúbrica</FormLabel><FormControl><Textarea placeholder="Pega aquí la rúbrica..." {...field} className="min-h-[150px]" /></FormControl><FormMessage /></FormMessage>
+                  )} />
+                </CardContent>
+              </Card>
+
+              <div className="text-center">
+                <Button type="submit" disabled={isProcessing} className="w-full md:w-1/2 text-base py-6">
+                  {isProcessing && !evaluationDone ? <Loader2 className="animate-spin mr-2" /> : <Sparkles className="mr-2 h-5 w-5" />}
+                  {isProcessing && !evaluationDone ? 'La IA está evaluando...' : 'Evaluar con IA'}
+                </Button>
+              </div>
+
+              {evaluationDone && (
+                  <Card className="border-green-300 animate-in fade-in-50 duration-500">
+                      <CardHeader><CardTitle>3. Resultado de la Evaluación</CardTitle></CardHeader>
+                      <CardContent className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <FormField control={form.control} name="nota" render={({ field }) => (
+                                <FormItem><FormLabel>Nota (Generada)</FormLabel><FormControl><Input {...field} readOnly className="bg-green-50 font-bold text-lg" /></FormControl></FormItem>
+                            )} />
+                            <FormField control={form.control} name="puntaje" render={({ field }) => (
+                                <FormItem><FormLabel>Puntaje (Generado)</FormLabel><FormControl><Input {...field} readOnly className="bg-green-50" /></FormControl></FormItem>
+                            )} />
+                          </div>
+                          <FormField control={form.control} name="retroalimentacion" render={({ field }) => (
+                              <FormItem><FormLabel>Retroalimentación (Generada)</FormLabel><FormControl><Textarea {...field} readOnly className="min-h-[120px] bg-green-50" /></FormControl></FormItem>
+                          )} />
+                          <Button type="button" onClick={onSave} disabled={isProcessing} className="w-full text-base py-6 bg-green-600 hover:bg-green-700">
+                              {isProcessing ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2 h-5 w-5" />}
+                              Guardar Evaluación Final
+                          </Button>
+                      </CardContent>
+                  </Card>
+              )}
             </form>
           </Form>
         )}
