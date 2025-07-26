@@ -1,42 +1,21 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from "react"
+import { useRef, useState, useCallback, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from "@/components/ui/drawer"
 import { Button } from "@/components/ui/button"
-import { useMediaPipe } from "@/hooks/use-media-pipe"
-import { Loader2, CheckCircle, CameraOff } from "lucide-react"
+import { Camera as CameraIcon } from "lucide-react"
 
-// Hook para detectar si la pantalla es de escritorio o móvil
-function useMediaQuery(query: string) {
-  const [value, setValue] = useState(false)
-  useEffect(() => {
-    function onChange(event: MediaQueryListEvent) { setValue(event.matches) }
-    const result = window.matchMedia(query);
-    result.addEventListener("change", onChange);
-    setValue(result.matches);
-    return () => result.removeEventListener("change", onChange)
-  }, [query])
-  return value
-}
-
-interface SmartCameraModalProps {
+interface StableCameraModalProps {
   isOpen: boolean
   onClose: () => void
   onCapture: (file: File) => void
 }
 
-export const SmartCameraModal = ({ isOpen, onClose, onCapture }: SmartCameraModalProps) => {
+export const SmartCameraModal = ({ isOpen, onClose, onCapture }: StableCameraModalProps) => {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [error, setError] = useState<string | null>(null)
   const [capturedImage, setCapturedImage] = useState<string | null>(null)
-  const [feedbackMessage, setFeedbackMessage] = useState("Buscando documento...")
-  const [isCaptureEnabled, setIsCaptureEnabled] = useState(false)
-  const detectionBoxRef = useRef<HTMLDivElement>(null)
-  const animationFrameId = useRef<number>()
-  
-  const { isLoading, error, detectObjects } = useMediaPipe()
-  const isDesktop = useMediaQuery("(min-width: 768px)")
 
   const stopCamera = useCallback(() => {
     if (videoRef.current?.srcObject) {
@@ -47,58 +26,28 @@ export const SmartCameraModal = ({ isOpen, onClose, onCapture }: SmartCameraModa
   }, [])
 
   const startCamera = useCallback(async () => {
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      try {
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
         if (videoRef.current) {
           videoRef.current.srcObject = stream
           await videoRef.current.play()
         }
-      } catch (err) {
-        console.error("Error al acceder a la cámara:", err)
-        setFeedbackMessage("? Permiso de cámara denegado.")
+      } else {
+        setError("La cámara no es compatible con este navegador.")
       }
-    } else {
-        setFeedbackMessage("? La cámara no es compatible con este navegador.")
+    } catch (err) {
+      setError("Permiso de cámara denegado. Habilítalo en la configuración de tu navegador.")
     }
   }, [])
   
-  const detectionLoop = useCallback(() => {
-    if (isOpen && !isLoading && !error && videoRef.current && detectionBoxRef.current && !capturedImage) {
-        const detected = detectObjects(videoRef.current)
-        if (detected.length > 0 && detected.some(d => d.label === 'book')) {
-            const doc = detected[0];
-            const { x, y, width, height } = doc.boundingBox;
-            const video = videoRef.current;
-            const box = detectionBoxRef.current;
-            if (box.style.display !== 'block') box.style.display = 'block';
-            box.style.left = `${(x / video.videoWidth) * 100}%`;
-            box.style.top = `${(y / video.videoHeight) * 100}%`;
-            box.style.width = `${(width / video.videoWidth) * 100}%`;
-            box.style.height = `${(height / video.videoHeight) * 100}%`;
-            setFeedbackMessage("? Documento detectado. ¡Estable!");
-            setIsCaptureEnabled(true);
-        } else {
-            if (detectionBoxRef.current.style.display !== 'none') detectionBoxRef.current.style.display = 'none';
-            setFeedbackMessage("Apunte al documento...");
-            setIsCaptureEnabled(false);
-        }
-        animationFrameId.current = requestAnimationFrame(detectionLoop)
-    }
-  }, [detectObjects, capturedImage, isOpen, isLoading, error])
-  
   useEffect(() => {
-      if (isOpen && !isLoading && !error && !capturedImage) {
-          startCamera()
-          detectionLoop();
-      } else {
-          stopCamera()
-      }
-      return () => {
-          stopCamera()
-          if(animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
-      }
-  }, [isOpen, isLoading, error, capturedImage, startCamera, stopCamera, detectionLoop])
+    if (isOpen && !capturedImage) {
+      startCamera()
+    } else {
+      stopCamera()
+    }
+  }, [isOpen, capturedImage, startCamera, stopCamera])
 
   const handleCapture = () => {
     if (videoRef.current && canvasRef.current) {
@@ -106,9 +55,8 @@ export const SmartCameraModal = ({ isOpen, onClose, onCapture }: SmartCameraModa
       const video = videoRef.current;
       canvas.width = video.videoWidth; 
       canvas.height = video.videoHeight;
-      const context = canvas.getContext('2d');
-      context?.drawImage(video, 0, 0, canvas.width, canvas.height);
-      setCapturedImage(canvas.toDataURL('image/jpeg'));
+      canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
+      setCapturedImage(canvas.toDataURL('image/jpeg', 0.9));
     }
   }
 
@@ -126,53 +74,28 @@ export const SmartCameraModal = ({ isOpen, onClose, onCapture }: SmartCameraModa
   const handleRetake = () => { setCapturedImage(null); }
   const handleClose = () => { setCapturedImage(null); onClose(); }
 
-  const CameraUI = (
-    <div className="relative bg-black rounded-lg aspect-video">
-        {capturedImage ? <img src={capturedImage} alt="Captura" className="rounded-lg w-full h-full object-contain" /> : <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-contain rounded-lg" />}
-        <canvas ref={canvasRef} className="hidden" />
-        <div ref={detectionBoxRef} className="absolute border-4 border-green-400 rounded-lg transition-all duration-200 pointer-events-none" style={{ display: 'none' }} />
-        {isLoading && <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center rounded-lg"><Loader2 className="w-8 h-8 text-white animate-spin" /><p className="mt-2 text-white">Cargando IA...</p></div>}
-        {error && <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center rounded-lg"><CameraOff className="w-12 h-12 text-red-400 mb-2"/><p className="text-red-400 text-center max-w-xs">{error}</p></div>}
-        {!capturedImage && !isLoading && !error && (
-        <div className={`absolute bottom-4 left-4 p-2 rounded-lg text-white text-sm flex items-center gap-2 transition-colors ${isCaptureEnabled ? 'bg-green-600' : 'bg-black bg-opacity-50'}`}>
-            {isCaptureEnabled ? <CheckCircle className="w-4 h-4" /> : <Loader2 className="w-4 h-4 animate-spin" />}
-            <span>{feedbackMessage}</span>
-        </div>
-        )}
-    </div>
-  )
-
-  const FooterButtons = (
-     <>
-        {capturedImage ? (<><Button onClick={handleRetake} variant="outline">Tomar de Nuevo</Button><Button onClick={handleAccept}>Aceptar y Usar Foto</Button></>) 
-        : (<Button onClick={handleCapture} disabled={isLoading || !!error || !isCaptureEnabled} size="lg">Tomar Foto</Button>)}
-     </>
-  )
-
-  const content = (
-    <>
-        <div className="px-4 md:px-0">{CameraUI}</div>
-        <div className="flex justify-end gap-2 p-4 pt-2 md:p-0 md:pt-4">{FooterButtons}</div>
-    </>
-  );
-
-  if (isDesktop) {
-    return (
-        <Dialog open={isOpen} onOpenChange={handleClose}>
-            <DialogContent className="max-w-4xl p-6">
-                <DialogHeader><DialogTitle>Cámara Inteligente</DialogTitle></DialogHeader>
-                <div className="flex flex-col gap-4">{content}</div>
-            </DialogContent>
-        </Dialog>
-    )
-  }
-
   return (
-    <Drawer open={isOpen} onOpenChange={handleClose}>
-        <DrawerContent>
-            <DrawerHeader><DrawerTitle>Cámara Inteligente</DrawerTitle></DrawerHeader>
-            <div className="flex flex-col gap-4">{content}</div>
-        </DrawerContent>
-    </Drawer>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader><DialogTitle>Capturar Evidencia</DialogTitle></DialogHeader>
+        <div className="relative bg-black rounded-lg aspect-video overflow-hidden">
+          {capturedImage ? <img src={capturedImage} alt="Captura" className="w-full h-full object-contain" /> : <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-contain" />}
+          <canvas ref={canvasRef} className="hidden" />
+          {error && <p className="absolute top-4 left-4 p-2 bg-red-800 bg-opacity-70 text-white rounded">{error}</p>}
+        </div>
+        <DialogFooter>
+          {capturedImage ? (
+            <>
+              <Button onClick={handleRetake} variant="outline">Tomar de Nuevo</Button>
+              <Button onClick={handleAccept}>Aceptar Foto</Button>
+            </>
+          ) : (
+            <Button onClick={handleCapture} disabled={!!error} size="lg">
+              <CameraIcon className="mr-2"/> Capturar
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
