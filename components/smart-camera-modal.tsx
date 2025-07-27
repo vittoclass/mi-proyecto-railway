@@ -38,7 +38,7 @@ export default function SmartCameraModal({ isOpen, onClose, onCapture }: StableC
         setError("La cámara no es compatible con este navegador.")
       }
     } catch (err) {
-      setError("Permiso de cámara denegado. Habilítalo en la configuración de tu navegador.")
+      setError("Permiso de cámara denegado. Habilítalo en tu navegador.")
     }
   }, [])
   
@@ -48,6 +48,7 @@ export default function SmartCameraModal({ isOpen, onClose, onCapture }: StableC
     } else {
       stopCamera()
     }
+    return () => stopCamera()
   }, [isOpen, capturedImage, startCamera, stopCamera])
 
   const handleCapture = () => {
