@@ -5,44 +5,50 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button"
 import { Camera as CameraIcon, X } from "lucide-react"
 
-export default function SmartCameraModal({ isOpen, onClose, onCapture }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+interface StableCameraModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onCapture: (file: File) => void
+}
+
+export default function SmartCameraModal({ isOpen, onClose, onCapture }: StableCameraModalProps) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [capturedImage, setCapturedImage] = useState<string | null>(null)
 
   const stopCamera = useCallback(() => {
     if (videoRef.current?.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach((track) => track.stop());
-      videoRef.current.srcObject = null;
+      const stream = videoRef.current.srcObject as MediaStream
+      stream.getTracks().forEach((track) => track.stop())
+      videoRef.current.srcObject = null
     }
-  }, []);
+  }, [])
 
   const startCamera = useCallback(async () => {
     setError(null);
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
         if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
+          videoRef.current.srcObject = stream
+          await videoRef.current.play()
         }
       } else {
-        setError("La cámara no es compatible con este navegador.");
+        setError("La cámara no es compatible con este navegador.")
       }
     } catch (err) {
-      setError("Permiso de cámara denegado. Habilítalo en tu navegador.");
+      setError("Permiso de cámara denegado. Habilítalo en la configuración de tu navegador.")
     }
-  }, []);
+  }, [])
   
   useEffect(() => {
     if (isOpen && !capturedImage) {
-      startCamera();
+      startCamera()
     } else {
-      stopCamera();
+      stopCamera()
     }
-  }, [isOpen, capturedImage, startCamera, stopCamera]);
+  }, [isOpen, capturedImage, startCamera, stopCamera])
 
   const handleCapture = () => {
     if (videoRef.current && canvasRef.current) {
@@ -72,7 +78,10 @@ export default function SmartCameraModal({ isOpen, onClose, onCapture }) {
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-3xl">
-        <DialogHeader><DialogTitle>Capturar Evidencia</DialogTitle></DialogHeader>
+        <DialogHeader className="flex flex-row items-center justify-between">
+            <DialogTitle>Capturar Evidencia</DialogTitle>
+            <Button variant="ghost" size="icon" onClick={handleClose}><X className="h-5 w-5"/></Button>
+        </DialogHeader>
         <div className="relative bg-black rounded-lg aspect-video overflow-hidden">
           {capturedImage ? <img src={capturedImage} alt="Captura" className="w-full h-full object-contain" /> : <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-contain" />}
           <canvas ref={canvasRef} className="hidden" />
@@ -85,7 +94,7 @@ export default function SmartCameraModal({ isOpen, onClose, onCapture }) {
               <Button onClick={handleAccept}>Aceptar Foto</Button>
             </>
           ) : (
-            <Button onClick={handleCapture} disabled={!!error} size="lg">
+            <Button onClick={handleCapture} disabled={!!error} size="lg" className="w-full">
               <CameraIcon className="mr-2"/> Capturar
             </Button>
           )}
