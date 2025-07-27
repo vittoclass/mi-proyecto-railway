@@ -16,15 +16,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Slider } from "@/components/ui/slider"
 import { AlertTriangle, Camera as CameraIcon, Loader2, Sparkles, FileUp, Save, Users, User, FileIcon, X, Printer, School } from "lucide-react"
 
+// --- IMPORTACIÓN DINÁMICA CORREGIDA ---
 const SmartCameraModal = dynamic(
-  () => import('@/components/smart-camera-modal').then(mod => mod.SmartCameraModal),
-  { ssr: false, loading: () => <div className="text-center p-4">Cargando cámara...</div> }
+  () => import('@/components/smart-camera-modal'), // Ya no se necesita el .then(...)
+  { 
+    ssr: false, 
+    loading: () => <p className="text-center p-4">Cargando cámara...</p> 
+  }
 );
 
 const formSchema = z.object({
   nombreProfesor: z.string().optional(),
   departamento: z.string().optional(),
-  rubrica: z.string().min(10, "La rúbrica es necesaria y debe tener al menos 10 caracteres."),
+  rubrica: z.string().min(10, "La rúbrica es necesaria para evaluar."),
   flexibilidad: z.number().min(1).max(5).default(3),
 });
 
@@ -118,23 +122,11 @@ export default function LibelIA() {
     const supabase = getSupabaseClient();
     let updatedGroups = [...studentGroups];
 
-    // **VALIDACIÓN FRONTAL (LA CLAVE DE LA SOLUCIÓN)**
-    // Antes de hacer nada, verificamos que la rúbrica tenga texto.
-    if (!values.rubrica || values.rubrica.trim().length < 10) {
-        alert("Error: La rúbrica está vacía o es demasiado corta. Por favor, escríbela antes de evaluar.");
-        setIsProcessing(false);
-        return;
-    }
-
     for (let i = 0; i < updatedGroups.length; i++) {
         const group = updatedGroups[i];
         setStudentGroups(prev => prev.map(g => g.id === group.id ? { ...g, isEvaluating: true, error: undefined } : g));
 
         try {
-            if (group.files.length === 0) {
-                throw new Error("Este grupo no tiene archivos para evaluar.");
-            }
-
             const imageUrls = await Promise.all(
               group.files.map(async (fp) => {
                 const filePath = `evaluaciones/${Date.now()}_${fp.file.name}`;
@@ -143,12 +135,6 @@ export default function LibelIA() {
                 return supabase.storage.from("imagenes").getPublicUrl(filePath).data.publicUrl;
               })
             );
-
-            // **VALIDACIÓN FRONTAL (PARTE 2)**
-            // Verificamos que las URLs se hayan generado correctamente.
-            if (!imageUrls || imageUrls.length === 0 || imageUrls.includes(null) || imageUrls.includes(undefined)) {
-                throw new Error("No se pudieron generar las URLs de las imágenes. Revisa la consola.");
-            }
 
             const response = await fetch('/api/evaluate', {
                 method: 'POST',
