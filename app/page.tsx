@@ -1,6 +1,7 @@
 // app/page.tsx
-import LibelIA from './Libel-IA';
+import EvaluatorClient from './EvaluatorClient'; // Asegúrate que EvaluatorClient.tsx esté en la carpeta app/
 
 export default function Home() {
-  return <LibelIA />;
+  // Renderiza directamente el componente que ya tiene toda la lógica
+  return <EvaluatorClient />;
 }
