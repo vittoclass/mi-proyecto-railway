@@ -3,7 +3,7 @@
 import { useRef, useState, useCallback, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Camera as CameraIcon } from "lucide-react"
+import { Camera as CameraIcon, X } from "lucide-react"
 
 interface StableCameraModalProps {
   isOpen: boolean
@@ -11,7 +11,7 @@ interface StableCameraModalProps {
   onCapture: (file: File) => void
 }
 
-export const SmartCameraModal = ({ isOpen, onClose, onCapture }: StableCameraModalProps) => {
+export default function SmartCameraModal({ isOpen, onClose, onCapture }: StableCameraModalProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [error, setError] = useState<string | null>(null)
@@ -26,6 +26,7 @@ export const SmartCameraModal = ({ isOpen, onClose, onCapture }: StableCameraMod
   }, [])
 
   const startCamera = useCallback(async () => {
+    setError(null);
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
@@ -77,7 +78,10 @@ export const SmartCameraModal = ({ isOpen, onClose, onCapture }: StableCameraMod
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-3xl">
-        <DialogHeader><DialogTitle>Capturar Evidencia</DialogTitle></DialogHeader>
+        <DialogHeader className="flex flex-row items-center justify-between">
+            <DialogTitle>Capturar Evidencia</DialogTitle>
+            <Button variant="ghost" size="icon" onClick={handleClose}><X className="h-5 w-5"/></Button>
+        </DialogHeader>
         <div className="relative bg-black rounded-lg aspect-video overflow-hidden">
           {capturedImage ? <img src={capturedImage} alt="Captura" className="w-full h-full object-contain" /> : <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-contain" />}
           <canvas ref={canvasRef} className="hidden" />
@@ -90,7 +94,7 @@ export const SmartCameraModal = ({ isOpen, onClose, onCapture }: StableCameraMod
               <Button onClick={handleAccept}>Aceptar Foto</Button>
             </>
           ) : (
-            <Button onClick={handleCapture} disabled={!!error} size="lg">
+            <Button onClick={handleCapture} disabled={!!error} size="lg" className="w-full">
               <CameraIcon className="mr-2"/> Capturar
             </Button>
           )}

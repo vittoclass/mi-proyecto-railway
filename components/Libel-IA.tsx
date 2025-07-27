@@ -17,8 +17,8 @@ import { Slider } from "@/components/ui/slider"
 import { AlertTriangle, Camera as CameraIcon, Loader2, Sparkles, FileUp, Save, Users, User, FileIcon, X, Printer, School } from "lucide-react"
 
 const SmartCameraModal = dynamic(
-  () => import('@/components/smart-camera-modal').then(mod => mod.SmartCameraModal),
-  { ssr: false, loading: () => <div className="text-center p-4">Cargando cámara...</div> }
+  () => import('@/components/smart-camera-modal'),
+  { ssr: false, loading: () => <div className="p-4 text-center">Cargando cámara...</div> }
 );
 
 const formSchema = z.object({
