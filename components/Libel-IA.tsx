@@ -1,20 +1,26 @@
 'use client'
 
-import { useState, useRef, useCallback } from "react";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { createClient } from '@supabase/supabase-js';
-import dynamic from 'next/dynamic';
+import { useState, useRef, useCallback } from "react"
+import { useForm } from "react-hook-form"
+import { z } from "zod"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { createClient } from '@supabase/supabase-js'
+import dynamic from 'next/dynamic'
 
 // --- Componentes de UI ---
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Slider } from "@/components/ui/slider";
-import { Loader2, Sparkles, FileUp, Save, Users, User, FileIcon, X, Printer, School } from "lucide-react";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Slider } from "@/components/ui/slider"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Camera as CameraIcon, Loader2, Sparkles, FileUp, Save, Users, User, FileIcon, X, Printer, School } from "lucide-react"
+
+const SmartCameraModal = dynamic(
+  () => import('@/components/smart-camera-modal').then(mod => mod.SmartCameraModal),
+  { ssr: false, loading: () => <p>Cargando cámara...</p> }
+);
 
 const formSchema = z.object({
   nombreProfesor: z.string().optional(),
@@ -32,12 +38,9 @@ interface StudentGroup {
 }
 type WorkflowStep = "upload" | "grouping" | "evaluate";
 
-export default function LibelIA() {
-  const SmartCameraModal = dynamic(
-    () => import('@/components/smart-camera-modal').then(mod => mod.SmartCameraModal),
-    { ssr: false, loading: () => <p>Cargando cámara...</p> }
-  );
+const generateStudentReport = (group: StudentGroup, config: z.infer<typeof formSchema>, logoUrl?: string) => { /* Tu lógica de reporte aquí */ }
 
+export default function LibelIA() {
   const [workflowStep, setWorkflowStep] = useState<WorkflowStep>("upload");
   const [filePreviews, setFilePreviews] = useState<FilePreview[]>([]);
   const [studentGroups, setStudentGroups] = useState<StudentGroup[]>([]);
@@ -55,8 +58,6 @@ export default function LibelIA() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  const generateStudentReport = (group: StudentGroup, config: z.infer<typeof formSchema>, logoUrl?: string) => { /* Tu lógica de reporte aquí */ };
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => { /* Tu lógica de subida de logo */ };
   const handleFiles = useCallback((files: FileList | File[]) => {
     const newFiles = Array.from(files).map(file => ({
       id: `${file.name}-${file.lastModified}-${Math.random()}`,
@@ -66,9 +67,47 @@ export default function LibelIA() {
     setFilePreviews(prev => [...prev, ...newFiles]);
     setWorkflowStep("grouping");
   }, []);
+  
   const handleCapture = (file: File) => { handleFiles([file]); };
   const removeFilePreview = (id: string) => { setFilePreviews(prev => prev.filter(f => f.id !== id)); };
-  const handleGroupingModeSelect = async (mode: "single" | "multiple") => { /* Tu lógica de agrupación */ };
+
+  const handleGroupingModeSelect = async (mode: "single" | "multiple") => {
+    setIsProcessing(true);
+    try {
+      let tempGroups: StudentGroup[] = [];
+      if (mode === 'multiple') {
+        tempGroups = [{ id: `group-${Date.now()}`, studentName: "Extrayendo...", files: filePreviews, isEvaluated: false, isEvaluating: false }];
+      } else {
+        tempGroups = filePreviews.map((fp, index) => ({ id: `group-${Date.now()}-${index}`, studentName: "Extrayendo...", files: [fp], isEvaluated: false, isEvaluating: false }));
+      }
+
+      await Promise.all(tempGroups.map(async (group) => {
+        const formData = new FormData();
+        group.files.forEach(fp => formData.append("files", fp.file));
+        const response = await fetch('/api/extract-name', { method: 'POST', body: formData });
+        if (!response.ok) throw new Error(`El servidor de extracción de nombres falló.`);
+
+        const result = await response.json();
+        if (result.success && result.suggestions.length > 0) {
+          group.studentName = result.suggestions[0];
+          if (result.suggestions.length > 1) group.nameSuggestions = result.suggestions;
+        } else {
+          group.studentName = "Estudiante (Sin nombre)";
+        }
+      }));
+      
+      setStudentGroups(tempGroups);
+      setFilePreviews([]);
+      setWorkflowStep("evaluate");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+      alert(`Error al procesar los nombres: ${errorMessage}`);
+      setWorkflowStep("grouping");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const onEvaluateAll = async (values: z.infer<typeof formSchema>) => { /* Tu lógica de evaluación */ };
 
   return (
@@ -87,11 +126,12 @@ export default function LibelIA() {
                 <div className="border-2 border-dashed rounded-lg p-6 text-center h-full flex flex-col justify-center items-center hover:border-blue-500 transition-colors">
                   <FileUp className="mx-auto h-8 w-8 text-gray-400 mb-2" />
                   <span className="text-blue-600 font-semibold">Sube uno o más archivos</span>
+                  <p className="text-xs text-gray-500">O arrástralos aquí</p>
                 </div>
               </label>
               <input id="file-upload" type="file" multiple className="hidden" onChange={(e) => e.target.files && handleFiles(Array.from(e.target.files))} />
               <Button type="button" variant="outline" className="flex-1 h-auto md:h-full text-lg" onClick={() => setIsCameraOpen(true)}>
-                <Loader2 className="mr-2 h-6 w-6 animate-spin" /> Usar Cámara
+                <CameraIcon className="mr-2 h-6 w-6" /> Usar Cámara
               </Button>
             </CardContent>
           </Card>
@@ -100,7 +140,30 @@ export default function LibelIA() {
           <Card>
             <CardHeader><CardTitle>Paso 2: Organiza los archivos</CardTitle></CardHeader>
             <CardContent>
-              {/* ... JSX para la agrupación ... */}
+              <div className="mb-6">
+                <h3 className="font-semibold mb-2">Archivos subidos ({filePreviews.length}):</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-4">
+                  {filePreviews.map(fp => (
+                    <div key={fp.id} className="relative group">
+                      {fp.previewUrl ? <img src={fp.previewUrl} alt={fp.file.name} className="aspect-square w-full rounded-md object-cover"/> : <div className="aspect-square w-full rounded-md bg-gray-100 flex items-center justify-center"><FileIcon/></div>}
+                      <p className="text-xs truncate mt-1">{fp.file.name}</p>
+                      <Button size="sm" variant="destructive" className="absolute top-1 right-1 h-6 w-6 p-0 opacity-0 group-hover:opacity-100" onClick={() => removeFilePreview(fp.id)}><X className="h-4 w-4"/></Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="text-center border-t pt-6">
+                <h3 className="font-semibold mb-4">¿Estos archivos a quién pertenecen?</h3>
+                <div className="flex flex-col md:flex-row gap-4 justify-center">
+                  <Button size="lg" onClick={() => handleGroupingModeSelect('multiple')} disabled={isProcessing}>
+                    <User className="mr-2"/> A un solo estudiante
+                  </Button>
+                  <Button size="lg" onClick={() => handleGroupingModeSelect('single')} disabled={isProcessing}>
+                    <Users className="mr-2"/> A varios estudiantes (uno por archivo)
+                  </Button>
+                </div>
+                {isProcessing && <p className="mt-4 text-blue-600 animate-pulse">Organizando y extrayendo nombres...</p>}
+              </div>
             </CardContent>
           </Card>
         )}
