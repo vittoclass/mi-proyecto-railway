@@ -17,8 +17,8 @@ import { Slider } from "@/components/ui/slider"
 import { AlertTriangle, Camera as CameraIcon, Loader2, Sparkles, FileUp, Save, Users, User, FileIcon, X, Printer, School } from "lucide-react"
 
 const SmartCameraModal = dynamic(
-  () => import('@/components/smart-camera-modal'),
-  { ssr: false, loading: () => <div className="p-4 text-center">Cargando cámara...</div> }
+  () => import('@/components/smart-camera-modal').then(mod => mod.SmartCameraModal),
+  { ssr: false, loading: () => <div className="text-center p-4">Cargando cámara...</div> }
 );
 
 const formSchema = z.object({
@@ -132,14 +132,20 @@ export default function LibelIA() {
               })
             );
 
+            const payload = {
+                imageUrls,
+                rubrica: values.rubrica,
+                flexibilidad: values.flexibilidad,
+            };
+
+            // --- PUNTO DE INSPECCIÓN ---
+            console.log(`Enviando payload para ${group.studentName}:`, JSON.stringify(payload, null, 2));
+            // -----------------------------
+
             const response = await fetch('/api/evaluate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    imageUrls,
-                    rubrica: values.rubrica,
-                    flexibilidad: values.flexibilidad,
-                }),
+                body: JSON.stringify(payload),
             });
             const result = await response.json();
             if (!result.success) throw new Error(result.error);
