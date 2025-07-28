@@ -1,4 +1,4 @@
-// hooks/useEvaluator.ts
+// app/useEvaluator.ts
 'use client'
 
 import { useState, useCallback } from "react";
@@ -15,22 +15,27 @@ export const useEvaluator = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<EvaluationResult | null>(null);
 
-  const evaluate = useCallback(async (fileUrl: string, rubrica: string): Promise<EvaluationResult> => {
+  // El primer parámetro aquí debe ser 'fileUrls' en plural
+  const evaluate = useCallback(async (fileUrls: string[], rubrica: string): Promise<EvaluationResult> => {
     setIsLoading(true);
     setResult(null);
 
     try {
       const response = await fetch('/api/evaluate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileUrl, rubrica }),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        // LA CORRECCIÓN ESTÁ AQUÍ: debe ser 'fileUrls' en plural para que coincida con el backend
+        body: JSON.stringify({ fileUrls, rubrica }),
       });
 
       const data: EvaluationResult = await response.json();
+
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Ocurrió un error en la evaluación.");
       }
-
+      
       setResult(data);
       return data;
 
