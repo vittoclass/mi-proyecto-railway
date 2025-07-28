@@ -1,3 +1,4 @@
+// app/api/evaluate/route.ts
 import { type NextRequest, NextResponse } from "next/server";
 
 async function callOpenAIVisionAPI(payload: any) {
@@ -19,17 +20,23 @@ async function callOpenAIVisionAPI(payload: any) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { fileUrl, rubrica } = await request.json();
+    const { fileUrls, rubrica } = await request.json();
 
-    if (!fileUrl || !rubrica) {
-      return NextResponse.json({ success: false, error: "Faltan datos en la petición (fileUrl o rubrica)." }, { status: 400 });
+    if (!fileUrls || !Array.isArray(fileUrls) || fileUrls.length === 0 || !rubrica) {
+      return NextResponse.json({ success: false, error: "Faltan datos en la petición (se necesita un array 'fileUrls' y una 'rubrica')." }, { status: 400 });
     }
 
-    const prompt = `Evalúa la imagen en la URL: ${fileUrl}. Rúbrica: """${rubrica}""". Responde en JSON: {"retroalimentacion": "...", "puntaje": "...", "nota": X.X}`;
+    const prompt = `Evalúa el siguiente conjunto de imágenes de un trabajo escrito. Rúbrica: """${rubrica}""". Responde en un único JSON con esta estructura: {"retroalimentacion": "...", "puntaje": "...", "nota": X.X}`;
+
+    // Construir el contenido del mensaje con el prompt y múltiples imágenes
+    const messageContent: any[] = [{ type: "text", text: prompt }];
+    fileUrls.forEach(url => {
+      messageContent.push({ type: "image_url", image_url: { url } });
+    });
 
     const data = await callOpenAIVisionAPI({
       model: "gpt-4o",
-      messages: [{ role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: fileUrl } }] }],
+      messages: [{ role: "user", content: messageContent }],
       response_format: { type: "json_object" },
       max_tokens: 1500,
     });

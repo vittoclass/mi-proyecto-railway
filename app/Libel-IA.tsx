@@ -2,15 +2,21 @@
 'use client';
 
 import { useState } from 'react';
-import { useEvaluator } from '@/hooks/useEvaluator'; // <-- 1. Importa el nuevo hook
-import SmartCameraModal from '../components/smart-camera-modal'; // <-- Ajusta la ruta si es necesario
+import { useEvaluator } from '@/hooks/useEvaluator';
+import SmartCameraModal from '@/components/smart-camera-modal'; // Asegúrate que esta ruta sea correcta
 
 export default function LibelIA() {
+  // ==================================================================
+  // INICIO DE LA ZONA DE HOOKS
+  // Todos los hooks deben estar aquí, al principio y sin condiciones.
+  // ==================================================================
   const [fileUrl, setFileUrl] = useState<string>('');
   const [rubrica, setRubrica] = useState<string>('');
-  
-  // 2. Usa el hook para obtener la lógica y el estado
   const { evaluate, isLoading, result } = useEvaluator();
+  // ==================================================================
+  // FIN DE LA ZONA DE HOOKS
+  // ==================================================================
+
 
   const handleEvaluate = () => {
     if (!fileUrl) {
@@ -21,7 +27,6 @@ export default function LibelIA() {
       alert('Por favor, ingresa una rúbrica de evaluación.');
       return;
     }
-    // 3. Llama a la función 'evaluate' del hook
     evaluate(fileUrl, rubrica);
   };
 
@@ -44,9 +49,13 @@ export default function LibelIA() {
       </div>
 
       {/* Módulo de cámara y subida */}
+      {/* OJO: La ruta de importación de SmartCameraModal debe ser correcta. 
+          Aquí asumimos que está en la carpeta 'components' en la raíz. */}
       <SmartCameraModal onCapture={setFileUrl} />
 
-      {/* Resultado de evaluación (ahora viene del hook) */}
+      {/* Resultado de evaluación */}
+      {isLoading && <p className="text-center mt-6">🔄 Evaluando con IA...</p>}
+      
       {result && (
         <div
           className={`mt-6 p-4 rounded-lg border-l-4 ${
@@ -56,7 +65,15 @@ export default function LibelIA() {
           }`}
         >
           <h3 className="font-bold text-lg">{result.success ? '✅ Éxito' : '❌ Error'}</h3>
-          <p className="mt-1">{result.feedback || result.error}</p>
+          {result.success ? (
+            <div>
+              <p className="mt-2"><strong>Retroalimentación:</strong> {result.retroalimentacion}</p>
+              <p className="mt-1"><strong>Puntaje:</strong> {result.puntaje}</p>
+              <p className="mt-1"><strong>Nota:</strong> {result.nota}</p>
+            </div>
+          ) : (
+            <p className="mt-1">{result.error}</p>
+          )}
         </div>
       )}
 
@@ -64,14 +81,14 @@ export default function LibelIA() {
       <div className="mt-6">
         <button
           onClick={handleEvaluate}
-          disabled={isLoading || !fileUrl || !rubrica.trim()} // <-- 4. Usa el estado 'isLoading' del hook
+          disabled={isLoading || !fileUrl || !rubrica.trim()}
           className={`w-full py-3 px-6 rounded-lg font-medium text-white transition
             ${isLoading
               ? 'bg-gray-400 cursor-not-allowed'
               : 'bg-blue-600 hover:bg-blue-700'
             }`}
         >
-          {isLoading ? '🔄 Evaluando con IA...' : '⚡ Evaluar con IA'}
+          {isLoading ? 'Evaluando...' : '⚡ Evaluar con IA'}
         </button>
       </div>
     </div>
