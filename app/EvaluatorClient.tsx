@@ -1,39 +1,41 @@
 'use client'
 
-import { useState, useRef, useCallback, ChangeEvent, useEffect } from "react"
+import { useState, useRef, ChangeEvent, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import dynamic from 'next/dynamic'
 
-// --- Componentes de UI (shadcn/ui) ---
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+// --- Componentes de UI ---
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Loader2, Sparkles, FileUp, Camera, Users, User, FileText, X, Printer, PlusCircle } from "lucide-react"
+import { Loader2, Sparkles, FileUp, Camera, Users, FileText, X, Printer } from "lucide-react"
 
 // --- Hook de Evaluación ---
 import { useEvaluator } from "./useEvaluator"
 
-// --- Importación Dinámica para la Cámara (CON RUTA RELATIVA CORREGIDA) ---
-const SmartCameraModal = dynamic(
-  () => import('../components/smart-camera-modal'), // <--- ESTA LÍNEA FUE CAMBIADA
-  { 
+// --- Importación Dinámica para la Cámara ---
+const SmartCameraModal = dynamic(() => import('../components/smart-camera-modal'), { 
     ssr: false,
     loading: () => <div className="flex items-center gap-2"><Loader2 className="animate-spin h-4 w-4" />Cargando cámara...</div> 
-  }
-)
+})
 
-// --- Esquema del Formulario y Tipos ---
+// --- Esquema y Tipos ---
 const formSchema = z.object({
-  rubrica: z.string().min(10, "La rúbrica es necesaria para una evaluación precisa."),
+  rubrica: z.string().min(10, "La rúbrica es necesaria."),
 });
 
-interface FilePreview { id: string; file: File; previewUrl: string | null; }
+interface FilePreview {
+  id: string;
+  file: File;
+  previewUrl: string; // Para mostrar en la UI
+  dataUrl: string;    // Para enviar a la IA
+}
 interface StudentGroup {
   id: string; studentName: string; files: FilePreview[];
   retroalimentacion?: string; puntaje?: string; nota?: number;
@@ -42,7 +44,7 @@ interface StudentGroup {
 
 // --- COMPONENTE PRINCIPAL ---
 export default function EvaluatorClient() {
-  // --- Estados del Componente ---
+  // --- Estados ---
   const [evaluationMode, setEvaluationMode] = useState<'single' | 'multiple'>('single');
   const [numStudents, setNumStudents] = useState(1);
   const [unassignedFiles, setUnassignedFiles] = useState<FilePreview[]>([]);
@@ -56,39 +58,59 @@ export default function EvaluatorClient() {
   });
   const { evaluate, isLoading: isEvaluationLoading } = useEvaluator();
 
-  // --- Efecto para crear grupos de estudiantes automáticamente ---
+  // --- Efecto para crear grupos de estudiantes ---
   useEffect(() => {
     const count = evaluationMode === 'single' ? 1 : numStudents;
     const newGroups: StudentGroup[] = Array.from({ length: count }, (_, i) => ({
         id: `student-${Date.now()}-${i}`,
         studentName: count > 1 ? `Alumno ${i + 1}` : 'Alumno',
-        files: [],
-        isEvaluated: false,
-        isEvaluating: false,
+        files: [], isEvaluated: false, isEvaluating: false,
     }));
     setStudentGroups(newGroups);
     setUnassignedFiles([]);
   }, [evaluationMode, numStudents]);
 
-  // --- Lógica de Manejo de Archivos y Grupos ---
+  // --- LÓGICA DE MANEJO DE ARCHIVOS (MODIFICADA) ---
+  const processFiles = (files: File[]) => {
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string;
+        const previewUrl = URL.createObjectURL(file);
+        
+        const newFilePreview: FilePreview = {
+          id: `${file.name}-${file.lastModified}-${Math.random()}`,
+          file,
+          previewUrl,
+          dataUrl,
+        };
+        setUnassignedFiles(prev => [...prev, newFilePreview]);
+      };
+      reader.readAsDataURL(file); // Convierte el archivo a Base64
+    });
+  };
+
   const handleFilesSelected = (files: FileList | null) => {
     if (!files) return;
-    const newFilePreviews = Array.from(files).map(file => ({
-      id: `${file.name}-${file.lastModified}-${Math.random()}`,
-      file,
-      previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : null
-    }));
-    setUnassignedFiles(prev => [...prev, ...newFilePreviews]);
+    processFiles(Array.from(files));
   };
+  
+  const handleCapture = (dataUrl: string) => {
+    fetch(dataUrl).then(res => res.blob()).then(blob => {
+      const file = new File([blob], `captura-${Date.now()}.png`, { type: 'image/png' });
+      processFiles([file]); // Usa la nueva función de procesamiento
+    });
+    setIsCameraOpen(false);
+  };
+  
+  // --- Lógica de Agrupación (sin cambios) ---
   const updateStudentName = (groupId: string, newName: string) => {
     setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, studentName: newName } : g));
   };
   const assignFileToGroup = (fileId: string, groupId: string) => {
     const fileToMove = unassignedFiles.find(f => f.id === fileId);
     if (!fileToMove) return;
-    setStudentGroups(groups => groups.map(g => 
-      g.id === groupId ? { ...g, files: [...g.files, fileToMove] } : g
-    ));
+    setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, files: [...g.files, fileToMove] } : g));
     setUnassignedFiles(files => files.filter(f => f.id !== fileId));
   };
   const removeFileFromGroup = (fileId: string, groupId: string) => {
@@ -105,7 +127,7 @@ export default function EvaluatorClient() {
     }
   };
 
-  // --- Lógica de Evaluación e Informes ---
+  // --- LÓGICA DE EVALUACIÓN (MODIFICADA) ---
   const onEvaluateAll = async () => {
     const rubrica = form.getValues("rubrica");
     if (!rubrica) {
@@ -113,59 +135,55 @@ export default function EvaluatorClient() {
       return;
     }
     setStudentGroups(groups => groups.map(g => g.files.length > 0 ? { ...g, isEvaluating: true, isEvaluated: false, error: undefined } : g));
+
     for (const group of studentGroups) {
       if (group.files.length === 0) continue;
-      const fileUrls = group.files.map(f => f.previewUrl).filter(Boolean) as string[];
+      
+      // Usa dataUrl en lugar de previewUrl para enviar a la API
+      const fileUrls = group.files.map(f => f.dataUrl);
       if (fileUrls.length === 0) continue;
+
       const result = await evaluate(fileUrls, rubrica);
+
       setStudentGroups(groups => groups.map(g => {
         if (g.id === group.id) {
-          return {
-            ...g, isEvaluating: false, isEvaluated: true,
-            retroalimentacion: result.retroalimentacion, puntaje: result.puntaje,
-            nota: result.nota, error: result.error,
-          };
+          return { ...g, isEvaluating: false, isEvaluated: true, ...result };
         }
         return g;
       }));
     }
   };
+  
+  // --- Lógica de Informes (sin cambios) ---
   const generateReport = (group: StudentGroup) => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return alert("Por favor, permite las ventanas emergentes.");
     const reportHTML = `
       <html>
-        <head><title>Informe de Evaluación - ${group.studentName}</title><script src="https://cdn.tailwindcss.com"></script></head>
-        <body class="font-sans p-8 bg-gray-50"><div class="max-w-4xl mx-auto bg-white p-10 rounded-lg shadow-lg">
-            <h1 class="text-3xl font-bold text-gray-800 mb-2">Informe de Evaluación</h1>
+        <head><title>Informe - ${group.studentName}</title><script src="https://cdn.tailwindcss.com"></script></head>
+        <body class="p-8 bg-gray-50"><div class="max-w-4xl mx-auto bg-white p-10 rounded-lg shadow-lg">
+            <h1 class="text-3xl font-bold mb-2">Informe de Evaluación</h1>
             <h2 class="text-xl text-gray-600 mb-8 border-b pb-4">Alumno: ${group.studentName}</h2>
             <div class="space-y-6">
-              <div><h3 class="font-semibold text-lg text-gray-700">Nota Final</h3><p class="text-4xl font-bold text-blue-600 mt-1">${group.nota || 'N/A'}</p></div> <hr />
-              <div><h3 class="font-semibold text-lg text-gray-700">Puntaje Detallado</h3><p class="text-gray-800 mt-1">${group.puntaje || 'N/A'}</p></div> <hr />
-              <div><h3 class="font-semibold text-lg text-gray-700">Retroalimentación Constructiva de la IA</h3><p class="bg-blue-50 text-blue-900 p-4 rounded-md mt-1 whitespace-pre-wrap">${group.retroalimentacion || 'Sin retroalimentación.'}</p></div>
+              <div><h3 class="font-semibold text-lg">Nota Final</h3><p class="text-4xl font-bold text-blue-600 mt-1">${group.nota || 'N/A'}</p></div><hr/>
+              <div><h3 class="font-semibold text-lg">Puntaje</h3><p>${group.puntaje || 'N/A'}</p></div><hr/>
+              <div><h3 class="font-semibold text-lg">Retroalimentación IA</h3><p class="bg-blue-50 p-4 rounded-md mt-1 whitespace-pre-wrap">${group.retroalimentacion || 'N/A'}</p></div>
             </div>
-        </div></body>
-      </html>`;
+        </div></body></html>`;
     printWindow.document.write(reportHTML);
     printWindow.document.close();
     printWindow.print();
   };
-  const handleCapture = (dataUrl: string) => {
-    fetch(dataUrl).then(res => res.blob()).then(blob => {
-      const file = new File([blob], `captura-${Date.now()}.png`, { type: 'image/png' });
-      const dt = new DataTransfer(); dt.items.add(file);
-      handleFilesSelected(dt.files);
-    });
-    setIsCameraOpen(false);
-  };
 
+  // --- Renderizado del Componente (JSX) ---
   return (
     <>
       {isCameraOpen && <SmartCameraModal onCapture={handleCapture} />}
-      
       <main className="p-4 md:p-8 max-w-6xl mx-auto font-sans space-y-8">
         <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2"><Sparkles className="text-blue-500" />Paso 1: Configuración de la Evaluación</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Sparkles className="text-blue-500" />Paso 1: Configuración</CardTitle>
+          </CardHeader>
           <CardContent className="space-y-6">
             <div>
                 <label className="font-bold text-sm">¿Para cuántos es la evaluación?</label>
@@ -203,22 +221,21 @@ export default function EvaluatorClient() {
             </div>
           </CardContent>
         </Card>
-        
-        {/* El resto del JSX no tiene cambios */}
+
         <Card>
             <CardHeader><CardTitle className="flex items-center gap-2"><Users className="text-green-500" />Paso 2: Agrupación y Evaluación</CardTitle></CardHeader>
             <CardContent className="space-y-6">
               {unassignedFiles.length > 0 && (<div>
                   <h3 className="font-bold mb-2">Archivos Pendientes de Asignar</h3>
                   <div className="flex flex-wrap gap-4 p-4 border rounded-lg bg-gray-50">
-                    {unassignedFiles.map(file => (<div key={file.id} className="w-24 h-24">{file.previewUrl ? <img src={file.previewUrl} alt={file.file.name} className="w-full h-full object-cover rounded-md" /> : <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 rounded-md"><FileText className="h-8 w-8 text-gray-500" /><span className="text-xs text-center truncate w-full px-1">{file.file.name}</span></div>}</div>))}
+                    {unassignedFiles.map(file => (<div key={file.id} className="w-24 h-24"><img src={file.previewUrl} alt={file.file.name} className="w-full h-full object-cover rounded-md" /></div>))}
                   </div>
               </div>)}
               <div className="space-y-4">
                 {studentGroups.map(group => (<div key={group.id} className="border p-4 rounded-lg">
                     <Input className="text-lg font-bold border-0 shadow-none focus-visible:ring-0 p-1 mb-2" value={group.studentName} onChange={(e) => updateStudentName(group.id, e.target.value)}/>
                     <div className="flex flex-wrap gap-2 min-h-[50px] bg-muted/50 p-2 rounded-md">
-                      {group.files.map(file => (<div key={file.id} className="relative w-20 h-20">{file.previewUrl ? <img src={file.previewUrl} alt={file.file.name} className="w-full h-full object-cover rounded-md" /> : <div className="w-full h-full flex items-center justify-center bg-gray-200 rounded-md"><FileText/></div>}<button onClick={() => removeFileFromGroup(file.id, group.id)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5"><X className="h-3 w-3"/></button></div>))}
+                      {group.files.map(file => (<div key={file.id} className="relative w-20 h-20"><img src={file.previewUrl} alt={file.file.name} className="w-full h-full object-cover rounded-md" /><button onClick={() => removeFileFromGroup(file.id, group.id)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5"><X className="h-3 w-3"/></button></div>))}
                       {unassignedFiles.length > 0 && (<div className="flex items-center justify-center w-20 h-20 border-2 border-dashed rounded-md">
                            <select onChange={(e) => { if(e.target.value) assignFileToGroup(e.target.value, group.id); e.target.value = ""; }} className="text-sm bg-transparent">
                               <option value="">Asignar</option>
