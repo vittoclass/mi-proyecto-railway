@@ -1,53 +1,53 @@
-// app/useEvaluator.ts
 'use client'
 
-import { useState, useCallback } from "react";
+import { useCallback } from "react";
 
+// La interfaz para el resultado que esperamos al final
 export interface EvaluationResult {
   success: boolean;
-  retroalimentacion?: string;
+  retroalimentacion?: any;
   puntaje?: string;
   nota?: number;
   error?: string;
 }
 
 export const useEvaluator = () => {
-  const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<EvaluationResult | null>(null);
-
-  // El primer parámetro aquí debe ser 'fileUrls' en plural
-  const evaluate = useCallback(async (fileUrls: string[], rubrica: string): Promise<EvaluationResult> => {
-    setIsLoading(true);
-    setResult(null);
-
+  // Inicia la tarea de evaluación en el backend
+  const startEvaluation = useCallback(async (payload: any): Promise<{ jobId?: string; error?: string }> => {
     try {
-      const response = await fetch('/api/evaluate', {
+      const response = await fetch('/api/evaluate/start', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        // LA CORRECCIÓN ESTÁ AQUÍ: debe ser 'fileUrls' en plural para que coincida con el backend
-        body: JSON.stringify({ fileUrls, rubrica }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
 
-      const data: EvaluationResult = await response.json();
-
+      const data = await response.json();
       if (!response.ok || !data.success) {
-        throw new Error(data.error || "Ocurrió un error en la evaluación.");
+        throw new Error(data.error || "Error al iniciar la tarea de evaluación.");
       }
-      
-      setResult(data);
-      return data;
-
+      return { jobId: data.jobId };
     } catch (err: any) {
-      console.error("Error durante la evaluación:", err);
-      const errorResult = { success: false, error: err.message || "Ocurrió un error inesperado." };
-      setResult(errorResult);
-      return errorResult;
-    } finally {
-      setIsLoading(false);
+      console.error("Error en startEvaluation:", err);
+      return { error: err.message };
     }
   }, []);
 
-  return { isLoading, result, evaluate };
+  // Consulta el estado de una tarea que ya está en proceso
+  const checkEvaluationStatus = useCallback(async (jobId: string): Promise<any> => {
+    try {
+      const response = await fetch(`/api/evaluate/status?jobId=${jobId}`);
+      if (!response.ok) {
+        throw new Error("Error del servidor al consultar el estado de la tarea.");
+      }
+      return await response.json();
+    } catch (err: any) {
+      console.error("Error en checkEvaluationStatus:", err);
+      return { status: 'failed', error: err.message };
+    }
+  }, []);
+
+  return {
+    startEvaluation,
+    checkEvaluationStatus,
+  };
 };
