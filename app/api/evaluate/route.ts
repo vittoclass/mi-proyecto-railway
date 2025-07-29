@@ -1,79 +1,99 @@
-// app/api/evaluate/route.ts
 import { type NextRequest, NextResponse } from "next/server";
 
+// La plantilla del prompt no cambia
 const systemPromptTemplate = `
-Eres un asistente experto en evaluación académica y un pedagogo excepcional, con la capacidad de analizar y ofrecer retroalimentación profunda en cualquier materia.
+Eres un sistema experto de análisis de evaluaciones. Tu función es desglosar el trabajo de un estudiante con precisión quirúrgica y rellenar un informe estructurado. Eres objetivo, detallado y te basas 100% en la evidencia visible en las imágenes.
 
-Tu tarea es evaluar el trabajo de un estudiante presentado en una o más imágenes, basándote en una rúbrica específica y un nivel de flexibilidad definido por el profesor.
+**INPUTS DEL PROFESOR:**
+1.  **RÚBRICA (Criterios cualitativos):** """{rubrica}"""
+2.  **PAUTA DE CORRECCIÓN (Respuestas y puntajes correctos):** """{pauta_correccion}"""
 
-**RÚBRICA DEL PROFESOR:**
-"""
-{rubrica}
-"""
+**ALGORITMO DE CORRECCIÓN (SIGUE ESTOS PASOS ESTRICTAMENTE):**
 
-**NIVEL DE FLEXIBILIDAD (1=Estricto, 5=Flexible):** {flexibilidad}
-Un nivel 1 significa una adherencia estricta a la rúbrica. Un nivel 5 te permite recompensar generosamente la originalidad, el esfuerzo evidente o soluciones creativas que, aunque se desvíen de la rúbrica, demuestran una comprensión superior del tema. Ajusta la nota final hacia arriba según este criterio de flexibilidad.
+**PASO 1: ANÁLISIS ÍTEM POR ÍTEM.**
+* Recorre CADA pregunta de la prueba.
+* Para ítems de selección (alternativas, V/F): Compara la respuesta del estudiante (lo que marcó) con la PAUTA. Anota si es 'Correcta' o 'Incorrecta' y cuál era la respuesta correcta.
+* Para ítems de desarrollo: Lee la respuesta del estudiante. Evalúala contra CADA criterio de la RÚBRICA y asigna un puntaje parcial para esa pregunta.
 
-**INSTRUCCIONES DE ANÁLISIS (DEBES SEGUIR ESTA ESTRUCTURA):**
-1.  **Descripción Objetiva:** Describe brevemente lo que ves en el trabajo del estudiante.
-2.  **Análisis de Fortalezas:** Elogia los puntos fuertes del trabajo, citando ejemplos específicos.
-3.  **Análisis de Oportunidades de Mejora:** Identifica áreas de mejora de forma constructiva, explicando el porqué.
-4.  **Conexión Conceptual Profunda:** Analiza si el estudiante demuestra una comprensión profunda de los conceptos.
+**PASO 2: ANÁLISIS DE HABILIDADES CON EVIDENCIA.**
+* Revisa los criterios de la RÚBRICA (ej: 'Comprensión del texto', 'Desarrollo de ideas'). Estos son las 'habilidades' a evaluar.
+* Para cada habilidad, escribe una evaluación concisa de si fue 'Lograda', 'Parcialmente Lograda' o 'Por Mejorar'.
+* **OBLIGATORIO:** Justifica tu evaluación para cada habilidad citando una frase corta textual del trabajo del estudiante que sirva como evidencia directa.
 
-**FORMATO DE RESPUESTA OBLIGATORIO:**
-Tu respuesta final DEBE ser únicamente un objeto JSON válido, con la siguiente estructura:
+**PASO 3: CÁLCULO DE PUNTAJE Y NOTA.**
+* Suma los puntajes de todos los ítems para obtener un Puntaje Total.
+* Convierte el Puntaje Total a una Nota Final (escala 1.0 a 7.0, 60% exigencia para el 4.0).
+
+**PASO 4: CONSTRUCCIÓN DEL INFORME JSON.**
+* Rellena el siguiente objeto JSON. No añadas texto fuera de la estructura.
+
+**FORMATO DE RESPUESTA OBLIGATORIO (JSON VÁLIDO):**
 {
-  "retroalimentacion": "Un texto detallado que contenga los 4 puntos del análisis.",
-  "puntaje": "Una descripción cualitativa del rendimiento (Ej: 'Excelente', 'Bueno con detalles a mejorar', 'Suficiente').",
-  "nota": Un número del 1.0 al 7.0 (formato chileno) que refleje la calidad general del trabajo, ajustado por el nivel de flexibilidad.
+  "nota": "La nota final calculada, como un número (ej: 6.5)",
+  "puntaje": "El puntaje total en formato texto (ej: '45/50 puntos')",
+  "retroalimentacion": {
+    "correccion_detallada": [
+      { "seccion": "I. Selección Múltiple", "detalle": "Pregunta 1: Correcta. Pregunta 2: Incorrecta (Respuesta correcta: C)." },
+      { "seccion": "II. Verdadero y Falso", "detalle": "Pregunta 1: Incorrecta (Faltó justificación). Pregunta 2: Correcta." },
+      { "seccion": "III. Desarrollo Pregunta 1", "detalle": "Puntaje: 8/10. Buen análisis del simbolismo..." }
+    ],
+    "evaluacion_habilidades": [
+      { "habilidad": "Comprensión de Texto", "evaluacion": "Lograda", "evidencia": "El estudiante demuestra esto al escribir: '...'" },
+      { "habilidad": "Argumentación", "evaluacion": "Por Mejorar", "evidencia": "El argumento es débil en la frase: 'pienso que esto es malo'." }
+    ],
+    "resumen_general": {
+        "fortalezas": "Un resumen en 2-3 puntos de los aciertos más notables, basado en la evidencia.",
+        "areas_mejora": "Un resumen en 2-3 puntos de las áreas más importantes a mejorar, basado en la evidencia."
+    }
+  }
 }
 `;
 
 async function callOpenAIVisionAPI(payload: any) {
-  // ... (sin cambios aquí)
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OPENAI_API_KEY no está configurada en el servidor.");
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) {
-    const errorBody = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(`OpenAI API error: ${errorBody.error?.message || response.statusText}`);
-  }
+  if (!apiKey) throw new Error("OPENAI_API_KEY no configurada.");
+  const response = await fetch("https://api.openai.com/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` }, body: JSON.stringify(payload), });
+  if (!response.ok) { const errorBody = await response.json().catch(() => ({ message: response.statusText })); throw new Error(`OpenAI API error: ${errorBody.error?.message || response.statusText}`); }
   return response.json();
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { fileUrls, rubrica, flexibilidad } = await request.json();
-
-    if (!fileUrls || !Array.isArray(fileUrls) || fileUrls.length === 0 || !rubrica) {
-      return NextResponse.json({ success: false, error: "Faltan datos en la petición." }, { status: 400 });
-    }
-
+    const { fileUrls, rubrica, pauta, flexibilidad, tipoEvaluacion } = await request.json();
+    if (!fileUrls || !Array.isArray(fileUrls) || fileUrls.length === 0 || !rubrica) { return NextResponse.json({ success: false, error: "Faltan datos en la petición." }, { status: 400 }); }
+    
     let prompt = systemPromptTemplate.replace('{rubrica}', rubrica);
-    prompt = prompt.replace('{flexibilidad}', flexibilidad?.toString() || '3'); // '3' como valor por defecto
+    prompt = prompt.replace('{pauta_correccion}', pauta || 'No se proporcionó una pauta de corrección específica.');
+    prompt = prompt.replace('{flexibilidad}', flexibilidad?.toString() || '3');
 
     const messageContent: any[] = [{ type: "text", text: prompt }];
-    fileUrls.forEach(url => {
-      messageContent.push({ type: "image_url", image_url: { url } });
-    });
+    fileUrls.forEach(url => { messageContent.push({ type: "image_url", image_url: { url } }); });
 
     const data = await callOpenAIVisionAPI({
       model: "gpt-4o",
       messages: [{ role: "user", content: messageContent }],
       response_format: { type: "json_object" },
-      max_tokens: 2000,
+      temperature: 0.5,
+      max_tokens: 4000,
     });
 
     const content = data?.choices?.[0]?.message?.content;
-    if (!content) throw new Error("La IA devolvió una respuesta vacía.");
+    if (!content) {
+        throw new Error("La IA devolvió una respuesta completamente vacía.");
+    }
 
-    const iaResult = JSON.parse(content);
+    // ===== INICIO DE LA CORRECCIÓN ROBUSTA =====
+    let iaResult;
+    try {
+        iaResult = JSON.parse(content);
+    } catch (e) {
+        // Si JSON.parse falla, significa que la IA no devolvió un JSON válido.
+        console.error("Error al parsear la respuesta de la IA. Contenido recibido:", content);
+        throw new Error(`La IA devolvió una respuesta en un formato no válido. Contenido: "${content.slice(0, 100)}..."`);
+    }
+    // ===== FIN DE LA CORRECCIÓN ROBUSTA =====
+
     return NextResponse.json({ success: true, ...iaResult });
-
   } catch (error) {
     console.error("Error en /api/evaluate:", error);
     return NextResponse.json({ success: false, error: `La IA de visión falló. Detalle: ${error instanceof Error ? error.message : "Error desconocido"}` }, { status: 500 });
