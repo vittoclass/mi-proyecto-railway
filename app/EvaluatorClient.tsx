@@ -22,34 +22,15 @@ import { Calendar } from "@/components/ui/calendar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Loader2, Sparkles, FileUp, Camera, Users, FileText, X, Printer, CalendarIcon, ImageUp, ClipboardList, Upload } from "lucide-react"
+import { Loader2, Sparkles, FileUp, Camera, Users, FileText, X, Printer, CalendarIcon, ImageUp, ClipboardList } from "lucide-react"
 import { cn } from "@/lib/utils"
-
-// --- Componentes y Hooks Personalizados ---
 import { useEvaluator } from "./useEvaluator"
 import { NotesDashboard } from "../components/NotesDashboard"
-
-// --- Importación Dinámica ---
 const SmartCameraModal = dynamic(() => import('../components/smart-camera-modal'), { ssr: false, loading: () => <p>Cargando...</p> })
-
-const Label = React.forwardRef<HTMLLabelElement, React.ComponentPropsWithoutRef<'label'>>(({ className, ...props }, ref) => (
-    <label ref={ref} className={cn("text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70", className)} {...props} />
-));
+const Label = React.forwardRef<HTMLLabelElement, React.ComponentPropsWithoutRef<'label'>>(({ className, ...props }, ref) => ( <label ref={ref} className={cn("text-sm font-medium", className)} {...props} /> ));
 Label.displayName = "Label"
 
-// --- Tipos y Esquemas ---
-const formSchema = z.object({
-    tipoEvaluacion: z.string().default('prueba'),
-    rubrica: z.string().min(10, "La rúbrica es necesaria."),
-    pauta: z.string().optional(),
-    flexibilidad: z.array(z.number()).default([3]),
-    nombreProfesor: z.string().optional(),
-    departamento: z.string().optional(),
-    curso: z.string().optional(),
-    fechaEvaluacion: z.date().optional(),
-});
-
-interface FilePreview { id: string; file: File; previewUrl: string; dataUrl: string; }
+// --- Tipos para la respuesta de la IA ---
 interface CorreccionDetallada { seccion: string; detalle: string; }
 interface EvaluacionHabilidad { habilidad: string; evaluacion: string; evidencia: string; }
 interface RetroalimentacionEstructurada {
@@ -57,38 +38,24 @@ interface RetroalimentacionEstructurada {
   evaluacion_habilidades: EvaluacionHabilidad[];
   resumen_general: { fortalezas: string; areas_mejora: string; };
 }
-interface StudentGroup {
-    id: string; studentName: string; files: FilePreview[];
-    retroalimentacion?: RetroalimentacionEstructurada;
-    puntaje?: string;
-    nota?: number | string;
-    decimasAdicionales: number;
-    isEvaluated: boolean; isEvaluating: boolean; error?: string;
-}
+const formSchema = z.object({ tipoEvaluacion: z.string().default('prueba'), rubrica: z.string().min(10, "La rúbrica es necesaria."), pauta: z.string().optional(), flexibilidad: z.array(z.number()).default([3]), nombreProfesor: z.string().optional(), departamento: z.string().optional(), curso: z.string().optional(), fechaEvaluacion: z.date().optional(), });
+interface FilePreview { id: string; file: File; previewUrl: string; dataUrl: string; }
+interface StudentGroup { id: string; studentName: string; files: FilePreview[]; retroalimentacion?: RetroalimentacionEstructurada; puntaje?: string; nota?: number | string; decimasAdicionales: number; isEvaluated: boolean; isEvaluating: boolean; error?: string; }
 
 // --- COMPONENTE PRINCIPAL ---
 export default function EvaluatorClient() {
-    // --- Estados ---
     const [unassignedFiles, setUnassignedFiles] = useState<FilePreview[]>([]);
     const [studentGroups, setStudentGroups] = useState<StudentGroup[]>([]);
     const [isCameraOpen, setIsCameraOpen] = useState(false);
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
     const [evaluationMode, setEvaluationMode] = useState<'single' | 'multiple'>('single');
     const [numStudents, setNumStudents] = useState(1);
-    const [isExtractingRubrica, setIsExtractingRubrica] = useState(false);
-    const [isExtractingPauta, setIsExtractingPauta] = useState(false);
-
     const fileInputRef = useRef<HTMLInputElement>(null);
     const logoInputRef = useRef<HTMLInputElement>(null);
-    const rubricaFileRef = useRef<HTMLInputElement>(null);
-    const pautaFileRef = useRef<HTMLInputElement>(null);
     const pollingIntervals = useRef<Map<string, NodeJS.Timeout>>(new Map());
-    
-    // --- Hooks ---
     const form = useForm<z.infer<typeof formSchema>>({ resolver: zodResolver(formSchema), defaultValues: { tipoEvaluacion: 'prueba', rubrica: "", pauta: "", flexibilidad: [3], nombreProfesor: "", departamento: "", curso: "", fechaEvaluacion: new Date() }, });
     const { startEvaluation, checkEvaluationStatus } = useEvaluator();
 
-    // --- Lógica del Componente ---
     useEffect(() => { return () => { pollingIntervals.current.forEach(intervalId => clearInterval(intervalId)); }; }, []);
     useEffect(() => { const count = evaluationMode === 'single' ? 1 : numStudents; const newGroups: StudentGroup[] = Array.from({ length: count }, (_, i) => ({ id: `student-${Date.now()}-${i}`, studentName: count > 1 ? `Alumno ${i + 1}` : 'Alumno', files: [], isEvaluated: false, isEvaluating: false, decimasAdicionales: 0, })); setStudentGroups(newGroups); setUnassignedFiles([]); }, [evaluationMode, numStudents]);
     
@@ -101,29 +68,6 @@ export default function EvaluatorClient() {
     const removeFileFromGroup = (fileId: string, groupId: string) => { let fileToMoveBack: FilePreview | undefined; setStudentGroups(groups => groups.map(g => { if (g.id === groupId) { fileToMoveBack = g.files.find(f => f.id === fileId); return { ...g, files: g.files.filter(f => f.id !== fileId) }; } return g; })); if (fileToMoveBack) { setUnassignedFiles(prev => [...prev, fileToMoveBack!]); } };
     const handleDecimasChange = (groupId: string, value: string) => { const decimas = parseFloat(value) || 0; setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, decimasAdicionales: decimas } : g)); };
     
-    const handleFileExtract = async (event: ChangeEvent<HTMLInputElement>, fieldName: 'rubrica' | 'pauta') => {
-        const file = event.target.files?.[0];
-        if (!file) return;
-        const setLoading = fieldName === 'rubrica' ? setIsExtractingRubrica : setIsExtractingPauta;
-        setLoading(true);
-        const formData = new FormData();
-        formData.append("file", file);
-        try {
-            const response = await fetch('/api/extract-text', { method: 'POST', body: formData });
-            const data = await response.json();
-            if (data.success) {
-                form.setValue(fieldName, data.text);
-            } else {
-                alert(`Error: ${data.error}`);
-            }
-        } catch (error) {
-            alert("Ocurrió un error al subir el archivo.");
-        } finally {
-            setLoading(false);
-            if (event.target) event.target.value = "";
-        }
-    };
-
     const onEvaluateAll = async () => {
         const { rubrica, pauta, flexibilidad, tipoEvaluacion } = form.getValues();
         if (!rubrica) { form.setError("rubrica", { type: "manual", message: "La rúbrica es requerida." }); return; }
@@ -154,15 +98,14 @@ export default function EvaluatorClient() {
         }
     };
 
-    // ===== INICIO DE LA CORRECCIÓN: FUNCIÓN DE INFORME COMPLETA =====
     const generateReport = (group: StudentGroup) => {
         const { nombreProfesor, departamento, fechaEvaluacion, curso } = form.getValues();
         const finalNota = (Number(group.nota) || 0) + group.decimasAdicionales;
         const reportWindow = window.open("", "_blank");
         if (!reportWindow) return alert("Habilita las ventanas emergentes.");
-
+        
         const buildCorreccionTable = () => {
-            if (!group.retroalimentacion?.correccion_detallada || group.retroalimentacion.correccion_detallada.length === 0) return '';
+            if (!group.retroalimentacion?.correccion_detallada?.length) return '';
             return `
                 <div class="mt-8">
                     <h3 class="font-semibold text-lg text-gray-800">Corrección Detallada</h3>
@@ -174,12 +117,11 @@ export default function EvaluatorClient() {
                             `).join('')}
                         </tbody>
                     </table>
-                </div>
-            `;
+                </div>`;
         };
 
         const buildHabilidadesTable = () => {
-            if (!group.retroalimentacion?.evaluacion_habilidades || group.retroalimentacion.evaluacion_habilidades.length === 0) return '';
+            if (!group.retroalimentacion?.evaluacion_habilidades?.length) return '';
             return `
                 <div class="mt-8">
                     <h3 class="font-semibold text-lg text-gray-800">Evaluación de Habilidades</h3>
@@ -191,8 +133,7 @@ export default function EvaluatorClient() {
                             `).join('')}
                         </tbody>
                     </table>
-                </div>
-            `;
+                </div>`;
         };
 
         const reportHTML = `
@@ -254,7 +195,6 @@ export default function EvaluatorClient() {
         reportWindow.document.write(reportHTML);
         reportWindow.document.close();
     };
-    // ===== FIN DE LA CORRECCIÓN =====
 
     const isCurrentlyEvaluating = studentGroups.some(g => g.isEvaluating);
 
