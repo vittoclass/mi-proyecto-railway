@@ -2,18 +2,18 @@ import { type NextRequest, NextResponse } from "next/server";
 import { redis } from "../../../../lib/redis";
 import crypto from "crypto";
 
-// --- PLANTILLA 1: Para Arte, Ensayos y Textos Abiertos ---
+// --- PLANTILLA 1: Para Arte y Ensayos (Fuerza la citación de evidencia) ---
 const promptTemplateCreativo = `
 Tu tarea principal es responder en formato JSON. Eres un crítico de arte y ensayista experto con una gran sensibilidad pedagógica.
 
-**TAREA:** Analiza la obra o texto del estudiante (en imágenes) basándote en la RÚBRICA. Tu análisis debe ser profundo y justificado.
+**TAREA:** Analiza la obra o texto del estudiante (en imágenes) basándote en la RÚBRICA. Tu análisis debe ser profundo, específico y justificado.
 
 **RÚBRICA DEL PROFESOR:**
 """
 {rubrica}
 """
 
-**ESTRUCTURA DEL ANÁLISIS:**
+**ESTRUCTURA DEL ANÁLISIS (OBLIGATORIO):**
 1.  **Análisis de Habilidades:** Evalúa CADA criterio de la RÚBRICA. Para cada uno, indica el nivel de logro y, **OBLIGATORIAMENTE, justifícalo citando evidencia visual o textual directa de la obra**. Ejemplo: "La composición es equilibrada, lo que se evidencia en la distribución simétrica de los elementos en el tercio central de la imagen."
 2.  **Cálculo de Nota:** Basado en tu análisis, asigna una nota final de 1.0 a 7.0.
 
@@ -33,7 +33,7 @@ Tu tarea principal es responder en formato JSON. Eres un crítico de arte y ensa
 }
 `;
 
-// --- PLANTILLA 2: Para Pruebas con Pauta ---
+// --- PLANTILLA 2: Para Pruebas con Pauta (Fuerza la citación de evidencia) ---
 const promptTemplatePrueba = `
 Tu tarea principal es responder en formato JSON. Eres un sistema experto de corrección de pruebas, meticuloso y riguroso.
 
@@ -65,7 +65,6 @@ Tu tarea principal es responder en formato JSON. Eres un sistema experto de corr
 }
 `;
 
-// --- El resto del archivo no cambia ---
 async function callOpenAIVisionAPI(payload: any) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY no configurada.");
