@@ -8,21 +8,18 @@ import dynamic from 'next/dynamic'
 import * as React from "react"
 import { format } from "date-fns"
 
-// --- Componentes de UI ---
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Slider } from "@/components/ui/slider"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Loader2, Sparkles, FileUp, Camera, Users, FileText, X, Printer, CalendarIcon, ImageUp, ClipboardList } from "lucide-react"
+import { Loader2, Sparkles, FileUp, Camera, Users, X, Printer, CalendarIcon, ImageUp, ClipboardList } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useEvaluator } from "./useEvaluator"
 import { NotesDashboard } from "../components/NotesDashboard"
@@ -30,7 +27,6 @@ const SmartCameraModal = dynamic(() => import('../components/smart-camera-modal'
 const Label = React.forwardRef<HTMLLabelElement, React.ComponentPropsWithoutRef<'label'>>(({ className, ...props }, ref) => ( <label ref={ref} className={cn("text-sm font-medium", className)} {...props} /> ));
 Label.displayName = "Label"
 
-// --- Tipos para la respuesta de la IA ---
 interface CorreccionDetallada { seccion: string; detalle: string; }
 interface EvaluacionHabilidad { habilidad: string; evaluacion: string; evidencia: string; }
 interface RetroalimentacionEstructurada {
@@ -42,7 +38,6 @@ const formSchema = z.object({ tipoEvaluacion: z.string().default('prueba'), rubr
 interface FilePreview { id: string; file: File; previewUrl: string; dataUrl: string; }
 interface StudentGroup { id: string; studentName: string; files: FilePreview[]; retroalimentacion?: RetroalimentacionEstructurada; puntaje?: string; nota?: number | string; decimasAdicionales: number; isEvaluated: boolean; isEvaluating: boolean; error?: string; }
 
-// --- COMPONENTE PRINCIPAL ---
 export default function EvaluatorClient() {
     const [unassignedFiles, setUnassignedFiles] = useState<FilePreview[]>([]);
     const [studentGroups, setStudentGroups] = useState<StudentGroup[]>([]);
@@ -53,6 +48,8 @@ export default function EvaluatorClient() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const logoInputRef = useRef<HTMLInputElement>(null);
     const pollingIntervals = useRef<Map<string, NodeJS.Timeout>>(new Map());
+    const [isExtractingNames, setIsExtractingNames] = useState(false);
+    const [nameSuggestions, setNameSuggestions] = useState<string[]>([]);
     const form = useForm<z.infer<typeof formSchema>>({ resolver: zodResolver(formSchema), defaultValues: { tipoEvaluacion: 'prueba', rubrica: "", pauta: "", flexibilidad: [3], nombreProfesor: "", departamento: "", curso: "", fechaEvaluacion: new Date() }, });
     const { startEvaluation, checkEvaluationStatus } = useEvaluator();
 
@@ -68,6 +65,30 @@ export default function EvaluatorClient() {
     const removeFileFromGroup = (fileId: string, groupId: string) => { let fileToMoveBack: FilePreview | undefined; setStudentGroups(groups => groups.map(g => { if (g.id === groupId) { fileToMoveBack = g.files.find(f => f.id === fileId); return { ...g, files: g.files.filter(f => f.id !== fileId) }; } return g; })); if (fileToMoveBack) { setUnassignedFiles(prev => [...prev, fileToMoveBack!]); } };
     const handleDecimasChange = (groupId: string, value: string) => { const decimas = parseFloat(value) || 0; setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, decimasAdicionales: decimas } : g)); };
     
+    const handleNameExtraction = async () => {
+        console.log("Iniciando extracción de nombres...");
+        if (unassignedFiles.length === 0) {
+            alert("Por favor, sube primero los archivos de los que quieres extraer nombres.");
+            return;
+        }
+        setIsExtractingNames(true);
+        setNameSuggestions([]);
+        const formData = new FormData();
+        unassignedFiles.forEach(filePreview => { formData.append("files", filePreview.file); });
+        try {
+            const response = await fetch('/api/extract-name', { method: 'POST', body: formData });
+            const data = await response.json();
+            if (!response.ok || !data.success) { throw new Error(data.error || 'Error desconocido al extraer nombres.'); }
+            setNameSuggestions(data.suggestions);
+        } catch (error) {
+            console.error("Error detallado durante la extracción:", error);
+            const errorMessage = error instanceof Error ? error.message : 'No se pudo conectar con el servidor.';
+            alert(`Error al extraer nombres: ${errorMessage}`);
+        } finally {
+            setIsExtractingNames(false);
+        }
+    };
+
     const onEvaluateAll = async () => {
         const { rubrica, pauta, flexibilidad, tipoEvaluacion } = form.getValues();
         if (!rubrica) { form.setError("rubrica", { type: "manual", message: "La rúbrica es requerida." }); return; }
@@ -227,20 +248,62 @@ export default function EvaluatorClient() {
                                         <FormField control={form.control} name="rubrica" render={({ field }) => (<FormItem><FormLabel className="font-bold">Rúbrica de Evaluación (Criterios)</FormLabel><FormControl><Textarea placeholder="Ej: Evalúa claridad, estructura, ortografía..." className="min-h-[100px]" {...field} /></FormControl><FormMessage /></FormItem>)} />
                                         <FormField control={form.control} name="pauta" render={({ field }) => (<FormItem><FormLabel className="font-bold">Pauta de Corrección (Respuestas)</FormLabel><FormControl><Textarea placeholder="Opcional. Pega aquí las respuestas correctas..." className="min-h-[100px]" {...field} /></FormControl></FormItem>)} />
                                         <FormField control={form.control} name="flexibilidad" render={({ field }) => (<FormItem><FormLabel className="font-bold">Nivel de Flexibilidad</FormLabel><FormControl><Slider min={1} max={5} step={1} defaultValue={field.value} onValueChange={field.onChange} /></FormControl><div className="flex justify-between text-xs text-muted-foreground"><span>Rigor Estricto</span><span>Máxima Flexibilidad</span></div></FormItem>)} />
+                                        
                                         <div>
                                             <h3 className="font-bold">Cargar Trabajos</h3>
                                             <div className="flex flex-wrap gap-4 mt-2">
                                                 <Button type="button" onClick={() => { fileInputRef.current?.click(); }}><FileUp className="mr-2 h-4 w-4" /> Subir Archivos</Button>
                                                 <Button type="button" variant="secondary" onClick={() => setIsCameraOpen(true)}><Camera className="mr-2 h-4 w-4" /> Usar Cámara</Button>
+                                                
+                                                {unassignedFiles.length > 0 && (
+                                                    <Button type="button" variant="outline" onClick={handleNameExtraction} disabled={isExtractingNames}>
+                                                        {isExtractingNames ? ( <Loader2 className="mr-2 h-4 w-4 animate-spin" /> ) : ( <Sparkles className="mr-2 h-4 w-4 text-purple-500" /> )}
+                                                        Detectar Nombres
+                                                    </Button>
+                                                )}
+
                                                 <input type="file" multiple ref={fileInputRef} onChange={(e) => handleFilesSelected(e.target.files)} className="hidden" />
                                             </div>
                                         </div>
+
+                                        {nameSuggestions.length > 0 && (
+                                            <div className="p-4 border rounded-lg mt-4 bg-muted/50">
+                                                <h3 className="text-base font-semibold mb-3">Sugerencias de Nombres (IA)</h3>
+                                                <div className="flex flex-wrap gap-3">
+                                                    {nameSuggestions.map((name, index) => (
+                                                        <div key={index} className="flex items-center gap-2 p-2 bg-background border rounded-md shadow-sm">
+                                                            <span className="font-medium text-sm">{name}</span>
+                                                            <Button 
+                                                                size="sm" 
+                                                                variant="ghost" 
+                                                                className="h-7"
+                                                                onClick={() => {
+                                                                    const firstDefaultStudentIndex = studentGroups.findIndex(g => g.studentName.startsWith('Alumno'));
+                                                                    if (firstDefaultStudentIndex !== -1) {
+                                                                        updateStudentName(studentGroups[firstDefaultStudentIndex].id, name);
+                                                                        setNameSuggestions(prev => prev.filter((_, i) => i !== index));
+                                                                    } else {
+                                                                        alert("Todos los grupos de alumnos ya tienen un nombre asignado. Puedes editar uno manualmente.");
+                                                                    }
+                                                                }}
+                                                                title="Asignar a un alumno"
+                                                            >
+                                                               Asignar
+                                                            </Button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </form>
                                 </Form>
                             </CardContent>
                         </Card>
+                        
                         {unassignedFiles.length > 0 && (<Card><CardHeader><CardTitle>Archivos Pendientes</CardTitle></CardHeader><CardContent className="flex flex-wrap gap-4">{unassignedFiles.map(file => (<div key={file.id} className="w-24 h-24"><img src={file.previewUrl} alt={file.file.name} className="w-full h-full object-cover rounded-md" /></div>))}</CardContent></Card>)}
+                        
                         {studentGroups.length > 0 && <Card><CardHeader><CardTitle className="flex items-center gap-2"><Users className="text-green-500" />Paso 2: Agrupación</CardTitle></CardHeader><CardContent className="space-y-4">{studentGroups.map(group => (<div key={group.id} className="border p-4 rounded-lg"><Input className="text-lg font-bold border-0 shadow-none focus-visible:ring-0 p-1 mb-2" value={group.studentName} onChange={(e) => updateStudentName(group.id, e.target.value)} /><div className="flex flex-wrap gap-2 min-h-[50px] bg-muted/50 p-2 rounded-md">{group.files.map(file => (<div key={file.id} className="relative w-20 h-20"><img src={file.previewUrl} alt={file.file.name} className="w-full h-full object-cover rounded-md" /><button onClick={() => removeFileFromGroup(file.id, group.id)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0-5"><X className="h-3 w-3" /></button></div>))}{unassignedFiles.length > 0 && (<div className="flex items-center justify-center w-20 h-20 border-2 border-dashed rounded-md"><select onChange={(e) => { if (e.target.value) assignFileToGroup(e.target.value, group.id); e.target.value = ""; }} className="text-sm bg-transparent"><option value="">Asignar</option>{unassignedFiles.map(f => <option key={f.id} value={f.id}>{f.file.name}</option>)}</select></div>)}</div></div>))}</CardContent><CardFooter><Button size="lg" onClick={onEvaluateAll} disabled={isCurrentlyEvaluating || studentGroups.every(g => g.files.length === 0)}>{isCurrentlyEvaluating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Evaluando...</> : <><Sparkles className="mr-2 h-4 w-4" /> Evaluar Todo</>}</Button></CardFooter></Card>}
+                        
                         {studentGroups.some(g => g.isEvaluated || g.isEvaluating) && (<Card><CardHeader><CardTitle>Paso 3: Resultados</CardTitle></CardHeader><CardContent className="space-y-4">{studentGroups.filter(g => g.isEvaluated || g.isEvaluating).map(group => { const finalNota = (Number(group.nota) || 0) + group.decimasAdicionales; return (<div key={group.id} className={`p-6 rounded-lg border-l-4 ${group.error ? 'border-red-500' : 'border-green-500'} bg-white shadow`}><div className="flex justify-between items-center flex-wrap gap-2"><h3 className="font-bold text-xl">{group.studentName}</h3>{group.isEvaluating && <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Procesando...</div>}{group.isEvaluated && !group.error && <Button variant="ghost" size="sm" onClick={() => generateReport(group)}><Printer className="mr-2 h-4 w-4" />Ver Informe</Button>}</div>{group.error ? <p className="text-red-600">Error: {group.error}</p> : <div className="mt-4 space-y-6">{group.isEvaluated && group.retroalimentacion && <><div className="flex justify-between items-start bg-gray-50 p-4 rounded-lg"><div><p className="text-sm font-bold">PUNTAJE OBTENIDO</p><p className="text-xl font-semibold">{group.puntaje || 'N/A'}</p></div><div className="text-right"><div className="flex items-center gap-2"><label htmlFor={`decimas-${group.id}`} className="text-sm font-medium">Décimas:</label><Input id={`decimas-${group.id}`} type="number" step="0.1" defaultValue={group.decimasAdicionales} onChange={e => handleDecimasChange(group.id, e.target.value)} className="h-8 w-20" /></div><p className="text-sm font-bold mt-2">NOTA FINAL</p><p className="text-3xl font-bold text-blue-600">{finalNota.toFixed(1)}</p></div></div><div><h4 className="font-bold mb-2 text-gray-800">Corrección Detallada</h4><Table><TableHeader><TableRow><TableHead>Sección</TableHead><TableHead>Detalle</TableHead></TableRow></TableHeader><TableBody>{group.retroalimentacion.correccion_detallada?.map((item, index) => (<TableRow key={index}><TableCell className="font-medium">{item.seccion}</TableCell><TableCell>{item.detalle}</TableCell></TableRow>))}</TableBody></Table></div><div><h4 className="font-bold mb-2 text-gray-800">Evaluación de Habilidades</h4><Table><TableHeader><TableRow><TableHead>Habilidad</TableHead><TableHead>Nivel</TableHead><TableHead>Evidencia Citada</TableHead></TableRow></TableHeader><TableBody>{group.retroalimentacion.evaluacion_habilidades?.map((item, index) => (<TableRow key={index}><TableCell className="font-medium">{item.habilidad}</TableCell><TableCell>{item.evaluacion}</TableCell><TableCell className="italic">"{item.evidencia}"</TableCell></TableRow>))}</TableBody></Table></div><div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4"><div><h4 className="font-bold text-green-700">✅ Fortalezas Principales</h4><div className="text-sm mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">{group.retroalimentacion.resumen_general?.fortalezas}</div></div><div><h4 className="font-bold text-yellow-700">✏️ Oportunidades de Mejora</h4><div className="text-sm mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">{group.retroalimentacion.resumen_general?.areas_mejora}</div></div></div></>}</div>}</div>)})}
                         </CardContent></Card>)}
                     </TabsContent>
