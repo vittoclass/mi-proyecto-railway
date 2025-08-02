@@ -1,114 +1,142 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { ComputerVisionClient } from "@azure/cognitiveservices-computervision";
+import { ApiKeyCredentials } from "@azure/ms-rest-js";
 
-// --- PLANTILLA 1: Para Arte, Ensayos y Textos Abiertos ---
-const promptTemplateCreativo = `
-Tu tarea principal es responder en formato JSON. Eres un crítico de arte y ensayista experto con una gran sensibilidad pedagógica.
+// --- Configuración de APIs ---
+const AZURE_VISION_ENDPOINT = process.env.AZURE_VISION_ENDPOINT!;
+const AZURE_VISION_KEY = process.env.AZURE_VISION_KEY!;
+const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY!;
 
-**TAREA:** Analiza la obra o texto del estudiante (en imágenes) basándote en la RÚBRICA. Tu análisis debe ser profundo, citando evidencia visual o textual.
+// --- Biblioteca de Prompts Expertos ---
+const promptsExpertos = {
+    general: `Actúa como un profesor universitario detallista, riguroso y constructivo. Tu objetivo es ofrecer una retroalimentación que demuestre un análisis profundo y nivel experto del trabajo del estudiante.`,
+    matematicas: `Actúa como un catedrático de Matemáticas. Sé riguroso y lógico. Explica el procedimiento correcto paso a paso, citando directamente los errores conceptuales o de cálculo del desarrollo del estudiante.`,
+    lenguaje: `Actúa como un crítico literario y académico. Sé profundo y argumentativo. Evalúa la estructura, coherencia y tesis, citando textualmente fragmentos del ensayo para justificar cada punto y revelar el subtexto.`,
+    ciencias: `Actúa como un riguroso científico e investigador. Evalúa la aplicación del método científico y la correcta interpretación de datos, citando evidencia específica de los reportes o respuestas para validar o refutar las conclusiones.`,
+    artes: `Actúa como un curador de arte y crítico profesional. Tu feedback debe ser conceptual y perceptivo. Describe elementos visuales específicos (ej: 'el trazo fuerte en la esquina', 'el contraste de color') para justificar tu análisis de la composición, técnica e intención artística.`,
+    humanidades: `Actúa como un filósofo y académico. Evalúa la profundidad del pensamiento crítico, la claridad de la argumentación y la comprensión de conceptos abstractos, citando las ideas principales del texto del estudiante para realizar un contra-argumento o expandir sobre ellas.`,
+    ingles: `Actúa como un examinador de idiomas nivel C2. Evalúa gramática, vocabulario y fluidez, citando ejemplos específicos de errores del texto y ofreciendo la corrección precisa y la razón detrás de ella.`,
+};
 
-**RÚBRICA DEL PROFESOR:**
-"""
-{rubrica}
-"""
-
-**NIVEL DE FLEXIBILIDAD (1=Estricto, 5=Flexible):** {flexibilidad}
-Aplica flexibilidad para premiar la originalidad y el pensamiento crítico.
-
-**ESTRUCTURA DEL ANÁLISIS:**
-1.  **Análisis de Habilidades:** Evalúa CADA criterio de la RÚBRICA. Para cada uno, indica el nivel de logro y **justifícalo citando evidencia directa de la obra**.
-2.  **Cálculo de Nota:** Basado en tu análisis de la rúbrica y los puntajes, asigna una nota final de 1.0 a 7.0.
-
-**FORMATO DE RESPUESTA OBLIGATORIO (JSON):**
-{
-  "nota": "La nota final que consideres justa, como un número (ej: 6.5)",
-  "puntaje": "Una descripción cualitativa del rendimiento (ej: 'Excelente dominio de la composición y el contraste').",
-  "retroalimentacion": {
-    "evaluacion_habilidades": [
-      { "habilidad": "Creatividad", "evaluacion": "Lograda", "evidencia": "La idea de representar el encierro en un cubo es muy original." }
-    ],
-    "resumen_general": {
-        "fortalezas": "Un resumen de los 2-3 puntos más fuertes de la obra.",
-        "areas_mejora": "Un resumen constructivo de 2-3 áreas a mejorar."
+// --- Funciones de Soporte ---
+async function ocrAzure(imageBuffer: Buffer): Promise<string> {
+  const credentials = new ApiKeyCredentials({ inHeader: { "Ocp-Apim-Subscription-Key": AZURE_VISION_KEY } });
+  const client = new ComputerVisionClient(credentials, AZURE_VISION_ENDPOINT);
+  const result = await client.readInStream(imageBuffer);
+  const operationId = result.operationLocation.split("/").pop()!;
+  let analysisResult;
+  do {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    analysisResult = await client.getReadResult(operationId);
+  } while (analysisResult.status === "running" || analysisResult.status === "notStarted");
+  let fullText = "";
+  if (analysisResult.status === "succeeded" && analysisResult.analyzeResult) {
+    for (const page of analysisResult.analyzeResult.readResults) {
+      for (const line of page.lines) { fullText += line.text + "\n"; }
     }
   }
+  return fullText;
 }
-`;
 
-// --- PLANTILLA 2: Para Pruebas con Pauta (Matemáticas, Ciencias, etc.) ---
-const promptTemplatePrueba = `
-Tu tarea principal es responder en formato JSON. Eres un sistema experto de corrección de pruebas, meticuloso y riguroso.
-
-**INPUTS:**
-1.  **RÚBRICA:** """{rubrica}"""
-2.  **PAUTA DE CORRECCIÓN:** """{pauta_correccion}"""
-
-**ALGORITMO DE CORRECCIÓN:**
-1.  **ANÁLISIS ÍTEM POR ÍTEM:** Compara las respuestas del estudiante con la PAUTA. Anota aciertos y errores.
-2.  **ANÁLISIS DE HABILIDADES:** Evalúa las habilidades de la RÚBRICA, citando evidencia.
-3.  **CÁLCULO DE PUNTAJE Y NOTA:** Calcula el puntaje total y conviértelo a nota (escala 1.0-7.0, 60% exigencia).
-
-**FORMATO DE RESPUESTA OBLIGATORIO (JSON):**
-{
-  "nota": "La nota final calculada, como un número (ej: 6.2)",
-  "puntaje": "El puntaje total en formato texto (ej: '42/50 puntos')",
-  "retroalimentacion": {
-    "correccion_detallada": [
-      { "seccion": "I. Selección Múltiple", "detalle": "Pregunta 1: Correcta. Pregunta 2: Incorrecta (Correcta: C)." }
-    ],
-    "evaluacion_habilidades": [
-      { "habilidad": "Comprensión de Texto", "evaluacion": "Lograda", "evidencia": "El estudiante escribe: '...'" }
-    ],
-    "resumen_general": {
-        "fortalezas": "Un resumen de los aciertos.",
-        "areas_mejora": "Un resumen de las áreas a mejorar."
-    }
-  }
-}
-`;
-
-async function callOpenAIVisionAPI(payload: any) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OPENAI_API_KEY no configurada.");
-  const response = await fetch("https://api.openai.com/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` }, body: JSON.stringify(payload), });
-  if (!response.ok) { const errorBody = await response.json().catch(() => ({ message: response.statusText })); throw new Error(`OpenAI API error: ${errorBody.error?.message || response.statusText}`); }
+async function callMistralAPI(payload: any) {
+  const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${MISTRAL_API_KEY}` },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) { throw new Error(`Error en la API de Mistral: ${response.statusText}`); }
   return response.json();
 }
 
+// --- API Principal de Evaluación ---
 export async function POST(request: NextRequest) {
   try {
-    const { fileUrls, rubrica, pauta, flexibilidad, tipoEvaluacion } = await request.json();
-    if (!fileUrls || !Array.isArray(fileUrls) || fileUrls.length === 0 || !rubrica) { return NextResponse.json({ success: false, error: "Faltan datos en la petición." }, { status: 400 }); }
-    
-    // --- SELECCIÓN DINÁMICA DEL PROMPT ---
-    let selectedPromptTemplate;
-    if (tipoEvaluacion === 'prueba') {
-        selectedPromptTemplate = promptTemplatePrueba;
-    } else { // 'ensayo' y 'arte' usan la plantilla creativa
-        selectedPromptTemplate = promptTemplateCreativo;
+    const payload = await request.json();
+    const { fileUrls, rubrica, pauta, areaConocimiento } = payload;
+    if (!fileUrls || fileUrls.length === 0) throw new Error("No se proporcionaron archivos.");
+
+    let textoCompleto = "";
+    for (const url of fileUrls) {
+      const base64Data = url.split(',')[1];
+      const buffer = Buffer.from(base64Data, 'base64');
+      textoCompleto += await ocrAzure(buffer) + "\n\n";
     }
 
-    let prompt = selectedPromptTemplate.replace('{rubrica}', rubrica);
-    prompt = prompt.replace('{pauta_correccion}', pauta || 'No se proporcionó una pauta de corrección específica.');
-    prompt = prompt.replace('{flexibilidad}', flexibilidad?.toString() || '3');
+    const personalidadExperto = promptsExpertos[areaConocimiento] || promptsExpertos['general'];
 
-    const messageContent: any[] = [{ type: "text", text: prompt }];
-    fileUrls.forEach(url => { messageContent.push({ type: "image_url", image_url: { url } }); });
+    // ========= INICIO: PROMPT FINAL DE CALIDAD SUPERIOR =========
+    const promptFinalParaIA = `
+      ${personalidadExperto}
 
-    const data = await callOpenAIVisionAPI({
-      model: "gpt-4o",
-      messages: [{ role: "user", content: messageContent }],
-      response_format: { type: "json_object" },
-      temperature: 0.4, // Temperatura balanceada para análisis detallado
-      max_tokens: 4000,
+      Tu tarea es realizar un análisis de nivel experto, como si fueras un profesor universitario evaluando un trabajo final. Debes seguir un proceso mental estricto y demostrarlo en tu retroalimentación.
+
+      **PROCESO MENTAL OBLIGATORIO (Piensa paso a paso antes de responder):**
+      1.  **Observación Concreta:** Para cada criterio de la RÚBRICA, encuentra el detalle, frase textual o elemento visual más relevante en el trabajo del estudiante.
+      2.  **Conexión y Justificación:** Explica CÓMO ese detalle específico que observaste se conecta directamente con el criterio de la rúbrica. No te limites a decir "lo cumple". Justifica tu evaluación.
+      3.  **Interpretación Profunda:** Ofrece una interpretación de lo que esa evidencia significa. ¿Qué demuestra sobre el nivel de habilidad o comprensión del estudiante? ¿Qué implicaciones tiene?
+      4.  **Síntesis del Feedback:** Construye tu retroalimentación usando los resultados de los pasos anteriores. La clave "detalle" debe explicar tu justificación (Paso 2 y 3), y la clave "evidencia" DEBE contener la observación concreta y específica (Paso 1).
+
+      **EJEMPLO PERFECTO DE TU TRABAJO (Este es tu estándar de calidad):**
+      * **RÚBRICA dice:** "Crítica Social: La ilustración aborda de manera clara y crítica un tema relevante de la sociedad."
+      * **TU PROCESO MENTAL:**
+          1.  *Observación:* "Veo un cráneo humano pintado de negro. La cara no tiene boca y los ojos son barrotes de una celda."
+          2.  *Conexión:* "Los barrotes son un símbolo universal de 'prisión' y 'falta de libertad', lo que conecta directamente con la idea de una 'crítica social'."
+          3.  *Interpretación:* "El uso del cráneo sugiere que esta es una condición humana fundamental, no temporal. Podría interpretarse como una crítica a cómo nuestras propias mentes, o la sociedad misma, nos aprisionan de forma predeterminada, limitando nuestra perspectiva."
+      * **TU SALIDA JSON (para ese criterio):**
+          "habilidad": "Crítica Social",
+          "evaluacion": "Excelente",
+          "evidencia": "La cara del cráneo está representada por barrotes de celda."
+          // El detalle en "correccion_detallada" incluiría la interpretación completa.
+
+      **FORMATO DE SALIDA (JSON VÁLIDO Y ESTRICTO):**
+      {
+        "puntaje": "string (ej: '40/42' o 'Sobresaliente')",
+        "nota": number (decimal entre 1.0 y 7.0, ajustado a la realidad de la evaluación),
+        "retroalimentacion": {
+          "correccion_detallada": [{ "seccion": "string", "detalle": "string (tu justificación e interpretación profunda aquí)" }],
+          "evaluacion_habilidades": [{ "habilidad": "string (criterio de la rúbrica)", "evaluacion": "string (ej: Logrado)", "evidencia": "string (la cita textual o descripción visual específica)" }],
+          "resumen_general": { "fortalezas": "string", "areas_mejora": "string" }
+        }
+      }
+
+      **INSUMOS PARA TU EVALUACIÓN:**
+      TEXTO DEL ESTUDIANTE: """${textoCompleto}"""
+      RÚBRICA: """${rubrica}"""
+      PAUTA (si aplica): """${pauta}"""
+    `;
+    // ========= FIN: PROMPT FINAL DE CALIDAD SUPERIOR =========
+
+    const aiResponse = await callMistralAPI({
+        model: "mistral-large-latest",
+        messages: [{ role: "user", content: promptFinalParaIA }],
+        response_format: { type: "json_object" },
     });
 
-    const content = data?.choices?.[0]?.message?.content;
-    if (!content) throw new Error("La IA devolvió una respuesta vacía.");
+    const content = aiResponse.choices[0].message.content;
+    let resultado = JSON.parse(content);
 
-    const iaResult = JSON.parse(content);
-    return NextResponse.json({ success: true, ...iaResult });
+    // --- GUARDIA DE CALIDAD Y REPARACIÓN DE DATOS (VERSIÓN FINAL) ---
+    console.log("Respuesta de la IA antes de corregir:", resultado);
+
+    let notaNumerica = parseFloat(resultado.nota);
+    if (isNaN(notaNumerica) || notaNumerica < 1.0) notaNumerica = 1.0;
+    else if (notaNumerica > 7.0) notaNumerica = 7.0;
+    resultado.nota = notaNumerica;
+
+    resultado.puntaje = String(resultado.puntaje || "N/A");
+    
+    resultado.retroalimentacion = resultado.retroalimentacion || {};
+    if (!Array.isArray(resultado.retroalimentacion.correccion_detallada)) resultado.retroalimentacion.correccion_detallada = [];
+    if (!Array.isArray(resultado.retroalimentacion.evaluacion_habilidades)) resultado.retroalimentacion.evaluacion_habilidades = [];
+    resultado.retroalimentacion.resumen_general = resultado.retroalimentacion.resumen_general || { fortalezas: "No especificado.", areas_mejora: "No especificado." };
+
+    console.log("Respuesta corregida y enviada al frontend:", resultado);
+
+    return NextResponse.json({ success: true, ...resultado });
+
   } catch (error) {
     console.error("Error en /api/evaluate:", error);
-    return NextResponse.json({ success: false, error: `La IA de visión falló. Detalle: ${error instanceof Error ? error.message : "Error desconocido"}` }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
   }
 }

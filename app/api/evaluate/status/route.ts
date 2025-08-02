@@ -1,25 +1,48 @@
-// app/api/evaluate/status/route.ts
 import { type NextRequest, NextResponse } from "next/server";
-import { redis } from "@/lib/redis";
+import { getJobStore } from '../jobStore';
+
+const promptsExpertos = {
+  general: `Eres un asistente de evaluación educativa...`,
+  matematicas: `Actúa como un profesor experto en Matemáticas...`,
+  lenguaje: `Actúa como un crítico literario y profesor de Lenguaje e Historia...`,
+  ciencias: `Actúa como un riguroso científico y académico...`,
+  artes: `Actúa como un curador de arte y un académico en estética...`,
+  humanidades: `Actúa como un filósofo y académico de las humanidades...`,
+  ingles: `Actúa como un examinador de idiomas (inglés)...`,
+};
 
 export async function GET(request: NextRequest) {
-    const { searchParams } = new URL(request.url);
+    const searchParams = request.nextUrl.searchParams;
     const jobId = searchParams.get('jobId');
+    const jobStore = getJobStore();
 
     if (!jobId) {
-        return NextResponse.json({ error: 'Falta el ID de la tarea (jobId).' }, { status: 400 });
+        return NextResponse.json({ success: false, error: "jobId no proporcionado" }, { status: 400 });
+    }
+    const job = jobStore.get(jobId);
+    if (!job) {
+        return NextResponse.json({ success: false, error: "Trabajo no encontrado" }, { status: 404 });
+    }
+    
+    if (job.status === 'pending') {
+        job.status = 'processing';
+    } else if (job.status === 'processing') {
+        job.status = 'completed';
+        
+        // Simula un resultado detallado basado en el área de conocimiento guardada
+        const area = job.payload?.areaConocimiento || 'general';
+        const retroalimentacionExperta = `Este es un ejemplo de retroalimentación profunda para el área de '${area}', que cita evidencia específica del texto y sigue la rúbrica proporcionada.`;
+        
+        job.result = {
+            puntaje: "95/100",
+            nota: 6.8,
+            retroalimentacion: {
+                correccion_detallada: [{ seccion: "Análisis Conceptual", detalle: retroalimentacionExperta }],
+                evaluacion_habilidades: [{ habilidad: "Profundidad Analítica", evaluacion: "Muy Logrado", evidencia: `Se demuestra un dominio del tema (${area}) al conectar A con B.` }],
+                resumen_general: { fortalezas: `Dominio conceptual del área de ${area}.`, areas_mejora: "Se puede mejorar la estructura de las conclusiones." }
+            }
+        };
     }
 
-    try {
-        const data = await redis.get(jobId);
-
-        if (!data) {
-            return NextResponse.json({ error: 'Tarea no encontrada o expirada.' }, { status: 404 });
-        }
-
-        return NextResponse.json(JSON.parse(data));
-
-    } catch (error) {
-        return NextResponse.json({ error: 'Error al consultar el estado de la tarea.' }, { status: 500 });
-    }
+    return NextResponse.json(job);
 }

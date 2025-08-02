@@ -1,43 +1,29 @@
 'use client'
 
-import { useCallback } from "react";
+import { useState, useCallback } from 'react';
 
 export const useEvaluator = () => {
-  // Inicia la tarea de evaluación en el backend
-  const startEvaluation = useCallback(async (payload: any): Promise<{ jobId?: string; error?: string }> => {
+  const [isLoading, setIsLoading] = useState(false);
+
+  const evaluate = useCallback(async (payload: any): Promise<any> => {
+    setIsLoading(true);
     try {
-      const response = await fetch('/api/evaluate/start', {
+      const response = await fetch('/api/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       const data = await response.json();
       if (!response.ok || !data.success) {
-        throw new Error(data.error || "Error al iniciar la tarea de evaluación.");
+        throw new Error(data.error || "Ocurrió un error durante la evaluación.");
       }
-      return { jobId: data.jobId };
+      return data;
     } catch (err: any) {
-      console.error("Error en startEvaluation:", err);
-      return { error: err.message };
+      return { success: false, error: err.message };
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
-  // Consulta el estado de una tarea que ya está en proceso
-  const checkEvaluationStatus = useCallback(async (jobId: string): Promise<any> => {
-    try {
-      const response = await fetch(`/api/evaluate/status?jobId=${jobId}`);
-      if (!response.ok) {
-        throw new Error("Error del servidor al consultar estado.");
-      }
-      return await response.json();
-    } catch (err: any) {
-      console.error("Error en checkEvaluationStatus:", err);
-      return { status: 'failed', error: err.message };
-    }
-  }, []);
-
-  return {
-    startEvaluation,
-    checkEvaluationStatus,
-  };
+  return { evaluate, isLoading };
 };
