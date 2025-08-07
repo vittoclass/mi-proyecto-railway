@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import dynamic from 'next/dynamic'
 import * as React from "react"
 import { format } from "date-fns"
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
@@ -18,13 +18,66 @@ import { Calendar } from "@/components/ui/calendar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Loader2, Sparkles, FileUp, Camera, Users, X, Printer, CalendarIcon, ImageUp, ClipboardList } from "lucide-react"
+import { Loader2, Sparkles, FileUp, Camera, Users, X, Printer, CalendarIcon, ImageUp, ClipboardList, Home, Palette } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useEvaluator } from "./useEvaluator"
 import { NotesDashboard } from "../components/NotesDashboard"
+
 const SmartCameraModal = dynamic(() => import('../components/smart-camera-modal'), { ssr: false, loading: () => <p>Cargando...</p> })
 const Label = React.forwardRef<HTMLLabelElement, React.ComponentPropsWithoutRef<'label'>>(({ className, ...props }, ref) => ( <label ref={ref} className={cn("text-sm font-medium", className)} {...props} /> ));
 Label.displayName = "Label"
+
+// ───────────────────────────────────────────────────────────────────────────────
+// LOGO Libel-IA (libélula) — diseño estilizado, gradiente y formas suaves
+const DRAGONFLY_SVG = `
+<svg viewBox="0 0 300 220" xmlns="http://www.w3.org/2000/svg" aria-label="Libel-IA logo">
+  <defs>
+    <linearGradient id="lg-a" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7C3AED"/>
+      <stop offset="50%" stop-color="#4F46E5"/>
+      <stop offset="100%" stop-color="#06B6D4"/>
+    </linearGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="1.4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect x="147" y="72" width="6" height="92" rx="3" fill="url(#lg-a)" filter="url(#soft)"/>
+  <circle cx="150" cy="66" r="11" fill="url(#lg-a)"/>
+  <path d="M30,80 C90,40 210,40 270,80 C210,92 90,92 30,80Z" fill="url(#lg-a)" opacity="0.25"/>
+  <path d="M40,110 C100,90 200,90 260,110 C200,122 100,122 40,110Z" fill="url(#lg-a)" opacity="0.2"/>
+  <rect x="149" y="166" width="2" height="14" rx="1" fill="#6366F1"/>
+  <rect x="149" y="182" width="2" height="10" rx="1" fill="#22D3EE"/>
+</svg>
+`;
+const DRAGONFLY_DATA_URL = `data:image/svg+xml;utf8,${encodeURIComponent(DRAGONFLY_SVG)}`;
+const wordmarkClass = "text-transparent bg-clip-text bg-gradient-to-r from-violet-500 via-indigo-500 to-cyan-400";
+// ───────────────────────────────────────────────────────────────────────────────
+
+// === INICIO: ADICIONES PARA TEMAS Y ESTILOS ===
+const GlobalStyles = () => (
+  <style jsx global>{`
+    @import url('https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@700&display=swap');
+
+    .font-logo {
+      font-family: 'Josefin Sans', sans-serif;
+    }
+
+    :root, .theme-default {
+      --bg-main: #F9FAFB; --bg-card: #FFFFFF; --bg-muted: #F3F4F6; --bg-muted-subtle: #F9FAFB; --bg-primary: #4338CA; --bg-primary-hover: #3730A3; --text-primary: #1F2937; --text-secondary: #6B7280; --text-on-primary: #FFFFFF; --text-accent: #4338CA; --border-color: #E5E7EB; --border-focus: #4F46E5; --ring-color: #4F46E5;
+    }
+
+    .theme-ocaso {
+      color: var(--text-primary);
+      --bg-main: #09090b; --bg-card: #18181b; --bg-muted: #27272a; --bg-muted-subtle: #18181b; --bg-primary: #7C3AED; --bg-primary-hover: #6D28D9; --text-primary: #F4F4F5; --text-secondary: #a1a1aa; --text-on-primary: #FFFFFF; --text-accent: #a78bfa; --border-color: #27272a; --border-focus: #8B5CF6; --ring-color: #8B5CF6;
+    }
+    
+    .theme-corporativo {
+      --bg-main: #F0F4F8; --bg-card: #FFFFFF; --bg-muted: #E3E8EE; --bg-muted-subtle: #F8FAFC; --bg-primary: #2563EB; --bg-primary-hover: #1D4ED8; --text-primary: #0F172A; --text-secondary: #475569; --text-on-primary: #FFFFFF; --text-accent: #2563EB; --border-color: #CBD5E1; --border-focus: #2563EB; --ring-color: #2563EB;
+    }
+  `}</style>
+);
+// === FIN: ADICIONES PARA TEMAS Y ESTILOS ===
 
 interface CorreccionDetallada { seccion: string; detalle: string; }
 interface EvaluacionHabilidad { habilidad: string; evaluacion: string; evidencia: string; }
@@ -39,7 +92,9 @@ const formSchema = z.object({
   pauta: z.string().optional(),
   flexibilidad: z.array(z.number()).default([3]),
   nombreProfesor: z.string().optional(),
+  nombrePrueba: z.string().optional(),
   departamento: z.string().optional(),
+  asignatura: z.string().optional(),
   curso: z.string().optional(),
   fechaEvaluacion: z.date().optional(),
   areaConocimiento: z.string().default('general'),
@@ -56,31 +111,32 @@ export default function EvaluatorClient() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const logoInputRef = useRef<HTMLInputElement>(null);
     const [isExtractingNames, setIsExtractingNames] = useState(false);
-    const [nameSuggestions, setNameSuggestions] = useState<string[]>([]);
     const { evaluate, isLoading } = useEvaluator();
+    const [theme, setTheme] = useState('theme-ocaso');
+    const [activeTab, setActiveTab] = useState("inicio");
+
     const form = useForm<z.infer<typeof formSchema>>({
       resolver: zodResolver(formSchema),
       defaultValues: {
         tipoEvaluacion: 'prueba', rubrica: "", pauta: "", flexibilidad: [3],
-        nombreProfesor: "", departamento: "", curso: "", fechaEvaluacion: new Date(), areaConocimiento: 'general',
+        nombreProfesor: "", nombrePrueba: "", departamento: "", asignatura: "", curso: "",
+        fechaEvaluacion: new Date(), areaConocimiento: 'general',
       },
     });
 
     useEffect(() => {
         const count = Math.max(1, classSize);
-        const newGroups: StudentGroup[] = Array.from({ length: count }, (_, i) => ({
+        setStudentGroups(Array.from({ length: count }, (_, i) => ({
             id: `student-${Date.now()}-${i}`, studentName: `Alumno ${i + 1}`, files: [],
             isEvaluated: false, isEvaluating: false, decimasAdicionales: 0,
-        }));
-        setStudentGroups(newGroups);
+        })));
         setUnassignedFiles([]);
     }, [classSize]);
     
     const processFiles = (files: File[]) => {
-        const supportedMimeTypes = ['image/jpeg', 'image/png', 'image/bmp', 'application/pdf', 'image/tiff'];
         const validFiles = Array.from(files).filter(file => {
-            if (supportedMimeTypes.includes(file.type)) { return true; }
-            alert(`El archivo "${file.name}" tiene un formato no soportado.\n\nPor favor, usa solo los formatos: JPEG, PNG, BMP, PDF o TIFF.`);
+            if (['image/jpeg', 'image/png', 'image/bmp', 'application/pdf', 'image/tiff'].includes(file.type)) return true;
+            alert(`Formato no soportado para "${file.name}". Usa: JPEG, PNG, BMP, PDF o TIFF.`);
             return false;
         });
         if (validFiles.length === 0) return;
@@ -88,41 +144,41 @@ export default function EvaluatorClient() {
             const reader = new FileReader(); 
             reader.onload = (e) => { 
                 const dataUrl = e.target?.result as string; 
-                const previewUrl = URL.createObjectURL(file); 
-                const newFilePreview: FilePreview = { id: `${file.name}-${Date.now()}`, file, previewUrl, dataUrl }; 
-                setUnassignedFiles(prev => [...prev, newFilePreview]); 
+                setUnassignedFiles(prev => [...prev, { id: `${file.name}-${Date.now()}`, file, previewUrl: URL.createObjectURL(file), dataUrl }]); 
             }; 
             reader.readAsDataURL(file); 
         }); 
     };
     
     const handleFilesSelected = (files: FileList | null) => { if (files) processFiles(Array.from(files)); };
-    const handleCapture = (dataUrl: string) => { fetch(dataUrl).then(res => res.blob()).then(blob => { const file = new File([blob], `captura-${Date.now()}.png`, { type: 'image/png' }); processFiles([file]); }); setIsCameraOpen(false); };
-    const handleLogoChange = (e: ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onloadend = () => { setLogoPreview(reader.result as string); }; reader.readAsDataURL(file); } };
-    const updateStudentName = (groupId: string, newName: string) => { setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, studentName: newName } : g)); };
+    const handleCapture = (dataUrl: string) => { fetch(dataUrl).then(res => res.blob()).then(blob => { processFiles([new File([blob], `captura-${Date.now()}.png`, { type: 'image/png' })]); }); setIsCameraOpen(false); };
+    const handleLogoChange = (e: ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onloadend = () => setLogoPreview(reader.result as string); reader.readAsDataURL(file); } };
+    const updateStudentName = (groupId: string, newName: string) => setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, studentName: newName } : g));
     const assignFileToGroup = (fileId: string, groupId: string) => { const fileToMove = unassignedFiles.find(f => f.id === fileId); if (!fileToMove) return; setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, files: [...g.files, fileToMove] } : g)); setUnassignedFiles(files => files.filter(f => f.id !== fileId)); };
-    const removeFileFromGroup = (fileId: string, groupId: string) => { let fileToMoveBack: FilePreview | undefined; setStudentGroups(groups => groups.map(g => { if (g.id === groupId) { fileToMoveBack = g.files.find(f => f.id === fileId); return { ...g, files: g.files.filter(f => f.id !== fileId) }; } return g; })); if (fileToMoveBack) { setUnassignedFiles(prev => [...prev, fileToMoveBack!]); } };
+    const removeFileFromGroup = (fileId: string, groupId: string) => { let fileToMoveBack: FilePreview | undefined; setStudentGroups(groups => groups.map(g => { if (g.id === groupId) { fileToMoveBack = g.files.find(f => f.id === fileId); return { ...g, files: g.files.filter(f => f.id !== fileId) }; } return g; })); if (fileToMoveBack) setUnassignedFiles(prev => [...prev, fileToMoveBack!]); };
     const handleDecimasChange = (groupId: string, value: string) => { const decimas = parseFloat(value) || 0; setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, decimasAdicionales: decimas } : g)); };
+    
+    const removeUnassignedFile = (fileId: string) => {
+        setUnassignedFiles(prev => prev.filter(f => f.id !== fileId));
+    };
+
     const handleNameExtraction = async () => {
-        if (unassignedFiles.length === 0) { alert("Por favor, sube primero la página que contiene el nombre."); return; }
+        if (unassignedFiles.length === 0) { alert("Sube primero la página que contiene el nombre."); return; }
         setIsExtractingNames(true);
-        setNameSuggestions([]);
         const formData = new FormData();
-        const fileToProcess = unassignedFiles[0];
-        formData.append("files", fileToProcess.file);
+        formData.append("files", unassignedFiles[0].file);
         try {
             const response = await fetch('/api/extract-name', { method: 'POST', body: formData });
             const data = await response.json();
-            if (!response.ok || !data.success) { throw new Error(data.error || 'Error desconocido.'); }
+            if (!response.ok || !data.success) throw new Error(data.error || 'Error desconocido.');
             if (data.suggestions && data.suggestions.length > 0) {
                 const bestSuggestion = data.suggestions[0];
-                alert(`Sugerencia de nombre detectada: ${bestSuggestion}`);
-                setNameSuggestions(data.suggestions);
+                alert(`Sugerencia detectada: ${bestSuggestion}`);
                 const firstDefaultStudentIndex = studentGroups.findIndex(g => g.studentName.startsWith('Alumno'));
-                if (firstDefaultStudentIndex !== -1) { updateStudentName(studentGroups[firstDefaultStudentIndex].id, bestSuggestion); }
-            } else { alert("No se detectaron nombres en la primera imagen."); }
+                if (firstDefaultStudentIndex !== -1) updateStudentName(studentGroups[firstDefaultStudentIndex].id, bestSuggestion);
+            } else alert("No se detectaron nombres en la imagen.");
         } catch (error) {
-            console.error("Error detallado durante la extracción:", error);
+            console.error("Error en extracción:", error);
             alert(`Error al extraer nombres: ${error instanceof Error ? error.message : 'Error desconocido'}`);
         } finally {
             setIsExtractingNames(false);
@@ -130,156 +186,146 @@ export default function EvaluatorClient() {
     };
     
     const generateReport = (group: StudentGroup) => {
-        try {
-            const { nombreProfesor, departamento, fechaEvaluacion, curso } = form.getValues();
-            const finalNota = (Number(group.nota) || 0) + group.decimasAdicionales;
-            const reportWindow = window.open("", "_blank");
-            if (!reportWindow) { alert("Habilita las ventanas emergentes para ver el informe."); return; }
-            
-            const buildCorreccionTable = () => {
-                const correcciones = group.retroalimentacion?.correccion_detallada;
-                if (!correcciones || !Array.isArray(correcciones) || correcciones.length === 0) {
-                    return '<p class="text-sm text-gray-500 italic">No se proporcionaron correcciones detalladas.</p>';
-                }
-                return `
-                    <div class="mt-8">
-                        <h3 class="font-semibold text-lg text-gray-800">Corrección Detallada</h3>
-                        <table class="w-full text-sm text-left mt-2 border-collapse">
-                            <thead class="bg-gray-50"><tr><th class="p-3 border">Sección</th><th class="p-3 border">Detalle</th></tr></thead>
-                            <tbody>
-                                ${correcciones.map(item => `
-                                    <tr class="border-b"><td class="p-3 border font-medium">${item.seccion || ''}</td><td class="p-3 border">${item.detalle || ''}</td></tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>`;
-            };
+        const { nombreProfesor, departamento, asignatura, curso, nombrePrueba } = form.getValues(); // <-- LÍNEA CORREGIDA
+        const reportWindow = window.open("", "_blank");
+        if (!reportWindow) { alert("Habilita las ventanas emergentes."); return; }
+        
+        const buildTable = (title: string, headers: string[], data: any[], rowBuilder: (item: any) => string) => {
+            if (!data || !Array.isArray(data) || data.length === 0) return '';
+            return `<div class="mt-8"><h3 class="font-semibold text-lg text-gray-800">${title}</h3><table class="w-full text-sm text-left mt-2 border-collapse"><thead class="bg-gray-50"><tr>${headers.map(h => `<th class="p-3 border">${h}</th>`).join('')}</tr></thead><tbody>${data.map(rowBuilder).join('')}</tbody></table></div>`;
+        };
+        
+        const resumen = group.retroalimentacion?.resumen_general || { fortalezas: 'N/A', areas_mejora: 'N/A' };
+        const finalNota = ((Number(group.nota) || 0) + group.decimasAdicionales).toFixed(1);
 
-            const buildHabilidadesTable = () => {
-                const habilidades = group.retroalimentacion?.evaluacion_habilidades;
-                if (!habilidades || !Array.isArray(habilidades) || habilidades.length === 0) {
-                    return '<p class="text-sm text-gray-500 italic">No se proporcionó evaluación de habilidades.</p>';
-                }
-                return `
-                    <div class="mt-8">
-                        <h3 class="font-semibold text-lg text-gray-800">Evaluación de Habilidades</h3>
-                        <table class="w-full text-sm text-left mt-2 border-collapse">
-                            <thead class="bg-gray-50"><tr><th class="p-3 border">Habilidad</th><th class="p-3 border">Nivel</th><th class="p-3 border">Evidencia Citada</th></tr></thead>
-                            <tbody>
-                                ${habilidades.map(item => `
-                                    <tr class="border-b"><td class="p-3 border font-medium">${item.habilidad || ''}</td><td class="p-3 border">${item.evaluacion || ''}</td><td class="p-3 border italic">"${item.evidencia || ''}"</td></tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>`;
-            };
-            
-            const resumen = group.retroalimentacion?.resumen_general || { fortalezas: 'N/A', areas_mejora: 'N/A' };
-
-            const reportHTML = `
-                <html>
-                    <head><title>Informe - ${group.studentName}</title><script src="https://cdn.tailwindcss.com"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script></head>
-                    <body class="bg-gray-100 font-sans">
-                        <div class="p-4 sm:p-8"><div class="max-w-4xl mx-auto">
-                            <div id="report-actions" class="bg-white p-4 sm:p-6 rounded-lg shadow-sm mb-4 flex justify-end gap-2 print:hidden">
-                                <button onclick="window.print()" class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg text-sm">Imprimir</button>
-                                <button onclick="exportPDF()" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg text-sm">Exportar a PDF</button>
-                            </div>
-                            <div id="report-content" class="bg-white p-10 rounded-lg shadow-lg">
-                                <header class="flex justify-between items-start border-b pb-6 mb-8">
-                                    <div><h1 class="text-3xl font-bold text-gray-800">Informe de Evaluación</h1>${departamento ? `<p class="text-gray-500">${departamento}</p>` : ''}</div>
-                                    ${logoPreview ? `<img src="${logoPreview}" alt="Logo" class="h-16 max-w-xs object-contain"/>` : ''}
-                                </header>
-                                <div class="grid grid-cols-3 gap-6 mb-8">
-                                    <div><p class="text-sm text-gray-500">Alumno</p><p class="font-semibold">${group.studentName}</p></div>
-                                    <div><p class="text-sm text-gray-500">Curso</p><p class="font-semibold">${curso || 'N/A'}</p></div>
-                                    <div><p class="text-sm text-gray-500">Fecha</p><p class="font-semibold">${fechaEvaluacion ? format(fechaEvaluacion, "dd/MM/yyyy") : 'N/A'}</p></div>
-                                </div>
-                                <div class="space-y-6">
-                                    <div><h3 class="font-semibold text-lg">Nota Final (con décimas)</h3><p class="text-4xl font-bold text-blue-600 mt-1">${finalNota.toFixed(1)}</p></div><hr/>
-                                    <div><h3 class="font-semibold text-lg">Puntaje</h3><p>${group.puntaje || 'N/A'}</p></div><hr/>
-                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div><h3 class="font-semibold text-lg text-green-700">✅ Fortalezas Principales</h3><p class="text-sm mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">${resumen.fortalezas}</p></div>
-                                        <div><h3 class="font-semibold text-lg text-yellow-700">✏️ Oportunidades de Mejora</h3><p class="text-sm mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">${resumen.areas_mejora}</p></div>
-                                    </div>
-                                    ${buildHabilidadesTable()}
-                                    ${buildCorreccionTable()}
-                                </div>
-                            </div>
-                        </div></div>
-                        <script>
-                            function exportPDF() {
-                                const { jsPDF } = window.jspdf;
-                                const content = document.getElementById('report-content');
-                                html2canvas(content, { scale: 2 }).then(canvas => {
-                                    const imgData = canvas.toDataURL('image/png');
-                                    const pdf = new jsPDF('p', 'mm', 'a4');
-                                    const pdfWidth = pdf.internal.pageSize.getWidth();
-                                    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-                                    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-                                    pdf.save('informe-' + "${group.studentName}".replace(/ /g, '_') + '.pdf');
-                                });
-                            }
-                        </script>
-                    </body>
-                </html>`;
-            reportWindow.document.write(reportHTML);
-            reportWindow.document.close();
-        } catch (error) {
-            console.error("Error al generar el informe:", error);
-            alert("Ocurrió un error al intentar generar el informe. Revisa la consola para más detalles.");
-        }
+        const reportHTML = `<html><head><title>Informe - ${group.studentName}</title><meta charset="utf-8" /><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-gray-100 font-sans p-8"><div id="report-content" class="bg-white p-10 rounded-lg shadow-lg max-w-4xl mx-auto"><header class="border-b pb-6 mb-8 flex justify-between items-start"><div class="flex items-center gap-4"><img src="${DRAGONFLY_DATA_URL}" alt="Logo" class="h-12 w-12"/><div><h1 class="text-3xl font-extrabold" style="background:linear-gradient(90deg,#7C3AED,#4F46E5,#06B6D4);-webkit-background-clip:text;background-clip:text;color:transparent;">Libel-IA</h1><p class="text-gray-500">Informe de Evaluación Pedagógica</p></div></div><div class="text-right">${logoPreview ? `<img src="${logoPreview}" alt="Logo Colegio" class="h-16 max-w-xs object-contain ml-auto mb-2"/>` : ''}<div class="text-sm leading-tight">${nombreProfesor ? `<div><strong>Profesor:</strong> ${nombreProfesor}</div>` : ''}${asignatura ? `<div><strong>Asignatura:</strong> ${asignatura}</div>` : ''}${departamento ? `<div><strong>Departamento:</strong> ${departamento}</div>` : ''}</div></div></header><div class="grid grid-cols-2 gap-x-6 gap-y-4 mb-8"><div><p class="text-sm text-gray-500">Alumno</p><p class="font-semibold">${group.studentName}</p></div><div><p class="text-sm text-gray-500">Curso</p><p class="font-semibold">${curso || 'N/A'}</p></div><div><p class="text-sm text-gray-500">Nombre Evaluación</p><p class="font-semibold">${nombrePrueba || 'N/A'}</p></div><div><p class="text-sm text-gray-500">Fecha</p><p class="font-semibold">${format(new Date(), "dd/MM/yyyy")}</p></div></div><div class="space-y-6"><div><h3 class="font-semibold text-lg">Nota Final</h3><p class="text-4xl font-bold text-blue-600 mt-1">${finalNota}</p></div><hr/><div><h3 class="font-semibold text-lg">Puntaje</h3><p>${group.puntaje || 'N/A'}</p></div><hr/><div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div><h3 class="font-semibold text-lg text-green-700">✅ Fortalezas</h3><p class="text-sm mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">${resumen.fortalezas}</p></div><div><h3 class="font-semibold text-lg text-yellow-700">✏️ Áreas de Mejora</h3><p class="text-sm mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">${resumen.areas_mejora}</p></div></div>${buildTable('Corrección Detallada', ['Sección', 'Detalle'], group.retroalimentacion?.correccion_detallada, item => `<tr class="border-b"><td class="p-3 border font-medium">${item.seccion || ''}</td><td class="p-3 border">${item.detalle || ''}</td></tr>`)}${buildTable('Evaluación de Habilidades', ['Habilidad', 'Nivel', 'Evidencia'], group.retroalimentacion?.evaluacion_habilidades, item => `<tr class="border-b"><td class="p-3 border font-medium">${item.habilidad || ''}</td><td class="p-3 border">${item.evaluacion || ''}</td><td class="p-3 border italic">"${item.evidencia || ''}"</td></tr>`)}</div></div></body></html>`;
+        reportWindow.document.write(reportHTML);
+        reportWindow.document.close();
     };
 
     const onEvaluateAll = async () => {
         const { rubrica, pauta, flexibilidad, tipoEvaluacion, areaConocimiento } = form.getValues();
         if (!rubrica) { form.setError("rubrica", { type: "manual", message: "La rúbrica es requerida." }); return; }
-
         for (const group of studentGroups) {
-            if (group.files.length > 0) {
-                setStudentGroups(prev => prev.map(g => g.id === group.id ? { ...g, isEvaluating: true, isEvaluated: false, error: undefined } : g));
-                const fileUrls = group.files.map(f => f.dataUrl);
-                const payload = { fileUrls, rubrica, pauta, flexibilidad: flexibilidad[0], tipoEvaluacion, areaConocimiento };
-                const evaluationResult = await evaluate(payload);
-                setStudentGroups(prev => prev.map(g => {
-                    if (g.id === group.id) {
-                        return { ...g, isEvaluating: false, isEvaluated: true, ...(evaluationResult.success ? evaluationResult : { error: evaluationResult.error }) };
-                    }
-                    return g;
-                }));
-            }
+            if (group.files.length === 0) continue;
+            setStudentGroups(prev => prev.map(g => g.id === group.id ? { ...g, isEvaluating: true, isEvaluated: false, error: undefined } : g));
+            const payload = { fileUrls: group.files.map(f => f.dataUrl), rubrica, pauta, flexibilidad: flexibilidad[0], tipoEvaluacion, areaConocimiento };
+            const result = await evaluate(payload);
+            setStudentGroups(prev => prev.map(g => g.id === group.id ? { ...g, isEvaluating: false, isEvaluated: true, ...(result.success ? result : { error: result.error }) } : g));
         }
     };
 
+    const exportToDocOrCsv = (formatType: 'csv' | 'doc') => {
+        const { curso, fechaEvaluacion, nombreProfesor, departamento, asignatura } = form.getValues();
+        const fechaStr = fechaEvaluacion ? format(fechaEvaluacion, "dd/MM/yyyy") : "";
+        const evaluatedGroups = studentGroups.filter(g => g.isEvaluated);
+        if (evaluatedGroups.length === 0) { alert("No hay evaluaciones para exportar."); return; }
+
+        if (formatType === 'csv') {
+            const rows = [["Alumno", "Curso", "Puntaje", "Nota", "Décimas", "Nota Final", "Fecha"]];
+            evaluatedGroups.forEach(g => {
+                const finalNota = ((Number(g.nota) || 0) + g.decimasAdicionales).toFixed(1);
+                rows.push([g.studentName, curso || "", g.puntaje || "", String(g.nota || 0), String(g.decimasAdicionales), finalNota, fechaStr]);
+            });
+            const csvContent = rows.map(r => r.map(v => `"${(v ?? "").toString().replace(/"/g, '""')}"`).join(",")).join("\n");
+            const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `resumen-notas_${new Date().toISOString().slice(0,10)}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } else {
+            const rows = evaluatedGroups.map(g => {
+                const finalNota = ((Number(g.nota) || 0) + g.decimasAdicionales).toFixed(1);
+                return `<tr><td>${g.studentName}</td><td>${curso || ""}</td><td>${g.puntaje || ""}</td><td>${g.nota || 0}</td><td>${g.decimasAdicionales}</td><td>${finalNota}</td><td>${fechaStr}</td></tr>`;
+            }).join("");
+            const htmlContent = `<html><head><meta charset="utf-8" /><title>Resumen de Notas</title><style>body{font-family:Arial,sans-serif}h1{font-size:18px}.meta{font-size:12px;color:#555;margin-bottom:10px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}thead th{background:#f2f2f2}.header{margin-bottom:12px}</style></head><body><div class="header"><h1>Resumen de Notas</h1><div class="meta">${nombreProfesor ? `<div><strong>Profesor:</strong> ${nombreProfesor}</div>` : ''}${asignatura ? `<div><strong>Asignatura:</strong> ${asignatura}</div>` : ''}${departamento ? `<div><strong>Departamento:</strong> ${departamento}</div>` : ''}${curso ? `<div><strong>Curso:</strong> ${curso}</div>` : ''}${fechaStr ? `<div><strong>Fecha:</strong> ${fechaStr}</div>` : ''}</div></div><table><thead><tr><th>Alumno</th><th>Curso</th><th>Puntaje</th><th>Nota</th><th>Décimas</th><th>Nota Final</th><th>Fecha</th></tr></thead><tbody>${rows || `<tr><td colspan="7">No hay evaluaciones.</td></tr>`}</tbody></table></body></html>`;
+            const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `resumen-notas_${new Date().toISOString().slice(0,10)}.doc`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    };
+    
     const isCurrentlyEvaluatingAny = studentGroups.some(g => g.isEvaluating);
 
     return (
-        <>
+        <div className={activeTab === 'inicio' ? 'theme-ocaso' : theme}>
+            <GlobalStyles />
             {isCameraOpen && <SmartCameraModal onCapture={handleCapture} onClose={() => setIsCameraOpen(false)} />}
-            <main className="p-4 md:p-8 max-w-6xl mx-auto font-sans">
-                <Tabs defaultValue="evaluator" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2">
+            <main className="p-4 md:p-8 max-w-6xl mx-auto font-sans bg-[var(--bg-main)] text-[var(--text-primary)] transition-colors duration-300">
+                
+                <div className="mb-6 p-3 rounded-lg flex items-center justify-between bg-[var(--bg-card)] border border-[var(--border-color)]">
+                    <div className="flex items-center gap-2">
+                        <Palette className="h-5 w-5 text-[var(--text-secondary)]" />
+                        <span className="text-sm font-medium text-[var(--text-secondary)]">Tema</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Button size="sm" variant={theme === 'theme-default' ? 'default' : 'ghost'} onClick={() => setTheme('theme-default')} className={cn(theme !== 'theme-default' && "text-[var(--text-secondary)]")}>Predeterminado</Button>
+                        <Button size="sm" variant={theme === 'theme-ocaso' ? 'default' : 'ghost'} onClick={() => setTheme('theme-ocaso')} className={cn(theme !== 'theme-ocaso' && "text-[var(--text-secondary)]")}>Ocaso</Button>
+                        <Button size="sm" variant={theme === 'theme-corporativo' ? 'default' : 'ghost'} onClick={() => setTheme('theme-corporativo')} className={cn(theme !== 'theme-corporativo' && "text-[var(--text-secondary)]")}>Corporativo</Button>
+                    </div>
+                </div>
+
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                    <TabsList className="grid w-full grid-cols-3 bg-[var(--bg-muted)]">
+                        <TabsTrigger value="inicio"><Home className="mr-2 h-4 w-4" />Inicio</TabsTrigger>
                         <TabsTrigger value="evaluator"><Sparkles className="mr-2 h-4 w-4" />Evaluador</TabsTrigger>
-                        <TabsTrigger value="dashboard"><ClipboardList className="mr-2 h-4 w-4" />Resumen de Notas</TabsTrigger>
+                        <TabsTrigger value="dashboard"><ClipboardList className="mr-2 h-4 w-4" />Resumen</TabsTrigger>
                     </TabsList>
+
+                    <TabsContent value="inicio" className="mt-8 text-center">
+                        <Card 
+                            className="max-w-3xl mx-auto border-2 shadow-lg bg-[var(--bg-card)] border-[var(--border-color)]"
+                            style={{ backgroundImage: 'radial-gradient(circle, rgba(124, 58, 237, 0.15) 0%, rgba(9, 9, 11, 0) 70%)' }}
+                        >
+                            <CardContent className="p-12">
+                                <img src={DRAGONFLY_DATA_URL} alt="Logo" className="mx-auto h-36 w-36 mb-4"/>
+                                <h1 className={`text-6xl font-bold ${wordmarkClass} font-logo`}>Libel-IA</h1>
+                                <p className="mt-3 text-xl italic text-cyan-300">
+                                    “Evaluación con Inteligencia Docente: Hecha por un Profe, para Profes”
+                                </p>
+                                <p className="mt-6 text-lg text-[var(--text-secondary)]">
+                                  Asistente pedagógico inteligente que analiza las respuestas de tus estudiantes, genera retroalimentación detallada y crea informes al instante.
+                                </p>
+                                <Button size="lg" className="mt-8 text-lg py-6 px-8" onClick={() => setActiveTab("evaluator")}>
+                                    Comenzar a Evaluar <Sparkles className="ml-2 h-5 w-5" />
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
                     <TabsContent value="evaluator" className="space-y-8 mt-4">
-                        <Card>
-                            <CardHeader><CardTitle>Paso 1: Configuración de la Evaluación</CardTitle></CardHeader>
+                        <div className="flex items-center gap-3">
+                            <img src={DRAGONFLY_DATA_URL} alt="Logo Libel-IA" className="h-8 w-8" />
+                            <span className={`font-semibold text-xl ${wordmarkClass} font-logo`}>Libel-IA</span>
+                        </div>
+
+                        <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
+                            <CardHeader><CardTitle className="text-[var(--text-accent)]">Paso 1: Configuración de la Evaluación</CardTitle></CardHeader>
                             <CardContent>
                                 <Form {...form}>
                                     <form onSubmit={(e) => { e.preventDefault(); onEvaluateAll(); }} className="space-y-8">
-                                        <div className="flex flex-wrap items-center gap-x-8 gap-y-4 p-4 border rounded-lg">
+                                        <div className="flex flex-wrap items-center gap-x-8 gap-y-4 p-4 border rounded-lg border-[var(--border-color)]">
                                             <div className="flex items-center space-x-3">
-                                                <Label htmlFor="class-size" className="text-base font-bold">Nº de Estudiantes:</Label>
+                                                <Label htmlFor="class-size" className="text-base font-bold text-[var(--text-accent)]">Nº de Estudiantes:</Label>
                                                 <Input id="class-size" type="number" value={classSize} onChange={(e) => setClassSize(Number(e.target.value) || 1)} className="w-24 text-base" min="1"/>
                                             </div>
                                             <div className="flex items-center space-x-3">
-                                                <FormField control={form.control} name="curso" render={({ field }) => (<FormItem className="flex items-center space-x-3"><FormLabel className="text-base font-bold mt-2">Curso:</FormLabel><FormControl><Input placeholder="Ej: 8° Básico" {...field} className="w-40 text-base" /></FormControl></FormItem>)}/>
+                                                <FormField control={form.control} name="curso" render={({ field }) => (<FormItem className="flex items-center space-x-3"><FormLabel className="text-base font-bold mt-2 text-[var(--text-accent)]">Curso:</FormLabel><FormControl><Input placeholder="Ej: 8° Básico" {...field} className="w-40 text-base" /></FormControl></FormItem>)}/>
                                             </div>
                                         </div>
                                         <FormField control={form.control} name="areaConocimiento" render={({ field }) => (
                                             <FormItem>
-                                                <FormLabel className="font-bold">Área de Conocimiento (Para Mejorar la IA)</FormLabel>
+                                                <FormLabel className="font-bold text-[var(--text-accent)]">Área de Conocimiento</FormLabel>
                                                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                                                     <FormControl><SelectTrigger><SelectValue placeholder="Selecciona la materia..." /></SelectTrigger></FormControl>
                                                     <SelectContent>
@@ -294,58 +340,75 @@ export default function EvaluatorClient() {
                                                 </Select>
                                             </FormItem>
                                         )}/>
-                                        <div className="p-4 border rounded-lg">
-                                            <h3 className="text-lg font-semibold mb-4">Personalización del Informe</h3>
+                                        <div className="p-4 border rounded-lg border-[var(--border-color)]">
+                                            <h3 className="text-lg font-semibold mb-4 text-[var(--text-accent)]">Personalización del Informe</h3>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                                <FormField control={form.control} name="nombreProfesor" render={({ field }) => (<FormItem><FormLabel>Nombre del Profesor</FormLabel><FormControl><Input placeholder="Ej: Juan Pérez" {...field} /></FormControl></FormItem>)} />
-                                                <FormField control={form.control} name="departamento" render={({ field }) => (<FormItem><FormLabel>Departamento</FormLabel><FormControl><Input placeholder="Ej: Ciencias" {...field} /></FormControl></FormItem>)} />
-                                                <FormField control={form.control} name="fechaEvaluacion" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Fecha</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>{field.value ? format(field.value, "PPP") : <span>Elige una fecha</span>}<CalendarIcon className="mr-2 h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent></Popover></FormItem>)} />
-                                                <div className="space-y-2 col-span-full"><Label>Logo (Opcional)</Label><div className="flex items-center gap-4"><Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}><ImageUp className="mr-2 h-4 w-4" />Subir Logo</Button><input type="file" accept="image/*" ref={logoInputRef} onChange={handleLogoChange} className="hidden" />{logoPreview && <img src={logoPreview} alt="Vista previa del logo" className="h-12 w-auto object-contain border p-1 rounded-md" />}</div></div>
+                                                <FormField control={form.control} name="nombreProfesor" render={({ field }) => (<FormItem><FormLabel className="text-[var(--text-accent)]">Nombre del Profesor</FormLabel><FormControl><Input placeholder="Ej: Juan Pérez" {...field} /></FormControl></FormItem>)} />
+                                                <FormField control={form.control} name="departamento" render={({ field }) => (<FormItem><FormLabel className="text-[var(--text-accent)]">Departamento</FormLabel><FormControl><Input placeholder="Ej: Ciencias" {...field} /></FormControl></FormItem>)} />
+                                                <FormField control={form.control} name="asignatura" render={({ field }) => (<FormItem><FormLabel className="text-[var(--text-accent)]">Asignatura</FormLabel><FormControl><Input placeholder="Ej: Lenguaje y Comunicación" {...field} /></FormControl></FormItem>)} />
+                                                <FormField control={form.control} name="nombrePrueba" render={({ field }) => (<FormItem><FormLabel className="text-[var(--text-accent)]">Nombre de la Prueba</FormLabel><FormControl><Input placeholder="Ej: Ensayo Final" {...field} /></FormControl></FormItem>)} />
+                                                <FormField control={form.control} name="fechaEvaluacion" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel className="text-[var(--text-accent)]">Fecha</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-[var(--text-secondary)]")}>{field.value ? format(field.value, "PPP") : <span>Elige una fecha</span>}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent></Popover></FormItem>)} />
+                                                <div className="space-y-2 col-span-full"><Label className="text-[var(--text-accent)]">Logo del Colegio (Opcional)</Label><div className="flex items-center gap-4"><Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}><ImageUp className="mr-2 h-4 w-4" />Subir Logo</Button><input type="file" accept="image/*" ref={logoInputRef} onChange={handleLogoChange} className="hidden" />{logoPreview && <img src={logoPreview} alt="Vista previa del logo" className="h-12 w-auto object-contain border p-1 rounded-md" />}</div></div>
                                             </div>
                                         </div>
-                                        <FormField control={form.control} name="rubrica" render={({ field }) => (<FormItem><FormLabel className="font-bold">Rúbrica (Criterios)</FormLabel><FormControl><Textarea placeholder="Ej: Evalúa claridad, estructura, ortografía..." className="min-h-[100px]" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                                        <FormField control={form.control} name="pauta" render={({ field }) => (<FormItem><FormLabel className="font-bold">Pauta (Respuestas)</FormLabel><FormControl><Textarea placeholder="Opcional. Pega aquí las respuestas correctas..." className="min-h-[100px]" {...field} /></FormControl></FormItem>)} />
-                                        <FormField control={form.control} name="flexibilidad" render={({ field }) => (<FormItem><FormLabel className="font-bold">Nivel de Flexibilidad</FormLabel><FormControl><Slider min={1} max={5} step={1} defaultValue={field.value} onValueChange={field.onChange} /></FormControl><div className="flex justify-between text-xs text-muted-foreground"><span>Estricto</span><span>Flexible</span></div></FormItem>)} />
+                                        <FormField control={form.control} name="rubrica" render={({ field }) => (<FormItem>
+                                            <FormLabel className="font-bold text-[var(--text-accent)]">Rúbrica (Criterios)</FormLabel>
+                                            <FormControl><Textarea placeholder="Ej: Evalúa claridad, estructura, ortografía..." className="min-h-[100px]" {...field} /></FormControl>
+                                            <FormDescription>
+                                                Importante: Incluye el puntaje total de la evaluación (Ej: "Puntaje total: 60 puntos").
+                                            </FormDescription>
+                                            <FormMessage />
+                                        </FormItem>)} />
+                                        <FormField control={form.control} name="pauta" render={({ field }) => (<FormItem><FormLabel className="font-bold text-[var(--text-accent)]">Pauta (Respuestas)</FormLabel><FormControl><Textarea placeholder="Opcional. Pega aquí las respuestas correctas..." className="min-h-[100px]" {...field} /></FormControl></FormItem>)} />
+                                        <FormField control={form.control} name="flexibilidad" render={({ field }) => (<FormItem><FormLabel className="font-bold text-[var(--text-accent)]">Nivel de Flexibilidad</FormLabel><FormControl><Slider min={1} max={5} step={1} defaultValue={field.value} onValueChange={field.onChange} /></FormControl><div className="flex justify-between text-xs text-[var(--text-secondary)]"><span>Estricto</span><span>Flexible</span></div></FormItem>)} />
                                     </form>
                                 </Form>
                             </CardContent>
                         </Card>
-                        <Card>
-                            <CardHeader><CardTitle>Paso 2: Cargar y Agrupar Trabajos</CardTitle></CardHeader>
+                        
+                        <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
+                            <CardHeader><CardTitle className="text-[var(--text-accent)]">Paso 2: Cargar y Agrupar Trabajos</CardTitle></CardHeader>
                             <CardContent className="space-y-6">
                                 <div>
-                                    <h3 className="font-bold">Cargar Archivos a la Bandeja de Pendientes</h3>
+                                    <h3 className="font-bold text-[var(--text-accent)]">Cargar Archivos</h3>
                                     <div className="flex flex-wrap gap-4 mt-2 items-center">
                                         <Button type="button" onClick={() => { fileInputRef.current?.click(); }}><FileUp className="mr-2 h-4 w-4" /> Subir Archivos</Button>
                                         <Button type="button" variant="secondary" onClick={() => setIsCameraOpen(true)}><Camera className="mr-2 h-4 w-4" /> Usar Cámara</Button>
                                         <input type="file" multiple ref={fileInputRef} onChange={(e) => handleFilesSelected(e.target.files)} className="hidden" />
-                                        <p className="text-sm text-muted-foreground">Consejo: Sube primero la página con el nombre.</p>
+                                        <p className="text-sm text-[var(--text-secondary)]">Consejo: Sube primero la página con el nombre.</p>
                                     </div>
                                 </div>
                                 {unassignedFiles.length > 0 && (
-                                    <div className="p-4 border rounded-lg bg-muted/20">
-                                        <h3 className="font-semibold mb-3 flex items-center"><ClipboardList className="mr-2 h-5 w-5" /> Bandeja de Archivos Pendientes</h3>
+                                    <div className="p-4 border rounded-lg bg-[var(--bg-muted-subtle)] border-[var(--border-color)]">
+                                        <h3 className="font-semibold mb-3 flex items-center text-[var(--text-accent)]"><ClipboardList className="mr-2 h-5 w-5" /> Archivos Pendientes</h3>
                                         <div className="flex flex-wrap gap-4 items-center">
-                                            {unassignedFiles.map(file => (<div key={file.id} className="w-24 h-24"><img src={file.previewUrl} alt={file.file.name} className="w-full h-full object-cover rounded-md" /></div>))}
+                                            {unassignedFiles.map(file => (
+                                                <div key={file.id} className="relative w-24 h-24">
+                                                    <img src={file.previewUrl} alt={file.file.name} className="w-full h-full object-cover rounded-md" />
+                                                    <button onClick={() => removeUnassignedFile(file.id)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 transition-colors" aria-label="Eliminar archivo">
+                                                        <X className="h-3 w-3" />
+                                                    </button>
+                                                </div>
+                                            ))}
                                             <Button type="button" variant="outline" onClick={handleNameExtraction} disabled={isExtractingNames} className="self-center">
-                                                {isExtractingNames ? ( <Loader2 className="mr-2 h-4 w-4 animate-spin" /> ) : ( <Sparkles className="mr-2 h-4 w-4 text-purple-500" /> )}
-                                                Detectar Nombre
+                                                {isExtractingNames ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4 text-purple-500" />} Detectar Nombre
                                             </Button>
                                         </div>
                                     </div>
                                 )}
                             </CardContent>
                         </Card>
+                        
                         {studentGroups.length > 0 && 
-                            <Card>
-                                <CardHeader><CardTitle className="flex items-center gap-2"><Users className="text-green-500" />Grupos de Estudiantes</CardTitle></CardHeader>
+                            <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
+                                <CardHeader><CardTitle className="flex items-center gap-2 text-[var(--text-accent)]"><Users className="text-green-500" />Grupos de Estudiantes</CardTitle></CardHeader>
                                 <CardContent className="space-y-4">
                                     {studentGroups.map(group => (
-                                        <div key={group.id} className="border p-4 rounded-lg">
-                                            <Input className="text-lg font-bold border-0 shadow-none focus-visible:ring-0 p-1 mb-2" value={group.studentName} onChange={(e) => updateStudentName(group.id, e.target.value)} />
-                                            <div className="flex flex-wrap gap-2 min-h-[50px] bg-muted/50 p-2 rounded-md">
+                                        <div key={group.id} className="border p-4 rounded-lg border-[var(--border-color)]">
+                                            <Input className="text-lg font-bold border-0 shadow-none focus-visible:ring-0 p-1 mb-2 bg-transparent" value={group.studentName} onChange={(e) => updateStudentName(group.id, e.target.value)} />
+                                            <div className="flex flex-wrap gap-2 min-h-[50px] bg-[var(--bg-muted-subtle)] p-2 rounded-md">
                                                 {group.files.map(file => (<div key={file.id} className="relative w-20 h-20"><img src={file.previewUrl} alt={file.file.name} className="w-full h-full object-cover rounded-md" /><button onClick={() => removeFileFromGroup(file.id, group.id)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5"><X className="h-3 w-3" /></button></div>))}
-                                                {unassignedFiles.length > 0 && (<div className="flex items-center justify-center w-20 h-20 border-2 border-dashed rounded-md"><select onChange={(e) => { if (e.target.value) assignFileToGroup(e.target.value, group.id); e.target.value = ""; }} className="text-sm bg-transparent"><option value="">Asignar</option>{unassignedFiles.map(f => <option key={f.id} value={f.id}>{f.file.name}</option>)}</select></div>)}
+                                                {unassignedFiles.length > 0 && (<div className="flex items-center justify-center w-20 h-20 border-2 border-dashed rounded-md border-[var(--border-color)]"><select onChange={(e) => { if (e.target.value) assignFileToGroup(e.target.value, group.id); e.target.value = ""; }} className="text-sm bg-transparent"><option value="">Asignar</option>{unassignedFiles.map(f => <option key={f.id} value={f.id}>{f.file.name}</option>)}</select></div>)}
                                             </div>
                                         </div>
                                     ))}
@@ -357,32 +420,39 @@ export default function EvaluatorClient() {
                                 </CardFooter>
                             </Card>
                         }
+                        
                         {studentGroups.some(g => g.isEvaluated || g.isEvaluating) && (
-                            <Card>
-                                <CardHeader><CardTitle>Paso 3: Resultados</CardTitle></CardHeader>
+                            <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
+                                <CardHeader><CardTitle className="text-[var(--text-accent)]">Paso 3: Resultados</CardTitle></CardHeader>
                                 <CardContent className="space-y-4">
                                     {studentGroups.filter(g => g.isEvaluated || g.isEvaluating).map(group => { 
                                         const finalNota = (Number(group.nota) || 0) + group.decimasAdicionales; 
                                         return (
-                                            <div key={group.id} className={`p-6 rounded-lg border-l-4 ${group.error ? 'border-red-500' : 'border-green-500'} bg-white shadow`}>
+                                            <div key={group.id} className={`p-6 rounded-lg border-l-4 ${group.error ? 'border-red-500' : 'border-green-500'} bg-[var(--bg-card)] shadow`}>
                                                 <div className="flex justify-between items-center flex-wrap gap-2">
-                                                    <h3 className="font-bold text-xl">{group.studentName}</h3>
-                                                    {group.isEvaluating && <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Procesando...</div>}
+                                                    <h3 className="font-bold text-xl text-[var(--text-accent)]">{group.studentName}</h3>
+                                                    {group.isEvaluating && <div className="flex items-center text-sm text-[var(--text-secondary)]"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Procesando...</div>}
                                                     {group.isEvaluated && !group.error && <Button variant="ghost" size="sm" onClick={() => generateReport(group)}><Printer className="mr-2 h-4 w-4" />Ver Informe</Button>}
                                                 </div>
                                                 {group.error ? <p className="text-red-600">Error: {group.error}</p> : <div className="mt-4 space-y-6">{group.isEvaluated && group.retroalimentacion && <>
-                                                    <div className="flex justify-between items-start bg-gray-50 p-4 rounded-lg">
+                                                    <div className="flex justify-between items-start bg-[var(--bg-muted-subtle)] p-4 rounded-lg">
                                                         <div><p className="text-sm font-bold">PUNTAJE</p><p className="text-xl font-semibold">{group.puntaje || 'N/A'}</p></div>
                                                         <div className="text-right">
                                                             <div className="flex items-center gap-2"><label htmlFor={`decimas-${group.id}`} className="text-sm font-medium">Décimas:</label><Input id={`decimas-${group.id}`} type="number" step="0.1" defaultValue={group.decimasAdicionales} onChange={e => handleDecimasChange(group.id, e.target.value)} className="h-8 w-20" /></div>
                                                             <p className="text-sm font-bold mt-2">NOTA FINAL</p><p className="text-3xl font-bold text-blue-600">{finalNota.toFixed(1)}</p>
                                                         </div>
                                                     </div>
-                                                    <div><h4 className="font-bold mb-2">Corrección Detallada</h4><Table><TableHeader><TableRow><TableHead>Sección</TableHead><TableHead>Detalle</TableHead></TableRow></TableHeader><TableBody>{group.retroalimentacion.correccion_detallada?.map((item, index) => (<TableRow key={index}><TableCell className="font-medium">{item.seccion}</TableCell><TableCell>{item.detalle}</TableCell></TableRow>))}</TableBody></Table></div>
-                                                    <div><h4 className="font-bold mb-2">Evaluación de Habilidades</h4><Table><TableHeader><TableRow><TableHead>Habilidad</TableHead><TableHead>Nivel</TableHead><TableHead>Evidencia</TableHead></TableRow></TableHeader><TableBody>{group.retroalimentacion.evaluacion_habilidades?.map((item, index) => (<TableRow key={index}><TableCell className="font-medium">{item.habilidad}</TableCell><TableCell>{item.evaluacion}</TableCell><TableCell className="italic">"{item.evidencia}"</TableCell></TableRow>))}</TableBody></Table></div>
+                                                    <div><h4 className="font-bold mb-2 text-[var(--text-accent)]">Corrección Detallada</h4><Table><TableHeader><TableRow><TableHead>Sección</TableHead><TableHead>Detalle</TableHead></TableRow></TableHeader><TableBody>{group.retroalimentacion.correccion_detallada?.map((item, index) => (<TableRow key={index}><TableCell className="font-medium">{item.seccion}</TableCell><TableCell>{item.detalle}</TableCell></TableRow>))}</TableBody></Table></div>
+                                                    <div><h4 className="font-bold mb-2 text-[var(--text-accent)]">Evaluación de Habilidades</h4><Table><TableHeader><TableRow><TableHead>Habilidad</TableHead><TableHead>Nivel</TableHead><TableHead>Evidencia</TableHead></TableRow></TableHeader><TableBody>{group.retroalimentacion.evaluacion_habilidades?.map((item, index) => (<TableRow key={index}><TableCell className="font-medium">{item.habilidad}</TableCell><TableCell>{item.evaluacion}</TableCell><TableCell className="italic">"{item.evidencia}"</TableCell></TableRow>))}</TableBody></Table></div>
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-                                                        <div><h4 className="font-bold text-green-700">Fortalezas</h4><div className="text-sm mt-2 p-3 bg-green-50 rounded-lg">{group.retroalimentacion.resumen_general?.fortalezas}</div></div>
-                                                        <div><h4 className="font-bold text-yellow-700">Áreas de Mejora</h4><div className="text-sm mt-2 p-3 bg-yellow-50 rounded-lg">{group.retroalimentacion.resumen_general?.areas_mejora}</div></div>
+                                                        <div>
+                                                            <h4 className="font-bold text-[var(--text-accent)]">Fortalezas</h4>
+                                                            <div className="text-sm mt-2 p-3 bg-[var(--bg-muted-subtle)] border border-[var(--border-color)] rounded-lg">{group.retroalimentacion.resumen_general?.fortalezas}</div>
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="font-bold text-[var(--text-accent)]">Áreas de Mejora</h4>
+                                                            <div className="text-sm mt-2 p-3 bg-[var(--bg-muted-subtle)] border border-[var(--border-color)] rounded-lg">{group.retroalimentacion.resumen_general?.areas_mejora}</div>
+                                                        </div>
                                                     </div>
                                                 </>}</div>}
                                             </div>
@@ -392,11 +462,19 @@ export default function EvaluatorClient() {
                             </Card>
                         )}
                     </TabsContent>
-                    <TabsContent value="dashboard" className="mt-4">
-                        <NotesDashboard studentGroups={studentGroups} curso={form.getValues("curso")} fecha={form.getValues("fechaEvaluacion")} />
+
+                    <TabsContent value="dashboard" className="mt-4 space-y-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <h2 className="text-xl font-semibold text-[var(--text-accent)]">Resumen de Notas</h2>
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" onClick={() => exportToDocOrCsv('csv')}>Exportar CSV</Button>
+                          <Button onClick={() => exportToDocOrCsv('doc')}>Exportar Word</Button>
+                        </div>
+                      </div>
+                      <NotesDashboard studentGroups={studentGroups} curso={form.getValues("curso")} fecha={form.getValues("fechaEvaluacion")} />
                     </TabsContent>
                 </Tabs>
             </main>
-        </>
+        </div>
     );
 }
