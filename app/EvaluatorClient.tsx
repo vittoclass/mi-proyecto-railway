@@ -1,5 +1,4 @@
 'use client'
-
 import { useState, useRef, ChangeEvent, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
@@ -22,12 +21,10 @@ import { Loader2, Sparkles, FileUp, Camera, Users, X, Printer, CalendarIcon, Ima
 import { cn } from "@/lib/utils"
 import { useEvaluator } from "./useEvaluator"
 import { NotesDashboard } from "../components/NotesDashboard"
-
 const SmartCameraModal = dynamic(() => import('../components/smart-camera-modal'), { ssr: false, loading: () => <p>Cargando...</p> })
 const Label = React.forwardRef<HTMLLabelElement, React.ComponentPropsWithoutRef<'label'>>(({ className, ...props }, ref) => ( <label ref={ref} className={cn("text-sm font-medium", className)} {...props} /> ));
 Label.displayName = "Label"
 
-// ───────────────────────────────────────────────────────────────────────────────
 // LOGO Libel-IA (libélula) — diseño estilizado, gradiente y formas suaves
 const DRAGONFLY_SVG = `
 <svg viewBox="0 0 300 220" xmlns="http://www.w3.org/2000/svg" aria-label="Libel-IA logo">
@@ -52,32 +49,27 @@ const DRAGONFLY_SVG = `
 `;
 const DRAGONFLY_DATA_URL = `data:image/svg+xml;utf8,${encodeURIComponent(DRAGONFLY_SVG)}`;
 const wordmarkClass = "text-transparent bg-clip-text bg-gradient-to-r from-violet-500 via-indigo-500 to-cyan-400";
-// ───────────────────────────────────────────────────────────────────────────────
 
-// === INICIO: ADICIONES PARA TEMAS Y ESTILOS ===
+// ADICIONES PARA TEMAS Y ESTILOS
 const GlobalStyles = () => (
   <style jsx global>{`
     @import url('https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@700&display=swap');
-
     .font-logo {
       font-family: 'Josefin Sans', sans-serif;
     }
-
     :root, .theme-default {
       --bg-main: #F9FAFB; --bg-card: #FFFFFF; --bg-muted: #F3F4F6; --bg-muted-subtle: #F9FAFB; --bg-primary: #4338CA; --bg-primary-hover: #3730A3; --text-primary: #1F2937; --text-secondary: #6B7280; --text-on-primary: #FFFFFF; --text-accent: #4338CA; --border-color: #E5E7EB; --border-focus: #4F46E5; --ring-color: #4F46E5;
     }
-
     .theme-ocaso {
       color: var(--text-primary);
       --bg-main: #09090b; --bg-card: #18181b; --bg-muted: #27272a; --bg-muted-subtle: #18181b; --bg-primary: #7C3AED; --bg-primary-hover: #6D28D9; --text-primary: #F4F4F5; --text-secondary: #a1a1aa; --text-on-primary: #FFFFFF; --text-accent: #a78bfa; --border-color: #27272a; --border-focus: #8B5CF6; --ring-color: #8B5CF6;
     }
-    
+
     .theme-corporativo {
       --bg-main: #F0F4F8; --bg-card: #FFFFFF; --bg-muted: #E3E8EE; --bg-muted-subtle: #F8FAFC; --bg-primary: #2563EB; --bg-primary-hover: #1D4ED8; --text-primary: #0F172A; --text-secondary: #475569; --text-on-primary: #FFFFFF; --text-accent: #2563EB; --border-color: #CBD5E1; --border-focus: #2563EB; --ring-color: #2563EB;
     }
   `}</style>
 );
-// === FIN: ADICIONES PARA TEMAS Y ESTILOS ===
 
 interface CorreccionDetallada { seccion: string; detalle: string; }
 interface EvaluacionHabilidad { habilidad: string; evaluacion: string; evidencia: string; }
@@ -86,6 +78,7 @@ interface RetroalimentacionEstructurada {
   evaluacion_habilidades?: EvaluacionHabilidad[];
   resumen_general?: { fortalezas: string; areas_mejora: string; };
 }
+
 const formSchema = z.object({
   tipoEvaluacion: z.string().default('prueba'),
   rubrica: z.string().min(10, "La rúbrica es necesaria."),
@@ -99,6 +92,7 @@ const formSchema = z.object({
   fechaEvaluacion: z.date().optional(),
   areaConocimiento: z.string().default('general'),
 });
+
 interface FilePreview { id: string; file: File; previewUrl: string; dataUrl: string; }
 interface StudentGroup { id: string; studentName: string; files: FilePreview[]; retroalimentacion?: RetroalimentacionEstructurada; puntaje?: string; nota?: number | string; decimasAdicionales: number; isEvaluated: boolean; isEvaluating: boolean; error?: string; }
 
@@ -132,7 +126,7 @@ export default function EvaluatorClient() {
         })));
         setUnassignedFiles([]);
     }, [classSize]);
-    
+
     const processFiles = (files: File[]) => {
         const validFiles = Array.from(files).filter(file => {
             if (['image/jpeg', 'image/png', 'image/bmp', 'application/pdf', 'image/tiff'].includes(file.type)) return true;
@@ -140,16 +134,16 @@ export default function EvaluatorClient() {
             return false;
         });
         if (validFiles.length === 0) return;
-        validFiles.forEach(file => { 
-            const reader = new FileReader(); 
-            reader.onload = (e) => { 
-                const dataUrl = e.target?.result as string; 
-                setUnassignedFiles(prev => [...prev, { id: `${file.name}-${Date.now()}`, file, previewUrl: URL.createObjectURL(file), dataUrl }]); 
-            }; 
-            reader.readAsDataURL(file); 
-        }); 
+        validFiles.forEach(file => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const dataUrl = e.target?.result as string;
+                setUnassignedFiles(prev => [...prev, { id: `${file.name}-${Date.now()}`, file, previewUrl: URL.createObjectURL(file), dataUrl }]);
+            };
+            reader.readAsDataURL(file);
+        });
     };
-    
+
     const handleFilesSelected = (files: FileList | null) => { if (files) processFiles(Array.from(files)); };
     const handleCapture = (dataUrl: string) => { fetch(dataUrl).then(res => res.blob()).then(blob => { processFiles([new File([blob], `captura-${Date.now()}.png`, { type: 'image/png' })]); }); setIsCameraOpen(false); };
     const handleLogoChange = (e: ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onloadend = () => setLogoPreview(reader.result as string); reader.readAsDataURL(file); } };
@@ -157,7 +151,7 @@ export default function EvaluatorClient() {
     const assignFileToGroup = (fileId: string, groupId: string) => { const fileToMove = unassignedFiles.find(f => f.id === fileId); if (!fileToMove) return; setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, files: [...g.files, fileToMove] } : g)); setUnassignedFiles(files => files.filter(f => f.id !== fileId)); };
     const removeFileFromGroup = (fileId: string, groupId: string) => { let fileToMoveBack: FilePreview | undefined; setStudentGroups(groups => groups.map(g => { if (g.id === groupId) { fileToMoveBack = g.files.find(f => f.id === fileId); return { ...g, files: g.files.filter(f => f.id !== fileId) }; } return g; })); if (fileToMoveBack) setUnassignedFiles(prev => [...prev, fileToMoveBack!]); };
     const handleDecimasChange = (groupId: string, value: string) => { const decimas = parseFloat(value) || 0; setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, decimasAdicionales: decimas } : g)); };
-    
+
     const removeUnassignedFile = (fileId: string) => {
         setUnassignedFiles(prev => prev.filter(f => f.id !== fileId));
     };
@@ -184,28 +178,372 @@ export default function EvaluatorClient() {
             setIsExtractingNames(false);
         }
     };
-    
+
     const generateReport = (group: StudentGroup) => {
-        const { nombreProfesor, departamento, asignatura, curso, nombrePrueba } = form.getValues(); // <-- LÍNEA CORREGIDA
+        const { nombreProfesor, departamento, asignatura, curso, nombrePrueba } = form.getValues();
         const reportWindow = window.open("", "_blank");
-        if (!reportWindow) { alert("Habilita las ventanas emergentes."); return; }
-        
+        if (!reportWindow) {
+            alert("Habilita las ventanas emergentes.");
+            return;
+        }
+
         const buildTable = (title: string, headers: string[], data: any[], rowBuilder: (item: any) => string) => {
             if (!data || !Array.isArray(data) || data.length === 0) return '';
-            return `<div class="mt-8"><h3 class="font-semibold text-lg text-gray-800">${title}</h3><table class="w-full text-sm text-left mt-2 border-collapse"><thead class="bg-gray-50"><tr>${headers.map(h => `<th class="p-3 border">${h}</th>`).join('')}</tr></thead><tbody>${data.map(rowBuilder).join('')}</tbody></table></div>`;
+            return `<div class="section-card"><h2>${title}</h2><table class="styled-table"><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${data.map(rowBuilder).join('')}</tbody></table></div>`;
         };
-        
+
         const resumen = group.retroalimentacion?.resumen_general || { fortalezas: 'N/A', areas_mejora: 'N/A' };
         const finalNota = ((Number(group.nota) || 0) + group.decimasAdicionales).toFixed(1);
+        const sanitizedStudentName = group.studentName.replace(/[^a-zA-Z0-9 ]/g, "");
 
-        const reportHTML = `<html><head><title>Informe - ${group.studentName}</title><meta charset="utf-8" /><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-gray-100 font-sans p-8"><div id="report-content" class="bg-white p-10 rounded-lg shadow-lg max-w-4xl mx-auto"><header class="border-b pb-6 mb-8 flex justify-between items-start"><div class="flex items-center gap-4"><img src="${DRAGONFLY_DATA_URL}" alt="Logo" class="h-12 w-12"/><div><h1 class="text-3xl font-extrabold" style="background:linear-gradient(90deg,#7C3AED,#4F46E5,#06B6D4);-webkit-background-clip:text;background-clip:text;color:transparent;">Libel-IA</h1><p class="text-gray-500">Informe de Evaluación Pedagógica</p></div></div><div class="text-right">${logoPreview ? `<img src="${logoPreview}" alt="Logo Colegio" class="h-16 max-w-xs object-contain ml-auto mb-2"/>` : ''}<div class="text-sm leading-tight">${nombreProfesor ? `<div><strong>Profesor:</strong> ${nombreProfesor}</div>` : ''}${asignatura ? `<div><strong>Asignatura:</strong> ${asignatura}</div>` : ''}${departamento ? `<div><strong>Departamento:</strong> ${departamento}</div>` : ''}</div></div></header><div class="grid grid-cols-2 gap-x-6 gap-y-4 mb-8"><div><p class="text-sm text-gray-500">Alumno</p><p class="font-semibold">${group.studentName}</p></div><div><p class="text-sm text-gray-500">Curso</p><p class="font-semibold">${curso || 'N/A'}</p></div><div><p class="text-sm text-gray-500">Nombre Evaluación</p><p class="font-semibold">${nombrePrueba || 'N/A'}</p></div><div><p class="text-sm text-gray-500">Fecha</p><p class="font-semibold">${format(new Date(), "dd/MM/yyyy")}</p></div></div><div class="space-y-6"><div><h3 class="font-semibold text-lg">Nota Final</h3><p class="text-4xl font-bold text-blue-600 mt-1">${finalNota}</p></div><hr/><div><h3 class="font-semibold text-lg">Puntaje</h3><p>${group.puntaje || 'N/A'}</p></div><hr/><div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div><h3 class="font-semibold text-lg text-green-700">✅ Fortalezas</h3><p class="text-sm mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">${resumen.fortalezas}</p></div><div><h3 class="font-semibold text-lg text-yellow-700">✏️ Áreas de Mejora</h3><p class="text-sm mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">${resumen.areas_mejora}</p></div></div>${buildTable('Corrección Detallada', ['Sección', 'Detalle'], group.retroalimentacion?.correccion_detallada, item => `<tr class="border-b"><td class="p-3 border font-medium">${item.seccion || ''}</td><td class="p-3 border">${item.detalle || ''}</td></tr>`)}${buildTable('Evaluación de Habilidades', ['Habilidad', 'Nivel', 'Evidencia'], group.retroalimentacion?.evaluacion_habilidades, item => `<tr class="border-b"><td class="p-3 border font-medium">${item.habilidad || ''}</td><td class="p-3 border">${item.evaluacion || ''}</td><td class="p-3 border italic">"${item.evidencia || ''}"</td></tr>`)}</div></div></body></html>`;
+        const reportHTML = `
+            <html>
+                <head>
+                    <title>Informe - ${group.studentName}</title>
+                    <meta charset="utf-8" />
+                    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+                    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+                    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+                    <style>
+                        body {
+                            font-family: 'Inter', sans-serif;
+                            background-color: #f3f4f6;
+                            margin: 0;
+                            padding: 10px;
+                            color: #1f2937;
+                            font-size: 10px;
+                            line-height: 1.2;
+                        }
+                        .report-outer-container {
+                            max-width: 800px;
+                            margin: auto;
+                        }
+                        .report-content {
+                            background: white;
+                            padding: 15px;
+                            border-radius: 8px;
+                            box-shadow: 0 2px 3px rgba(0,0,0,0.1);
+                        }
+                        .header {
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: flex-start;
+                            padding-bottom: 10px;
+                            border-bottom: 1px solid #e5e7eb;
+                        }
+                        .header-left {
+                            display: flex;
+                            align-items: center;
+                            gap: 8px;
+                        }
+                        .header-left img {
+                            height: 30px;
+                        }
+                        .header-left h1 {
+                            font-size: 20px;
+                            font-weight: 700;
+                            color: #4f46e5;
+                            margin: 0;
+                            line-height: 1;
+                        }
+                        .header-left p {
+                            font-size: 10px;
+                            color: #6b7280;
+                            margin: 0;
+                        }
+                        .header-right {
+                            text-align: right;
+                        }
+                        .header-right img {
+                            max-height: 35px;
+                            max-width: 120px;
+                            object-fit: contain;
+                            margin-bottom: 6px;
+                        }
+                        .header-right p {
+                            font-size: 9px;
+                            margin: 1px 0;
+                            color: #4b5563;
+                        }
+                        .student-summary-grid {
+                            display: grid;
+                            grid-template-columns: 1fr 1fr;
+                            gap: 10px;
+                            margin-top: 10px;
+                        }
+                        .summary-card {
+                            background-color: #f9fafb;
+                            border: 1px solid #e5e7eb;
+                            padding: 10px;
+                            border-radius: 6px;
+                            text-align: center;
+                        }
+                        .summary-card .label {
+                            font-size: 10px;
+                            font-weight: 600;
+                            color: #4b5563;
+                            margin-bottom: 3px;
+                        }
+                        .summary-card .value {
+                            font-size: 28px;
+                            font-weight: 700;
+                            color: #4f46e5;
+                            line-height: 1;
+                        }
+                        .summary-card .value-small {
+                            font-size: 16px;
+                        }
+                        .feedback-grid {
+                            display: grid;
+                            grid-template-columns: 1fr 1fr;
+                            gap: 10px;
+                            margin-top: 10px;
+                        }
+                        .feedback-card {
+                            padding: 10px;
+                            border-radius: 6px;
+                        }
+                        .feedback-card h2 {
+                            font-size: 14px;
+                            font-weight: 600;
+                            margin: 0 0 8px 0;
+                            display: flex;
+                            align-items: center;
+                        }
+                        .feedback-card p {
+                            font-size: 10px;
+                            line-height: 1.2;
+                            margin: 0;
+                        }
+                        .fortalezas {
+                            background-color: #f0fdf4;
+                            border: 1px solid #bbf7d0;
+                            color: #14532d;
+                        }
+                        .fortalezas h2 {
+                            color: #166534;
+                        }
+                        .areas-mejora {
+                            background-color: #fffbeb;
+                            border: 1px solid #fde68a;
+                            color: #78350f;
+                        }
+                        .areas-mejora h2 {
+                            color: #854d0e;
+                        }
+                        .section-card {
+                            margin-top: 15px;
+                        }
+                        .section-card h2 {
+                            font-size: 16px;
+                            font-weight: 600;
+                            padding-bottom: 6px;
+                            border-bottom: 1px solid #e5e7eb;
+                            margin: 0 0 10px 0;
+                        }
+                        .styled-table {
+                            width: 100%;
+                            border-collapse: collapse;
+                        }
+                        .styled-table th, .styled-table td {
+                            padding: 8px;
+                            text-align: left;
+                            border-bottom: 1px solid #e5e7eb;
+                            font-size: 10px;
+                        }
+                        .styled-table th {
+                            font-weight: 600;
+                            background-color: #f9fafb;
+                        }
+                        .styled-table tr:last-child td {
+                            border-bottom: none;
+                        }
+                        .styled-table td:first-child {
+                            font-weight: 600;
+                            color: #374151;
+                        }
+                        .styled-table i {
+                            color: #6b7280;
+                        }
+                        .actions-container {
+                            margin-top: 15px;
+                            display: flex;
+                            gap: 10px;
+                        }
+                        .action-button {
+                            flex: 1;
+                            padding: 8px;
+                            font-size: 14px;
+                            font-weight: 600;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            transition: background-color 0.2s, transform 0.1s;
+                        }
+                        .action-button:hover {
+                            transform: translateY(-1px);
+                        }
+                        .action-button:active {
+                            transform: translateY(0);
+                        }
+                        .pdf-button {
+                            background-color: #4f46e5;
+                            color: white;
+                        }
+                        .pdf-button:hover {
+                            background-color: #4338ca;
+                        }
+                        .word-button {
+                            background-color: #1d4ed8;
+                            color: white;
+                        }
+                        .word-button:hover {
+                            background-color: #1e40af;
+                        }
+                        .action-button:disabled {
+                            background-color: #a5b4fc;
+                            cursor: not-allowed;
+                            transform: none;
+                        }
+                    </style>
+                    <script>
+                        function setButtonsLoading(isLoading) {
+                            const pdfButton = document.getElementById('pdf-button');
+                            const wordButton = document.getElementById('word-button');
+                            if (isLoading) {
+                                pdfButton.innerText = 'Generando...';
+                                pdfButton.disabled = true;
+                                wordButton.disabled = true;
+                            } else {
+                                pdfButton.innerText = 'Descargar PDF';
+                                pdfButton.disabled = false;
+                                wordButton.disabled = false;
+                            }
+                        }
+
+                        function downloadPDF() {
+                            setButtonsLoading(true);
+                            const report = document.getElementById('report-content');
+
+                            html2canvas(report, {
+                                scale: 2,
+                                useCORS: true,
+                                windowWidth: report.scrollWidth,
+                                windowHeight: report.scrollHeight
+                            }).then(canvas => {
+                                const imgData = canvas.toDataURL('image/png');
+                                const pdf = new window.jspdf.jsPDF({
+                                    orientation: 'p',
+                                    unit: 'mm',
+                                    format: 'a4'
+                                });
+
+                                const imgProps = pdf.getImageProperties(imgData);
+                                const pdfWidth = pdf.internal.pageSize.getWidth();
+                                const pdfPageHeight = pdf.internal.pageSize.getHeight();
+                                const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+                                let heightLeft = imgHeight;
+                                let position = 0;
+                                pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+                                heightLeft -= pdfPageHeight;
+                                while (heightLeft > 0) {
+                                    position = heightLeft - imgHeight;
+                                    pdf.addPage();
+                                    pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+                                    heightLeft -= pdfPageHeight;
+                                }
+
+                                pdf.save('informe-${sanitizedStudentName}.pdf');
+                                setButtonsLoading(false);
+                            }).catch(err => {
+                                alert("Error al generar PDF. Ver la consola para detalles.");
+                                console.error(err);
+                                setButtonsLoading(false);
+                            });
+                        }
+
+                        function downloadWord() {
+                            setButtonsLoading(true);
+                            const reportContent = document.getElementById('report-content').innerHTML;
+                            const header = \`
+                                <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+                                <head><meta charset='utf-8'><title>Informe de Evaluación</title></head><body>\`;
+                            const footer = '</body></html>';
+                            const sourceHTML = header + reportContent + footer;
+                            const source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML);
+                            const fileDownload = document.createElement("a");
+                            document.body.appendChild(fileDownload);
+                            fileDownload.href = source;
+                            fileDownload.download = 'informe-${sanitizedStudentName}.doc';
+                            fileDownload.click();
+                            document.body.removeChild(fileDownload);
+                            setButtonsLoading(false);
+                        }
+                    </script>
+                </head>
+                <body>
+                    <div class="report-outer-container">
+                        <div class="report-content" id="report-content">
+                            <div class="header">
+                                <div class="header-left">
+                                    <img src="${DRAGONFLY_DATA_URL}" alt="Logo Libel-IA" />
+                                    <div>
+                                        <h1>Libel-IA</h1>
+                                        <p>Informe de Evaluación Pedagógica</p>
+                                    </div>
+                                </div>
+                                <div class="header-right">
+                                    ${logoPreview ? `<img src="${logoPreview}" alt="Logo Colegio" />` : ''}
+                                    <p><strong>Profesor:</strong> ${nombreProfesor || 'N/A'}</p>
+                                    <p><strong>Asignatura:</strong> ${asignatura || 'N/A'}</p>
+                                </div>
+                            </div>
+                            <div class="student-summary-grid">
+                                <div class="summary-card">
+                                    <div class="label">Nota Final</div>
+                                    <div class="value">${finalNota}</div>
+                                </div>
+                                <div class="summary-card">
+                                    <div class="label">Puntaje</div>
+                                    <div class="value value-small">${group.puntaje || 'N/A'}</div>
+                                </div>
+                            </div>
+                            <div class="section-card">
+                                <h2>Resumen del Estudiante</h2>
+                                <p><strong>Alumno:</strong> ${group.studentName} | <strong>Curso:</strong> ${curso || 'N/A'} | <strong>Fecha:</strong> ${format(new Date(), "dd/MM/yyyy")}</p>
+                            </div>
+                            <div class="feedback-grid">
+                                <div class="feedback-card fortalezas">
+                                    <h2>✅ Fortalezas</h2>
+                                    <p>${resumen.fortalezas}</p>
+                                </div>
+                                <div class="feedback-card areas-mejora">
+                                    <h2>✏️ Áreas de Mejora</h2>
+                                    <p>${resumen.areas_mejora}</p>
+                                </div>
+                            </div>
+                            ${buildTable('Corrección Detallada', ['Sección', 'Detalle'], group.retroalimentacion?.correccion_detallada, item => `<tr><td>${item.seccion || ''}</td><td>${item.detalle || ''}</td></tr>`)}
+                            ${buildTable('Evaluación de Habilidades', ['Habilidad', 'Nivel', 'Evidencia'], group.retroalimentacion?.evaluacion_habilidades, item => `<tr><td>${item.habilidad || ''}</td><td>${item.evaluacion || ''}</td><td><i>"${item.evidencia || ''}"</i></td></tr>`)}
+                        </div>
+                        <div class="actions-container">
+                            <button id="pdf-button" class="action-button pdf-button" onclick="downloadPDF()">Descargar PDF</button>
+                            <button id="word-button" class="action-button word-button" onclick="downloadWord()">Descargar Word (Editable)</button>
+                        </div>
+                    </div>
+                </body>
+            </html>`;
+
         reportWindow.document.write(reportHTML);
         reportWindow.document.close();
     };
 
     const onEvaluateAll = async () => {
         const { rubrica, pauta, flexibilidad, tipoEvaluacion, areaConocimiento } = form.getValues();
-        if (!rubrica) { form.setError("rubrica", { type: "manual", message: "La rúbrica es requerida." }); return; }
+        if (!rubrica) {
+            form.setError("rubrica", { type: "manual", message: "La rúbrica es requerida." });
+            return;
+        }
         for (const group of studentGroups) {
             if (group.files.length === 0) continue;
             setStudentGroups(prev => prev.map(g => g.id === group.id ? { ...g, isEvaluating: true, isEvaluated: false, error: undefined } : g));
@@ -219,8 +557,10 @@ export default function EvaluatorClient() {
         const { curso, fechaEvaluacion, nombreProfesor, departamento, asignatura } = form.getValues();
         const fechaStr = fechaEvaluacion ? format(fechaEvaluacion, "dd/MM/yyyy") : "";
         const evaluatedGroups = studentGroups.filter(g => g.isEvaluated);
-        if (evaluatedGroups.length === 0) { alert("No hay evaluaciones para exportar."); return; }
-
+        if (evaluatedGroups.length === 0) {
+            alert("No hay evaluaciones para exportar.");
+            return;
+        }
         if (formatType === 'csv') {
             const rows = [["Alumno", "Curso", "Puntaje", "Nota", "Décimas", "Nota Final", "Fecha"]];
             evaluatedGroups.forEach(g => {
@@ -254,7 +594,7 @@ export default function EvaluatorClient() {
             URL.revokeObjectURL(url);
         }
     };
-    
+
     const isCurrentlyEvaluatingAny = studentGroups.some(g => g.isEvaluating);
 
     return (
@@ -262,7 +602,6 @@ export default function EvaluatorClient() {
             <GlobalStyles />
             {isCameraOpen && <SmartCameraModal onCapture={handleCapture} onClose={() => setIsCameraOpen(false)} />}
             <main className="p-4 md:p-8 max-w-6xl mx-auto font-sans bg-[var(--bg-main)] text-[var(--text-primary)] transition-colors duration-300">
-                
                 <div className="mb-6 p-3 rounded-lg flex items-center justify-between bg-[var(--bg-card)] border border-[var(--border-color)]">
                     <div className="flex items-center gap-2">
                         <Palette className="h-5 w-5 text-[var(--text-secondary)]" />
@@ -274,19 +613,14 @@ export default function EvaluatorClient() {
                         <Button size="sm" variant={theme === 'theme-corporativo' ? 'default' : 'ghost'} onClick={() => setTheme('theme-corporativo')} className={cn(theme !== 'theme-corporativo' && "text-[var(--text-secondary)]")}>Corporativo</Button>
                     </div>
                 </div>
-
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                     <TabsList className="grid w-full grid-cols-3 bg-[var(--bg-muted)]">
                         <TabsTrigger value="inicio"><Home className="mr-2 h-4 w-4" />Inicio</TabsTrigger>
                         <TabsTrigger value="evaluator"><Sparkles className="mr-2 h-4 w-4" />Evaluador</TabsTrigger>
                         <TabsTrigger value="dashboard"><ClipboardList className="mr-2 h-4 w-4" />Resumen</TabsTrigger>
                     </TabsList>
-
                     <TabsContent value="inicio" className="mt-8 text-center">
-                        <Card 
-                            className="max-w-3xl mx-auto border-2 shadow-lg bg-[var(--bg-card)] border-[var(--border-color)]"
-                            style={{ backgroundImage: 'radial-gradient(circle, rgba(124, 58, 237, 0.15) 0%, rgba(9, 9, 11, 0) 70%)' }}
-                        >
+                        <Card className="max-w-3xl mx-auto border-2 shadow-lg bg-[var(--bg-card)] border-[var(--border-color)]" style={{ backgroundImage: 'radial-gradient(circle, rgba(124, 58, 237, 0.15) 0%, rgba(9, 9, 11, 0) 70%)' }}>
                             <CardContent className="p-12">
                                 <img src={DRAGONFLY_DATA_URL} alt="Logo" className="mx-auto h-36 w-36 mb-4"/>
                                 <h1 className={`text-6xl font-bold ${wordmarkClass} font-logo`}>Libel-IA</h1>
@@ -294,7 +628,7 @@ export default function EvaluatorClient() {
                                     “Evaluación con Inteligencia Docente: Hecha por un Profe, para Profes”
                                 </p>
                                 <p className="mt-6 text-lg text-[var(--text-secondary)]">
-                                  Asistente pedagógico inteligente que analiza las respuestas de tus estudiantes, genera retroalimentación detallada y crea informes al instante.
+                                    Asistente pedagógico inteligente que analiza las respuestas de tus estudiantes, genera retroalimentación detallada y crea informes al instante.
                                 </p>
                                 <Button size="lg" className="mt-8 text-lg py-6 px-8" onClick={() => setActiveTab("evaluator")}>
                                     Comenzar a Evaluar <Sparkles className="ml-2 h-5 w-5" />
@@ -302,13 +636,11 @@ export default function EvaluatorClient() {
                             </CardContent>
                         </Card>
                     </TabsContent>
-
                     <TabsContent value="evaluator" className="space-y-8 mt-4">
                         <div className="flex items-center gap-3">
                             <img src={DRAGONFLY_DATA_URL} alt="Logo Libel-IA" className="h-8 w-8" />
                             <span className={`font-semibold text-xl ${wordmarkClass} font-logo`}>Libel-IA</span>
                         </div>
-
                         <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
                             <CardHeader><CardTitle className="text-[var(--text-accent)]">Paso 1: Configuración de la Evaluación</CardTitle></CardHeader>
                             <CardContent>
@@ -351,23 +683,47 @@ export default function EvaluatorClient() {
                                                 <div className="space-y-2 col-span-full"><Label className="text-[var(--text-accent)]">Logo del Colegio (Opcional)</Label><div className="flex items-center gap-4"><Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}><ImageUp className="mr-2 h-4 w-4" />Subir Logo</Button><input type="file" accept="image/*" ref={logoInputRef} onChange={handleLogoChange} className="hidden" />{logoPreview && <img src={logoPreview} alt="Vista previa del logo" className="h-12 w-auto object-contain border p-1 rounded-md" />}</div></div>
                                             </div>
                                         </div>
-                                        <FormField control={form.control} name="rubrica" render={({ field }) => (<FormItem>
-                                            <FormLabel className="font-bold text-[var(--text-accent)]">Rúbrica (Criterios)</FormLabel>
-                                            <FormControl><Textarea placeholder="Ej: Evalúa claridad, estructura, ortografía..." className="min-h-[100px]" {...field} /></FormControl>
-                                            <FormDescription>
-                                                Importante: Incluye el puntaje total de la evaluación (Ej: "Puntaje total: 60 puntos").
-                                            </FormDescription>
-                                            <FormMessage />
-                                        </FormItem>)} />
-                                        <FormField control={form.control} name="pauta" render={({ field }) => (<FormItem><FormLabel className="font-bold text-[var(--text-accent)]">Pauta (Respuestas)</FormLabel><FormControl><Textarea placeholder="Opcional. Pega aquí las respuestas correctas..." className="min-h-[100px]" {...field} /></FormControl></FormItem>)} />
-                                        <FormField control={form.control} name="flexibilidad" render={({ field }) => (<FormItem><FormLabel className="font-bold text-[var(--text-accent)]">Nivel de Flexibilidad</FormLabel><FormControl><Slider min={1} max={5} step={1} defaultValue={field.value} onValueChange={field.onChange} /></FormControl><div className="flex justify-between text-xs text-[var(--text-secondary)]"><span>Estricto</span><span>Flexible</span></div></FormItem>)} />
+                                        <FormField control={form.control} name="rubrica" render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="font-bold text-[var(--text-accent)]">Rúbrica (Criterios)</FormLabel>
+                                                <FormControl>
+                                                    <Textarea placeholder="Ej: Evalúa claridad, estructura, ortografía..." className="min-h-[100px]" {...field} />
+                                                </FormControl>
+                                                <FormDescription>
+                                                    Importante: Incluye el puntaje total de la evaluación (Ej: "Puntaje total: 60 puntos").
+                                                </FormDescription>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}/>
+                                        <FormField control={form.control} name="pauta" render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="font-bold text-[var(--text-accent)]">Pauta (Respuestas)</FormLabel>
+                                                <FormControl>
+                                                    <Textarea placeholder="Opcional. Pega aquí las respuestas correctas..." className="min-h-[100px]" {...field} />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}/>
+                                        <FormField control={form.control} name="flexibilidad" render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="font-bold text-[var(--text-accent)]">Nivel de Flexibilidad</FormLabel>
+                                                <FormControl>
+                                                    <Slider min={1} max={5} step={1} defaultValue={field.value} onValueChange={field.onChange} />
+                                                </FormControl>
+                                                <div className="flex justify-between text-xs text-[var(--text-secondary)]">
+                                                    <span>Estricto</span>
+                                                    <span>Flexible</span>
+                                                </div>
+                                            </FormItem>
+                                        )}/>
                                     </form>
                                 </Form>
                             </CardContent>
                         </Card>
-                        
+
                         <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
-                            <CardHeader><CardTitle className="text-[var(--text-accent)]">Paso 2: Cargar y Agrupar Trabajos</CardTitle></CardHeader>
+                            <CardHeader>
+                                <CardTitle className="text-[var(--text-accent)]">Paso 2: Cargar y Agrupar Trabajos</CardTitle>
+                            </CardHeader>
                             <CardContent className="space-y-6">
                                 <div>
                                     <h3 className="font-bold text-[var(--text-accent)]">Cargar Archivos</h3>
@@ -398,17 +754,35 @@ export default function EvaluatorClient() {
                                 )}
                             </CardContent>
                         </Card>
-                        
-                        {studentGroups.length > 0 && 
+
+                        {studentGroups.length > 0 && (
                             <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
-                                <CardHeader><CardTitle className="flex items-center gap-2 text-[var(--text-accent)]"><Users className="text-green-500" />Grupos de Estudiantes</CardTitle></CardHeader>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2 text-[var(--text-accent)]">
+                                        <Users className="text-green-500" />Grupos de Estudiantes
+                                    </CardTitle>
+                                </CardHeader>
                                 <CardContent className="space-y-4">
                                     {studentGroups.map(group => (
                                         <div key={group.id} className="border p-4 rounded-lg border-[var(--border-color)]">
                                             <Input className="text-lg font-bold border-0 shadow-none focus-visible:ring-0 p-1 mb-2 bg-transparent" value={group.studentName} onChange={(e) => updateStudentName(group.id, e.target.value)} />
                                             <div className="flex flex-wrap gap-2 min-h-[50px] bg-[var(--bg-muted-subtle)] p-2 rounded-md">
-                                                {group.files.map(file => (<div key={file.id} className="relative w-20 h-20"><img src={file.previewUrl} alt={file.file.name} className="w-full h-full object-cover rounded-md" /><button onClick={() => removeFileFromGroup(file.id, group.id)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5"><X className="h-3 w-3" /></button></div>))}
-                                                {unassignedFiles.length > 0 && (<div className="flex items-center justify-center w-20 h-20 border-2 border-dashed rounded-md border-[var(--border-color)]"><select onChange={(e) => { if (e.target.value) assignFileToGroup(e.target.value, group.id); e.target.value = ""; }} className="text-sm bg-transparent"><option value="">Asignar</option>{unassignedFiles.map(f => <option key={f.id} value={f.id}>{f.file.name}</option>)}</select></div>)}
+                                                {group.files.map(file => (
+                                                    <div key={file.id} className="relative w-20 h-20">
+                                                        <img src={file.previewUrl} alt={file.file.name} className="w-full h-full object-cover rounded-md" />
+                                                        <button onClick={() => removeFileFromGroup(file.id, group.id)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5">
+                                                            <X className="h-3 w-3" />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                                {unassignedFiles.length > 0 && (
+                                                    <div className="flex items-center justify-center w-20 h-20 border-2 border-dashed rounded-md border-[var(--border-color)]">
+                                                        <select onChange={(e) => { if (e.target.value) assignFileToGroup(e.target.value, group.id); e.target.value = ""; }} className="text-sm bg-transparent">
+                                                            <option value="">Asignar</option>
+                                                            {unassignedFiles.map(f => <option key={f.id} value={f.id}>{f.file.name}</option>)}
+                                                        </select>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -419,14 +793,16 @@ export default function EvaluatorClient() {
                                     </Button>
                                 </CardFooter>
                             </Card>
-                        }
-                        
+                        )}
+
                         {studentGroups.some(g => g.isEvaluated || g.isEvaluating) && (
                             <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
-                                <CardHeader><CardTitle className="text-[var(--text-accent)]">Paso 3: Resultados</CardTitle></CardHeader>
+                                <CardHeader>
+                                    <CardTitle className="text-[var(--text-accent)]">Paso 3: Resultados</CardTitle>
+                                </CardHeader>
                                 <CardContent className="space-y-4">
-                                    {studentGroups.filter(g => g.isEvaluated || g.isEvaluating).map(group => { 
-                                        const finalNota = (Number(group.nota) || 0) + group.decimasAdicionales; 
+                                    {studentGroups.filter(g => g.isEvaluated || g.isEvaluating).map(group => {
+                                        const finalNota = (Number(group.nota) || 0) + group.decimasAdicionales;
                                         return (
                                             <div key={group.id} className={`p-6 rounded-lg border-l-4 ${group.error ? 'border-red-500' : 'border-green-500'} bg-[var(--bg-card)] shadow`}>
                                                 <div className="flex justify-between items-center flex-wrap gap-2">
@@ -434,44 +810,94 @@ export default function EvaluatorClient() {
                                                     {group.isEvaluating && <div className="flex items-center text-sm text-[var(--text-secondary)]"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Procesando...</div>}
                                                     {group.isEvaluated && !group.error && <Button variant="ghost" size="sm" onClick={() => generateReport(group)}><Printer className="mr-2 h-4 w-4" />Ver Informe</Button>}
                                                 </div>
-                                                {group.error ? <p className="text-red-600">Error: {group.error}</p> : <div className="mt-4 space-y-6">{group.isEvaluated && group.retroalimentacion && <>
-                                                    <div className="flex justify-between items-start bg-[var(--bg-muted-subtle)] p-4 rounded-lg">
-                                                        <div><p className="text-sm font-bold">PUNTAJE</p><p className="text-xl font-semibold">{group.puntaje || 'N/A'}</p></div>
-                                                        <div className="text-right">
-                                                            <div className="flex items-center gap-2"><label htmlFor={`decimas-${group.id}`} className="text-sm font-medium">Décimas:</label><Input id={`decimas-${group.id}`} type="number" step="0.1" defaultValue={group.decimasAdicionales} onChange={e => handleDecimasChange(group.id, e.target.value)} className="h-8 w-20" /></div>
-                                                            <p className="text-sm font-bold mt-2">NOTA FINAL</p><p className="text-3xl font-bold text-blue-600">{finalNota.toFixed(1)}</p>
+                                                {group.error ? <p className="text-red-600">Error: {group.error}</p> : <div className="mt-4 space-y-6">
+                                                    {group.isEvaluated && group.retroalimentacion && <>
+                                                        <div className="flex justify-between items-start bg-[var(--bg-muted-subtle)] p-4 rounded-lg">
+                                                            <div>
+                                                                <p className="text-sm font-bold">PUNTAJE</p>
+                                                                <p className="text-xl font-semibold">{group.puntaje || 'N/A'}</p>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <div className="flex items-center gap-2">
+                                                                    <label htmlFor={`decimas-${group.id}`} className="text-sm font-medium">Décimas:</label>
+                                                                    <Input id={`decimas-${group.id}`} type="number" step="0.1" defaultValue={group.decimasAdicionales} onChange={e => handleDecimasChange(group.id, e.target.value)} className="h-8 w-20" />
+                                                                </div>
+                                                                <p className="text-sm font-bold mt-2">NOTA FINAL</p>
+                                                                <p className="text-3xl font-bold text-blue-600">{finalNota.toFixed(1)}</p>
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                    <div><h4 className="font-bold mb-2 text-[var(--text-accent)]">Corrección Detallada</h4><Table><TableHeader><TableRow><TableHead>Sección</TableHead><TableHead>Detalle</TableHead></TableRow></TableHeader><TableBody>{group.retroalimentacion.correccion_detallada?.map((item, index) => (<TableRow key={index}><TableCell className="font-medium">{item.seccion}</TableCell><TableCell>{item.detalle}</TableCell></TableRow>))}</TableBody></Table></div>
-                                                    <div><h4 className="font-bold mb-2 text-[var(--text-accent)]">Evaluación de Habilidades</h4><Table><TableHeader><TableRow><TableHead>Habilidad</TableHead><TableHead>Nivel</TableHead><TableHead>Evidencia</TableHead></TableRow></TableHeader><TableBody>{group.retroalimentacion.evaluacion_habilidades?.map((item, index) => (<TableRow key={index}><TableCell className="font-medium">{item.habilidad}</TableCell><TableCell>{item.evaluacion}</TableCell><TableCell className="italic">"{item.evidencia}"</TableCell></TableRow>))}</TableBody></Table></div>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                                                         <div>
-                                                            <h4 className="font-bold text-[var(--text-accent)]">Fortalezas</h4>
-                                                            <div className="text-sm mt-2 p-3 bg-[var(--bg-muted-subtle)] border border-[var(--border-color)] rounded-lg">{group.retroalimentacion.resumen_general?.fortalezas}</div>
+                                                            <h4 className="font-bold mb-2 text-[var(--text-accent)]">Corrección Detallada</h4>
+                                                            <Table>
+                                                                <TableHeader>
+                                                                    <TableRow>
+                                                                        <TableHead>Sección</TableHead>
+                                                                        <TableHead>Detalle</TableHead>
+                                                                    </TableRow>
+                                                                </TableHeader>
+                                                                <TableBody>
+                                                                    {group.retroalimentacion.correccion_detallada?.map((item, index) => (
+                                                                        <TableRow key={index}>
+                                                                            <TableCell className="font-medium">{item.seccion}</TableCell>
+                                                                            <TableCell>{item.detalle}</TableCell>
+                                                                        </TableRow>
+                                                                    ))}
+                                                                </TableBody>
+                                                            </Table>
                                                         </div>
                                                         <div>
-                                                            <h4 className="font-bold text-[var(--text-accent)]">Áreas de Mejora</h4>
-                                                            <div className="text-sm mt-2 p-3 bg-[var(--bg-muted-subtle)] border border-[var(--border-color)] rounded-lg">{group.retroalimentacion.resumen_general?.areas_mejora}</div>
+                                                            <h4 className="font-bold mb-2 text-[var(--text-accent)]">Evaluación de Habilidades</h4>
+                                                            <Table>
+                                                                <TableHeader>
+                                                                    <TableRow>
+                                                                        <TableHead>Habilidad</TableHead>
+                                                                        <TableHead>Nivel</TableHead>
+                                                                        <TableHead>Evidencia</TableHead>
+                                                                    </TableRow>
+                                                                </TableHeader>
+                                                                <TableBody>
+                                                                    {group.retroalimentacion.evaluacion_habilidades?.map((item, index) => (
+                                                                        <TableRow key={index}>
+                                                                            <TableCell className="font-medium">{item.habilidad}</TableCell>
+                                                                            <TableCell>{item.evaluacion}</TableCell>
+                                                                            <TableCell className="italic">"{item.evidencia}"</TableCell>
+                                                                        </TableRow>
+                                                                    ))}
+                                                                </TableBody>
+                                                            </Table>
                                                         </div>
-                                                    </div>
-                                                </>}</div>}
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                                                            <div>
+                                                                <h4 className="font-bold text-[var(--text-accent)]">Fortalezas</h4>
+                                                                <div className="text-sm mt-2 p-3 bg-[var(--bg-muted-subtle)] border border-[var(--border-color)] rounded-lg">
+                                                                    {group.retroalimentacion.resumen_general?.fortalezas}
+                                                                </div>
+                                                            </div>
+                                                            <div>
+                                                                <h4 className="font-bold text-[var(--text-accent)]">Áreas de Mejora</h4>
+                                                                <div className="text-sm mt-2 p-3 bg-[var(--bg-muted-subtle)] border border-[var(--border-color)] rounded-lg">
+                                                                    {group.retroalimentacion.resumen_general?.areas_mejora}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </>}
+                                                </div>}
                                             </div>
-                                        )
+                                        );
                                     })}
                                 </CardContent>
                             </Card>
                         )}
                     </TabsContent>
-
                     <TabsContent value="dashboard" className="mt-4 space-y-4">
-                      <div className="flex items-center justify-between gap-2">
-                        <h2 className="text-xl font-semibold text-[var(--text-accent)]">Resumen de Notas</h2>
-                        <div className="flex items-center gap-2">
-                          <Button variant="outline" onClick={() => exportToDocOrCsv('csv')}>Exportar CSV</Button>
-                          <Button onClick={() => exportToDocOrCsv('doc')}>Exportar Word</Button>
+                        <div className="flex items-center justify-between gap-2">
+                            <h2 className="text-xl font-semibold text-[var(--text-accent)]">Resumen de Notas</h2>
+                            <div className="flex items-center gap-2">
+                                <Button variant="outline" onClick={() => exportToDocOrCsv('csv')}>Exportar CSV</Button>
+                                <Button onClick={() => exportToDocOrCsv('doc')}>Exportar Word</Button>
+                            </div>
                         </div>
-                      </div>
-                      <NotesDashboard studentGroups={studentGroups} curso={form.getValues("curso")} fecha={form.getValues("fechaEvaluacion")} />
+                        <NotesDashboard studentGroups={studentGroups} curso={form.getValues("curso")} fecha={form.getValues("fechaEvaluacion")} />
                     </TabsContent>
                 </Tabs>
             </main>
