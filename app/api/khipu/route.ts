@@ -1,3 +1,7 @@
+// 👇 fuerza a Next a tratar esta ruta como dinámica y en Node.js
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 import { NextRequest, NextResponse } from "next/server";
 
 function authHeader() {
@@ -7,17 +11,21 @@ function authHeader() {
   return `Basic ${token}`;
 }
 
-// Sanidad: te permite comprobar que la ruta existe con GET
+// GET: verificación de existencia
 export async function GET() {
   return NextResponse.json({ ok: true, route: "/api/khipu" });
 }
 
+// POST: creación real del cobro
 export async function POST(req: NextRequest) {
   try {
     const { monto, glosa, txid } = await req.json();
+
     if (!monto || Number.isNaN(Number(monto))) {
       return NextResponse.json({ error: "Monto inválido" }, { status: 400 });
     }
+
+    const apiBase = process.env.KHIPU_BASE || "https://khipu.com/api/3.0";
 
     const body = {
       subject: glosa || "Pago LibelIA",
@@ -26,10 +34,9 @@ export async function POST(req: NextRequest) {
       transaction_id: txid || `orden-${Date.now()}`,
       return_url: process.env.PUBLIC_RETURN_URL,
       cancel_url: process.env.PUBLIC_CANCEL_URL,
-      notify_url: process.env.PUBLIC_NOTIFY_URL,
+      notify_url: process.env.PUBLIC_NOTIFY_URL, // -> /api/khipu/webhook
     };
 
-    const apiBase = process.env.KHIPU_BASE || "https://khipu.com/api/3.0";
     const r = await fetch(`${apiBase}/payments`, {
       method: "POST",
       headers: {
@@ -41,7 +48,8 @@ export async function POST(req: NextRequest) {
     });
 
     if (!r.ok) {
-      return NextResponse.json({ error: await r.text() }, { status: r.status });
+      const text = await r.text();
+      return NextResponse.json({ error: text || "Error Khipu" }, { status: r.status });
     }
 
     const resp = await r.json();
