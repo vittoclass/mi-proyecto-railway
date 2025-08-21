@@ -8,12 +8,13 @@ function authHeader() {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
     const { monto, glosa, txid } = req.body || {};
+    if (!monto || Number.isNaN(Number(monto))) {
+      return res.status(400).json({ error: "Monto inválido" });
+    }
 
     const body = {
       subject: glosa || "Pago LibelIA",
@@ -22,11 +23,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       transaction_id: txid || `orden-${Date.now()}`,
       return_url: process.env.PUBLIC_RETURN_URL,
       cancel_url: process.env.PUBLIC_CANCEL_URL,
-      notify_url: process.env.PUBLIC_NOTIFY_URL,
+      notify_url: process.env.PUBLIC_NOTIFY_URL, // -> /api/khipu/webhook
     };
 
     const apiBase = process.env.KHIPU_BASE || "https://khipu.com/api/3.0";
-
     const r = await fetch(`${apiBase}/payments`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: authHeader() },

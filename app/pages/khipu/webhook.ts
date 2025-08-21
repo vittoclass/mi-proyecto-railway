@@ -8,9 +8,7 @@ function authHeader() {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
     const body = req.body || {};
@@ -18,7 +16,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!paymentId) return res.status(400).json({ ok: false, error: "Falta payment_id" });
 
     const apiBase = process.env.KHIPU_BASE || "https://khipu.com/api/3.0";
-
     const r = await fetch(`${apiBase}/payments/${paymentId}`, {
       headers: { Authorization: authHeader() },
     });
@@ -27,6 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const pago = await r.json();
 
     if (pago?.status === "done") {
+      // TODO: marca pago.transaction_id como pagado en tu BD
       return res.status(200).json({ ok: true, status: "paid" });
     }
     return res.status(200).json({ ok: false, status: pago?.status || "unknown" });
