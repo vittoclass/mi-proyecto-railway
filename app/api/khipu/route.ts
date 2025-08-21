@@ -7,6 +7,11 @@ function authHeader() {
   return `Basic ${token}`;
 }
 
+// ← Este GET es SOLO para verificar existencia de la ruta sin 404
+export async function GET() {
+  return NextResponse.json({ ok: true, route: "/api/khipu" });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { monto, glosa, txid } = await req.json();
@@ -25,7 +30,6 @@ export async function POST(req: NextRequest) {
     };
 
     const apiBase = process.env.KHIPU_BASE || "https://khipu.com/api/3.0";
-
     const r = await fetch(`${apiBase}/payments`, {
       method: "POST",
       headers: {
@@ -41,7 +45,6 @@ export async function POST(req: NextRequest) {
     }
 
     const resp = await r.json();
-    // <- ESTO es lo que necesitas para redirigir al pago
     return NextResponse.json({
       payment_url: resp.payment_url,
       payment_id: resp.payment_id,
