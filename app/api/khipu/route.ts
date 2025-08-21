@@ -7,7 +7,7 @@ function authHeader() {
   return `Basic ${token}`;
 }
 
-// ← Este GET es SOLO para verificar existencia de la ruta sin 404
+// Sanidad: te permite comprobar que la ruta existe con GET
 export async function GET() {
   return NextResponse.json({ ok: true, route: "/api/khipu" });
 }
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
       transaction_id: txid || `orden-${Date.now()}`,
       return_url: process.env.PUBLIC_RETURN_URL,
       cancel_url: process.env.PUBLIC_CANCEL_URL,
-      notify_url: process.env.PUBLIC_NOTIFY_URL, // -> /api/khipu/webhook
+      notify_url: process.env.PUBLIC_NOTIFY_URL,
     };
 
     const apiBase = process.env.KHIPU_BASE || "https://khipu.com/api/3.0";
@@ -50,9 +50,6 @@ export async function POST(req: NextRequest) {
       payment_id: resp.payment_id,
     });
   } catch (e: any) {
-    return NextResponse.json(
-      { error: e?.message || "Error creando pago" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: e?.message || "Error creando pago" }, { status: 500 });
   }
 }
