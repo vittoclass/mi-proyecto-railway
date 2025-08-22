@@ -1,4 +1,11 @@
+@'
 import type { NextApiRequest, NextApiResponse } from "next";
+
+function normBase(raw: string) {
+  const trimmed = (raw || "").trim();
+  const normalized = trimmed.replace(/\/+$/, ""); // sin slash final
+  return { trimmed, normalized };
+}
 
 function authHeader(): string {
   const token = Buffer.from(
@@ -16,10 +23,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: "Monto invalido" });
     }
 
-    // 🔎 Normalizamos KHIPU_BASE (sin espacios, sin slash final)
-    const rawBase = (process.env.KHIPU_BASE || "https://khipu.com/api/3.0").trim();
-    const base = rawBase.replace(/\/+$/, ""); // quita / al final
-    const url = `${base}/payments`;
+    const rawBase = process.env.KHIPU_BASE || "https://khipu.com/api/3.0";
+    const { trimmed, normalized } = normBase(rawBase);
+    const used_url = `${normalized}/payments`;
 
     const body = {
       subject: glosa || "Pago LibelIA",
@@ -31,34 +37,45 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       notify_url: process.env.PUBLIC_NOTIFY_URL
     };
 
-    const headers = {
-      "Content-Type": "application/json",
-      "Accept": "application/json",
-      "Authorization": authHeader()
-    } as const;
-
-    const r = await fetch(url, {
+    const r = await fetch(used_url, {
       method: "POST",
-      headers,
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Authorization": authHeader()
+      },
       body: JSON.stringify(body)
     });
 
-    // Si falla, devolvemos diagnostico completo
+    const preview = await r.text(); // leemos texto SIEMPRE para poder mostrar diagnostico
     if (!r.ok) {
-      const text = await r.text();
       return res.status(r.status).json({
         error: "Khipu devolvio error",
         status: r.status,
-        used_url: url,
-        khipu_base_env: rawBase,
-        note: "Revisa que KHIPU_BASE no tenga espacios y sea https://khipu.com/api/3.0",
-        response_preview: text.slice(0, 500)
+        used_url,
+        khipu_base_env_raw: rawBase,
+        khipu_base_env_trimmed: trimmed,
+        response_preview: preview.slice(0, 500)
       });
     }
 
-    const resp = await r.json();
-    return res.status(200).json({ payment_url: resp.payment_url, payment_id: resp.payment_id, used_url: url });
-  } catch (e: any) {
+    // si fue OK, intentamos parsear el JSON y devolver solo lo util
+    try {
+      const json = JSON.parse(preview);
+      return res.status(200).json({
+        payment_url: json?.payment_url,
+        payment_id: json?.payment_id,
+        used_url
+      });
+    } catch {
+      return res.status(200).json({ ok: true, used_url, raw: preview.slice(0, 500) });
+    }
+  } catch (e:any) {
     return res.status(500).json({ error: e?.message || "Error creando pago" });
   }
 }
+'@ | Out-File -Encoding utf8 -NoNewline "pages\api\khipu.ts"
+
+git add -A
+git commit -m "diag: /api/khipu muestra used_url, env y preview de respuesta"
+git push
