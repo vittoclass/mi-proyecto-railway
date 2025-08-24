@@ -2,6 +2,9 @@ import { type NextRequest, NextResponse } from "next/server";
 import { ComputerVisionClient } from "@azure/cognitiveservices-computervision";
 import { ApiKeyCredentials } from "@azure/ms-rest-js";
 
+// ✅ NUEVO: util para descontar 1 crédito (no rompe si no lo usas)
+import { useOneCredit } from "@/lib/credits";
+
 // --- Configuración de APIs ---
 const AZURE_VISION_ENDPOINT = process.env.AZURE_VISION_ENDPOINT!;
 const AZURE_VISION_KEY = process.env.AZURE_VISION_KEY!;
@@ -52,8 +55,28 @@ async function callMistralAPI(payload: any) {
 export async function POST(request: NextRequest) {
   try {
     const payload = await request.json();
-    const { fileUrls, rubrica, pauta, areaConocimiento } = payload;
+    // ✅ NUEVO: soporta userEmail sin romper tu payload actual
+    const { fileUrls, rubrica, pauta, areaConocimiento, userEmail } = payload;
     if (!fileUrls || fileUrls.length === 0) throw new Error("No se proporcionaron archivos.");
+
+    // ✅ NUEVO: descuento de crédito SOLO si se envía userEmail
+    if (userEmail) {
+      try {
+        const tieneSaldo = await useOneCredit(userEmail);
+        if (!tieneSaldo) {
+          return NextResponse.json(
+            { success: false, error: "No tienes créditos disponibles" },
+            { status: 402 }
+          );
+        }
+      } catch (e: any) {
+        // Si falla Supabase, no rompemos la evaluación; retornamos error controlado
+        return NextResponse.json(
+          { success: false, error: `Error verificando créditos: ${e.message || e}` },
+          { status: 500 }
+        );
+      }
+    }
 
     let textoCompleto = "";
     for (const url of fileUrls) {

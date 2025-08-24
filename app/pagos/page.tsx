@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { useState } from 'react';
+import Link from 'next/link'; // <-- agregado
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Check, Sparkles } from 'lucide-react';
@@ -18,7 +19,6 @@ type Pack = {
 };
 
 const PACKS: Pack[] = [
-  // 1) FREE TRIAL
   {
     id: 'free-trial',
     nombre: 'Plan Gratuito – Prueba Inicial',
@@ -46,8 +46,6 @@ const PACKS: Pack[] = [
       '⚠️ Nota: No incluye almacenamiento permanente de resultados. Al refrescar la página se perderán los datos.'
     ],
   },
-
-  // 2) DOCENTE ACTIVO (600 créditos, ~3 cursos)
   {
     id: 'docente-activo',
     nombre: 'Pack 📦 Docente Activo',
@@ -72,8 +70,6 @@ const PACKS: Pack[] = [
       '⚠️ Nota Importante: Libel-IA está en su primera versión. Para no perder tu trabajo, te recomendamos completar y exportar tus evaluaciones en una sola sesión, ya que la información se reinicia si refrescas o cierras el enlace.'
     ],
   },
-
-  // 3) DOCENTE PRO (800 créditos, ~4 cursos)
   {
     id: 'docente-pro',
     nombre: 'Paquete 📦 Docente Pro',
@@ -96,8 +92,6 @@ const PACKS: Pack[] = [
       '⚠️ Nota Importante: Libel-IA está en su primera versión. Para no perder tu trabajo, te recomendamos completar y exportar tus evaluaciones en una sola sesión, ya que la información se reinicia si refrescas o cierras el enlace.'
     ],
   },
-
-  // 4) COORDINADOR PLUS (1600 créditos, ~8 cursos)
   {
     id: 'coordinador-plus',
     nombre: 'Pack 📦 Coordinador Plus',
@@ -121,8 +115,6 @@ const PACKS: Pack[] = [
       '⚠️ Nota Importante: Libel-IA está en su primera versión. Para no perder tu trabajo, te recomendamos completar y exportar tus evaluaciones en una sola sesión, ya que la información se reinicia si refrescas o cierras el enlace.'
     ],
   },
-
-  // 5) INSTITUCIONAL (3000 créditos, ~15 cursos)
   {
     id: 'institucional',
     nombre: 'Pack 📦 Institucional',
@@ -150,7 +142,6 @@ export default function PagosPage() {
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
   async function comprar(pack: Pack) {
-    // Gratis: activar local (rápido para enganchar). Si prefieres activarlo por backend, te preparo endpoint /api/gratis.
     if (pack.precioCLP === 0) {
       const caducaEn = new Date(Date.now() + pack.vigenciaDias * 864e5).toISOString();
       localStorage.setItem(
@@ -196,6 +187,13 @@ export default function PagosPage() {
 
   return (
     <main className="max-w-6xl mx-auto px-4 py-10">
+      {/* Botón para volver a tu app (inicio) */}
+      <div className="flex justify-end mb-6">
+        <Link href="/">
+          <Button variant="outline">← Volver a la app</Button>
+        </Link>
+      </div>
+
       <section className="text-center mb-10">
         <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Planes y Packs de Libel-IA</h1>
         <p className="mt-2 text-muted-foreground">
@@ -225,7 +223,6 @@ export default function PagosPage() {
                 {p.creditos} imágenes · vence en {p.vigenciaDias} días
               </div>
 
-              {/* Viñetas cortas */}
               <ul className="space-y-2 text-sm">
                 {p.bullets.map((d, i) => (
                   <li key={i} className="flex items-start gap-2">
@@ -235,7 +232,6 @@ export default function PagosPage() {
                 ))}
               </ul>
 
-              {/* Texto largo plegable (si quieres hacerlo expandible más tarde) */}
               <details className="mt-3 text-sm">
                 <summary className="cursor-pointer text-violet-600">Ver detalles</summary>
                 <div className="mt-2 space-y-2">
