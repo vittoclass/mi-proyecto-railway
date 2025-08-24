@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { ComputerVisionClient } from "@azure/cognitiveservices-computervision";
 import { ApiKeyCredentials } from "@azure/ms-rest-js";
 
-// ✅ NUEVO: util para descontar 1 crédito (no rompe si no lo usas)
+// ✅ util para descontar 1 crédito
 import { useOneCredit } from "@/lib/credits";
 
 // --- Configuración de APIs ---
@@ -12,13 +12,13 @@ const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY!;
 
 // --- Biblioteca de Prompts Expertos ---
 const promptsExpertos = {
-    general: `Actúa como un profesor universitario detallista, riguroso y constructivo. Tu objetivo es ofrecer una retroalimentación que demuestre un análisis profundo y nivel experto del trabajo del estudiante.`,
-    matematicas: `Actúa como un catedrático de Matemáticas. Sé riguroso y lógico. Explica el procedimiento correcto paso a paso, citando directamente los errores conceptuales o de cálculo del desarrollo del estudiante.`,
-    lenguaje: `Actúa como un crítico literario y académico. Sé profundo y argumentativo. Evalúa la estructura, coherencia y tesis, citando textualmente fragmentos del ensayo para justificar cada punto y revelar el subtexto.`,
-    ciencias: `Actúa como un riguroso científico e investigador. Evalúa la aplicación del método científico y la correcta interpretación de datos, citando evidencia específica de los reportes o respuestas para validar o refutar las conclusiones.`,
-    artes: `Actúa como un curador de arte y crítico profesional. Tu feedback debe ser conceptual y perceptivo. Describe elementos visuales específicos (ej: 'el trazo fuerte en la esquina', 'el contraste de color') para justificar tu análisis de la composición, técnica e intención artística.`,
-    humanidades: `Actúa como un filósofo y académico. Evalúa la profundidad del pensamiento crítico, la claridad de la argumentación y la comprensión de conceptos abstractos, citando las ideas principales del texto del estudiante para realizar un contra-argumento o expandir sobre ellas.`,
-    ingles: `Actúa como un examinador de idiomas nivel C2. Evalúa gramática, vocabulario y fluidez, citando ejemplos específicos de errores del texto y ofreciendo la corrección precisa y la razón detrás de ella.`,
+  general: `Actúa como un profesor universitario detallista, riguroso y constructivo. Tu objetivo es ofrecer una retroalimentación que demuestre un análisis profundo y nivel experto del trabajo del estudiante.`,
+  matematicas: `Actúa como un catedrático de Matemáticas. Sé riguroso y lógico. Explica el procedimiento correcto paso a paso, citando directamente los errores conceptuales o de cálculo del desarrollo del estudiante.`,
+  lenguaje: `Actúa como un crítico literario y académico. Sé profundo y argumentativo. Evalúa la estructura, coherencia y tesis, citando textualmente fragmentos del ensayo para justificar cada punto y revelar el subtexto.`,
+  ciencias: `Actúa como un riguroso científico e investigador. Evalúa la aplicación del método científico y la correcta interpretación de datos, citando evidencia específica de los reportes o respuestas para validar o refutar las conclusiones.`,
+  artes: `Actúa como un curador de arte y crítico profesional. Tu feedback debe ser conceptual y perceptivo. Describe elementos visuales específicos (ej: 'el trazo fuerte en la esquina', 'el contraste de color') para justificar tu análisis de la composición, técnica e intención artística.`,
+  humanidades: `Actúa como un filósofo y académico. Evalúa la profundidad del pensamiento crítico, la claridad de la argumentación y la comprensión de conceptos abstractos, citando las ideas principales del texto del estudiante para realizar un contra-argumento o expandir sobre ellas.`,
+  ingles: `Actúa como un examinador de idiomas nivel C2. Evalúa gramática, vocabulario y fluidez, citando ejemplos específicos de errores del texto y ofreciendo la corrección precisa y la razón detrás de ella.`,
 };
 
 // --- Funciones de Soporte ---
@@ -55,29 +55,45 @@ async function callMistralAPI(payload: any) {
 export async function POST(request: NextRequest) {
   try {
     const payload = await request.json();
-    // ✅ NUEVO: soporta userEmail sin romper tu payload actual
     const { fileUrls, rubrica, pauta, areaConocimiento, userEmail } = payload;
-    if (!fileUrls || fileUrls.length === 0) throw new Error("No se proporcionaron archivos.");
 
-    // ✅ NUEVO: descuento de crédito SOLO si se envía userEmail
-    if (userEmail) {
-      try {
-        const tieneSaldo = await useOneCredit(userEmail);
-        if (!tieneSaldo) {
-          return NextResponse.json(
-            { success: false, error: "No tienes créditos disponibles" },
-            { status: 402 }
-          );
-        }
-      } catch (e: any) {
-        // Si falla Supabase, no rompemos la evaluación; retornamos error controlado
-        return NextResponse.json(
-          { success: false, error: `Error verificando créditos: ${e.message || e}` },
-          { status: 500 }
-        );
-      }
+    if (!fileUrls || fileUrls.length === 0) {
+      return NextResponse.json({ success: false, error: "No se proporcionaron archivos." }, { status: 400 });
     }
 
+    // ✅ Requerimos el email para asociar y controlar créditos
+    if (!userEmail) {
+      return NextResponse.json({ success: false, error: "Falta userEmail" }, { status: 400 });
+    }
+
+    // ✅ Descontar 1 crédito ANTES de llamar a Azure/Mistral.
+    // Acepta tanto boolean (true/false) como objeto { ok, error }
+    let ok = false;
+    let creditErr: string | undefined;
+
+    try {
+      const res = await useOneCredit(userEmail);
+      if (typeof res === "boolean") {
+        ok = res;
+      } else if (res && typeof res === "object") {
+        ok = !!(res as any).ok;
+        creditErr = (res as any).error;
+      }
+    } catch (e: any) {
+      return NextResponse.json(
+        { success: false, error: `Error verificando créditos: ${e?.message || e}` },
+        { status: 500 }
+      );
+    }
+
+    if (!ok) {
+      return NextResponse.json(
+        { success: false, error: creditErr || "No tienes créditos disponibles" },
+        { status: 402 }
+      );
+    }
+
+    // ==== A partir de aquí, tu pipeline original (OCR + LLM) ====
     let textoCompleto = "";
     for (const url of fileUrls) {
       const base64Data = url.split(',')[1];
@@ -130,9 +146,9 @@ export async function POST(request: NextRequest) {
     // ========= FIN: PROMPT FINAL DE CALIDAD SUPERIOR =========
 
     const aiResponse = await callMistralAPI({
-        model: "mistral-large-latest",
-        messages: [{ role: "user", content: promptFinalParaIA }],
-        response_format: { type: "json_object" },
+      model: "mistral-large-latest",
+      messages: [{ role: "user", content: promptFinalParaIA }],
+      response_format: { type: "json_object" },
     });
 
     const content = aiResponse.choices[0].message.content;
@@ -147,7 +163,7 @@ export async function POST(request: NextRequest) {
     resultado.nota = notaNumerica;
 
     resultado.puntaje = String(resultado.puntaje || "N/A");
-    
+
     resultado.retroalimentacion = resultado.retroalimentacion || {};
     if (!Array.isArray(resultado.retroalimentacion.correccion_detallada)) resultado.retroalimentacion.correccion_detallada = [];
     if (!Array.isArray(resultado.retroalimentacion.evaluacion_habilidades)) resultado.retroalimentacion.evaluacion_habilidades = [];

@@ -344,6 +344,9 @@ interface StudentGroup {
 
 // ==== Componente Principal ====
 export default function EvaluatorClient() {
+  // 🔹 NUEVO: email del usuario para créditos
+  const [userEmail, setUserEmail] = useState<string>("");
+
   const [unassignedFiles, setUnassignedFiles] = useState<FilePreview[]>([]);
   const [studentGroups, setStudentGroups] = useState<StudentGroup[]>([]);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -377,6 +380,14 @@ export default function EvaluatorClient() {
       areaConocimiento: 'general',
     },
   });
+
+  // 🔹 NUEVO: cargar correo guardado (minúsculas)
+  useEffect(() => {
+    const saved = (localStorage.getItem('userEmail') || '').toLowerCase();
+    if (saved && /\S+@\S+\.\S+/.test(saved)) {
+      setUserEmail(saved);
+    }
+  }, []);
 
   // Inicializar grupos con tamaño de curso
   useEffect(() => {
@@ -476,17 +487,40 @@ export default function EvaluatorClient() {
   };
 
   const onEvaluateAll = async () => {
+    // 🔹 NUEVO: verificar que haya correo (necesario para descontar crédito)
+    if (!userEmail) {
+      alert('Falta confirmar tu correo. Ve a "Planes", activa o confirma tu correo y vuelve a evaluar.');
+      return;
+    }
+
     const { rubrica, pauta, flexibilidad, tipoEvaluacion, areaConocimiento } = form.getValues();
     if (!rubrica) {
       form.setError('rubrica', { type: 'manual', message: 'La rúbrica es requerida.' });
       return;
     }
+
     for (const group of studentGroups) {
       if (group.files.length === 0) continue;
+
       setStudentGroups(prev => prev.map(g => g.id === group.id ? { ...g, isEvaluating: true, isEvaluated: false, error: undefined } : g));
-      const payload = { fileUrls: group.files.map(f => f.dataUrl), rubrica, pauta, flexibilidad: flexibilidad[0], tipoEvaluacion, areaConocimiento };
+
+      // 🔹 NUEVO: userEmail va en el payload (clave para /api/evaluate)
+      const payload = {
+        fileUrls: group.files.map(f => f.dataUrl),
+        rubrica,
+        pauta,
+        flexibilidad: flexibilidad[0],
+        tipoEvaluacion,
+        areaConocimiento,
+        userEmail, // <<<<<<<<<<<<<<<<<<<<<< AQUI LA CLAVE
+      };
+
       const result = await evaluate(payload);
-      setStudentGroups(prev => prev.map(g => g.id === group.id ? { ...g, isEvaluating: false, isEvaluated: true, ...(result.success ? result : { error: result.error }) } : g));
+
+      setStudentGroups(prev => prev.map(g => g.id === group.id
+        ? { ...g, isEvaluating: false, isEvaluated: true, ...(result.success ? result : { error: result.error }) }
+        : g
+      ));
     }
   };
 
