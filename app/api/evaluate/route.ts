@@ -1,3 +1,4 @@
+import { sendEmail } from "@/lib/email";
 import { type NextRequest, NextResponse } from "next/server";
 import { ComputerVisionClient } from "@azure/cognitiveservices-computervision";
 import { ApiKeyCredentials } from "@azure/ms-rest-js";
@@ -66,42 +67,59 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Falta userEmail" }, { status: 400 });
     }
 
-    // ✅ Descontar 1 crédito ANTES de llamar a Azure/Mistral.
-    // Acepta tanto boolean (true/false) como objeto { ok, error }
-    let ok = false;
-    let creditErr: string | undefined;
+    // ✅ COBRO POR IMAGEN
+    const requiredCredits = fileUrls.length;
 
+    // 1) Verificar saldo ANTES de descontar nada (evita cobros parciales)
     try {
-      const res = await useOneCredit(userEmail);
-      if (typeof res === "boolean") {
-        ok = res;
-      } else if (res && typeof res === "object") {
-        ok = !!(res as any).ok;
-        creditErr = (res as any).error;
+      // Construye la URL absoluta hacia tu propio endpoint /api/credits/saldo
+      const saldoUrl = new URL("/api/credits/saldo", request.url);
+      saldoUrl.searchParams.set("userEmail", userEmail);
+      const saldoResp = await fetch(saldoUrl.toString(), { method: "GET" });
+      const saldoData = await saldoResp.json().catch(() => ({}));
+      const saldo = Number(saldoData?.saldo ?? 0);
+      if (!Number.isFinite(saldo) || saldo < requiredCredits) {
+        return NextResponse.json(
+          { success: false, error: `Saldo insuficiente: necesitas ${requiredCredits}, disponible ${saldo}` },
+          { status: 402 }
+        );
       }
     } catch (e: any) {
       return NextResponse.json(
-        { success: false, error: `Error verificando créditos: ${e?.message || e}` },
+        { success: false, error: `No se pudo verificar saldo: ${e?.message || e}` },
         { status: 500 }
       );
     }
 
-    if (!ok) {
+    // 2) Descontar exactamente requiredCredits (1 por imagen)
+    try {
+      for (let i = 0; i < requiredCredits; i++) {
+        const r = await useOneCredit(userEmail);
+        const ok = typeof r === "boolean" ? r : !!(r as any)?.ok;
+        if (!ok) {
+          const err = typeof r === "object" ? (r as any)?.error : undefined;
+          return NextResponse.json(
+            { success: false, error: err || "No tienes créditos disponibles" },
+            { status: 402 }
+          );
+        }
+      }
+    } catch (e: any) {
       return NextResponse.json(
-        { success: false, error: creditErr || "No tienes créditos disponibles" },
-        { status: 402 }
+        { success: false, error: `Error descontando créditos: ${e?.message || e}` },
+        { status: 500 }
       );
     }
 
     // ==== A partir de aquí, tu pipeline original (OCR + LLM) ====
     let textoCompleto = "";
     for (const url of fileUrls) {
-      const base64Data = url.split(',')[1];
-      const buffer = Buffer.from(base64Data, 'base64');
+      const base64Data = url.split(",")[1];
+      const buffer = Buffer.from(base64Data, "base64");
       textoCompleto += await ocrAzure(buffer) + "\n\n";
     }
 
-    const personalidadExperto = promptsExpertos[areaConocimiento] || promptsExpertos['general'];
+    const personalidadExperto = promptsExpertos[areaConocimiento] || promptsExpertos["general"];
 
     // ========= INICIO: PROMPT FINAL DE CALIDAD SUPERIOR =========
     const promptFinalParaIA = `
@@ -170,6 +188,24 @@ export async function POST(request: NextRequest) {
     resultado.retroalimentacion.resumen_general = resultado.retroalimentacion.resumen_general || { fortalezas: "No especificado.", areas_mejora: "No especificado." };
 
     console.log("Respuesta corregida y enviada al frontend:", resultado);
+
+    // ✅ Envío de correo (no afecta si falla)
+    try {
+      await sendEmail({
+        to: userEmail,
+        subject: "Resultado de evaluación — Libel-IA",
+        html: `
+          <h2>¡Tu evaluación está lista!</h2>
+          <p><b>Puntaje:</b> ${resultado.puntaje || "N/A"}</p>
+          <p><b>Nota:</b> ${resultado.nota ?? "N/A"}</p>
+          <p>${(resultado?.retroalimentacion?.resumen_general?.fortalezas || "Resumen no disponible")
+            .toString().slice(0, 240)}...</p>
+          <p>Gracias por usar Libel-IA.</p>
+        `,
+      });
+    } catch (e) {
+      console.error("Aviso: email falló (no se interrumpe la evaluación):", e);
+    }
 
     return NextResponse.json({ success: true, ...resultado });
 
