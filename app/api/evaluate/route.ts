@@ -192,19 +192,22 @@ export async function POST(request: NextRequest) {
     // ✅ Envío de correo (no afecta si falla)
     try {
       await sendEmail({
+        from: process.env.RESEND_FROM || "Libel-IA <onboarding@resend.dev>",
         to: userEmail,
         subject: "Resultado de evaluación — Libel-IA",
+        text: `Tu evaluación está lista.\n\nPuntaje: ${resultado.puntaje || "N/A"}\nNota: ${resultado.nota ?? "N/A"}\n\nGracias por usar Libel-IA.`,
         html: `
           <h2>¡Tu evaluación está lista!</h2>
           <p><b>Puntaje:</b> ${resultado.puntaje || "N/A"}</p>
           <p><b>Nota:</b> ${resultado.nota ?? "N/A"}</p>
           <p>${(resultado?.retroalimentacion?.resumen_general?.fortalezas || "Resumen no disponible")
             .toString().slice(0, 240)}...</p>
-          <p>Gracias por usar Libel-IA.</p>
+          <hr/>
+          <p style="font-size:12px;color:#555">Gracias por usar <b>Libel-IA</b>.</p>
         `,
       });
-    } catch (e) {
-      console.error("Aviso: email falló (no se interrumpe la evaluación):", e);
+    } catch (e: any) {
+      console.error("⚠️ Aviso: el envío de email falló (no se interrumpe la evaluación):", e?.message || e);
     }
 
     return NextResponse.json({ success: true, ...resultado });

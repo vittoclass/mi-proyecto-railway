@@ -4,12 +4,20 @@ import { useEffect, useState } from "react";
 type Props = {
   userEmail?: string | null;
   children: React.ReactNode;
-  redirect?: boolean; // si true, redirige a /pagos
+  redirect?: boolean;
 };
 
 export default function PaywallGuard({ userEmail, children, redirect = false }: Props) {
   const [loading, setLoading] = useState(true);
   const [saldo, setSaldo] = useState<number>(0);
+
+  // 🔓 Siempre permitir /pagos
+  if (typeof window !== "undefined") {
+    const pathname = window.location?.pathname || "";
+    if (pathname.startsWith("/pagos")) {
+      return <>{children}</>;
+    }
+  }
 
   useEffect(() => {
     const run = async () => {
