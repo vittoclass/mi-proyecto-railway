@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 
 type Props = {
   userEmail?: string | null;
@@ -7,21 +8,64 @@ type Props = {
   redirect?: boolean;
 };
 
+// Componente auxiliar: persiste ?email=... en localStorage y devuelve los children
+function SaveEmailFromQuery({ children }: { children: React.ReactNode }) {
+  const search = useSearchParams();
+  useEffect(() => {
+    const qEmail = search.get("email");
+    if (qEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(qEmail)) {
+      try { localStorage.setItem("userEmail", qEmail); } catch {}
+    }
+  }, [search]);
+  return <>{children}</>;
+}
+
 export default function PaywallGuard({ userEmail, children, redirect = false }: Props) {
+  const pathname = usePathname();
+  const search = useSearchParams();
+
   const [loading, setLoading] = useState(true);
   const [saldo, setSaldo] = useState<number>(0);
 
-  // 🔓 Siempre permitir /pagos
-  if (typeof window !== "undefined") {
-    const pathname = window.location?.pathname || "";
-    if (pathname.startsWith("/pagos")) {
-      return <>{children}</>;
-    }
+  // 🔓 Siempre permitir /pagos PERO guardando el email si viene por query
+  if (pathname?.startsWith("/pagos")) {
+    return <SaveEmailFromQuery>{children}</SaveEmailFromQuery>;
   }
 
+  // Email efectivo: prop -> query -> localStorage
+  const [effectiveEmail, setEffectiveEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    const qEmail = search.get("email");
+    let chosen = (userEmail ?? "") || "";
+
+    if (!chosen && qEmail) {
+      chosen = qEmail;
+    }
+    if (!chosen) {
+      try {
+        const ls = localStorage.getItem("userEmail") || "";
+        if (ls) chosen = ls;
+      } catch {}
+    }
+
+    // normalizamos y validamos
+    chosen = chosen.trim().toLowerCase();
+    if (chosen && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(chosen)) {
+      setEffectiveEmail(chosen);
+      // si vino por query, persiste
+      if (qEmail && qEmail.toLowerCase() === chosen) {
+        try { localStorage.setItem("userEmail", chosen); } catch {}
+      }
+    } else {
+      setEffectiveEmail(null);
+    }
+  }, [userEmail, search]);
+
+  // Consulta de saldo (igual que tu versión original, usando POST)
   useEffect(() => {
     const run = async () => {
-      if (!userEmail) {
+      if (!effectiveEmail) {
         setSaldo(0);
         setLoading(false);
         return;
@@ -30,7 +74,7 @@ export default function PaywallGuard({ userEmail, children, redirect = false }: 
         const r = await fetch("/api/credits/saldo", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userEmail })
+          body: JSON.stringify({ userEmail: effectiveEmail }),
         });
         const data = await r.json();
         setSaldo(Number(data?.saldo || 0));
@@ -41,9 +85,11 @@ export default function PaywallGuard({ userEmail, children, redirect = false }: 
       }
     };
     run();
-  }, [userEmail]);
+  }, [effectiveEmail]);
 
-  if (loading) return <div className="p-6 text-sm opacity-70">Comprobando acceso…</div>;
+  if (loading) {
+    return <div className="p-6 text-sm opacity-70">Comprobando acceso…</div>;
+  }
 
   if (saldo <= 0) {
     if (redirect) {
