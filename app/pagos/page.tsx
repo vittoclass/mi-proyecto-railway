@@ -1,139 +1,354 @@
 "use client";
-import { useEffect, useState } from "react";
 
-type Plan = { id: string; nombre: string; precioCLP: number; creditos: number; vigenciaDias: number };
+import { useEffect, useMemo, useState } from "react";
 
-export default function PagosPage() {
+type Plan = {
+  id: string;
+  nombre: string;
+  precioCLP: number;
+  creditos: number;
+  vigenciaDias: number;
+  equivEvaluaciones?: number;
+};
+
+const isEmailValid = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+
+export default function PlanesPage() {
+  const [savedEmail, setSavedEmail] = useState<string | null>(null);
+  const [email, setEmail] = useState("");
+  const [saldo, setSaldo] = useState<number | null>(null);
+  const [loadingFree, setLoadingFree] = useState(false);
+  const [loadingSaldo, setLoadingSaldo] = useState(false);
+  const [loadingBuy, setLoadingBuy] = useState<string | null>(null); // planId en compra
+  const [msg, setMsg] = useState<{ type: "ok" | "error" | "info"; text: string } | null>(null);
+
   const [planes, setPlanes] = useState<Plan[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [comprando, setComprando] = useState<string | null>(null);
-  const [email, setEmail] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
-  const [debug, setDebug] = useState<{ status?: number; raw?: string; data?: any } | null>(null);
+  const [loadingPlanes, setLoadingPlanes] = useState(true);
 
-  // Cargar correo guardado
+  // lee correo guardado
   useEffect(() => {
     try {
-      const saved = (localStorage.getItem("userEmail") || "").toLowerCase();
-      setEmail(saved);
+      const stored = localStorage.getItem("userEmail");
+      if (stored) setSavedEmail(stored);
     } catch {}
   }, []);
 
-  // Cargar planes (acepta /api/planes con {plans:[...]} o un array directo)
+  const normalizedEmail = useMemo(() => email.trim().toLowerCase(), [email]);
+  const emailOk = useMemo(() => isEmailValid(normalizedEmail), [normalizedEmail]);
+
+  // guarda cuando sea válido
   useEffect(() => {
-    (async () => {
+    if (emailOk) {
+      try { localStorage.setItem("userEmail", normalizedEmail); } catch {}
+    }
+  }, [emailOk, normalizedEmail]);
+
+  // trae planes desde backend (sin caché)
+  useEffect(() => {
+    const run = async () => {
       try {
-        const r = await fetch("/api/planes");
-        const data = await r.json().catch(() => null);
-        const arr = Array.isArray(data) ? data : Array.isArray((data as any)?.plans) ? (data as any).plans : [];
-        setPlanes(arr as Plan[]);
+        setLoadingPlanes(true);
+        const r = await fetch("/api/planes", { cache: "no-store" });
+        const data = await r.json();
+        setPlanes(Array.isArray(data) ? data : []);
       } catch (e) {
-        console.error("Error cargando planes:", e);
+        console.error("No se pudieron cargar los planes", e);
+        setPlanes([]);
       } finally {
-        setLoading(false);
+        setLoadingPlanes(false);
       }
-    })();
+    };
+    run();
   }, []);
 
-  const guardarEmail = () => {
-    const ok = /\S+@\S+\.\S+/.test(email);
-    if (!ok) { alert("Ingresa un correo válido (ej: profe@colegio.cl)"); return; }
-    localStorage.setItem("userEmail", email.toLowerCase());
-    alert("Correo guardado ✔");
+  // trae saldo del correo EN USO
+  const fetchSaldo = async () => {
+    if (!emailOk) { setSaldo(null); return; }
+    try {
+      setLoadingSaldo(true);
+      const r = await fetch("/api/credits/saldo?userEmail=" + encodeURIComponent(normalizedEmail), { cache: "no-store" });
+      const data = await r.json();
+      setSaldo(Number(data?.saldo ?? 0));
+    } catch {
+      setSaldo(null);
+    } finally {
+      setLoadingSaldo(false);
+    }
+  };
+  useEffect(() => { fetchSaldo(); /* eslint-disable-next-line */ }, [emailOk, normalizedEmail]);
+
+  const useSavedEmail = () => {
+    if (savedEmail) {
+      setEmail(savedEmail);
+      setMsg(null);
+    }
+  };
+  const clearSavedEmail = () => {
+    try { localStorage.removeItem("userEmail"); } catch {}
+    setSavedEmail(null);
+    setEmail((prev) => (prev === savedEmail ? "" : prev));
+    setSaldo(null);
+    setMsg({ type: "info", text: "Correo borrado. Ingresa uno nuevo." });
   };
 
-  // ===== comprar (con panel de depuración) =====
-  const comprar = async (plan: Plan) => {
-    setError(null);
-    setDebug(null);
-    if (!/\S+@\S+\.\S+/.test(email)) { alert("Primero guarda tu correo (arriba)."); return; }
-    setComprando(plan.id);
+  // ===== Acciones =====
+
+  // FREE: activar créditos gratis
+  const activarGratis = async () => {
+    if (!isEmailValid(normalizedEmail)) {
+      setMsg({ type: "error", text: "Escribe un correo válido." });
+      return;
+    }
     try {
-      const precioNum = Number(plan.precioCLP); // asegura número
-      const r = await fetch("/api/pagos/create", {
+      setLoadingFree(true);
+      setMsg(null);
+      const r = await fetch("/api/credits/gratis", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userEmail: normalizedEmail }),
+      });
+      const data = await r.json();
+      if (!r.ok || !data?.ok) {
+        setMsg({ type: "error", text: data?.error || "No se pudo activar el plan gratuito." });
+        return;
+      }
+      setMsg({
+        type: "ok",
+        text:
+          data.creditsGranted > 0
+            ? `¡Listo! Se activaron ${data.creditsGranted} créditos en ${normalizedEmail}.`
+            : `Este correo ya había activado el plan gratuito.`,
+      });
+      setTimeout(() => { window.location.href = "/evaluar"; }, 600);
+    } catch (e: any) {
+      setMsg({ type: "error", text: e?.message || "Error inesperado." });
+    } finally {
+      setLoadingFree(false);
+      fetchSaldo();
+    }
+  };
+
+  // COMPRA: llamado directo al backend → Khipu URL
+  const comprarPlan = async (packId: string) => {
+    if (!isEmailValid(normalizedEmail)) {
+      setMsg({ type: "error", text: "Escribe un correo válido para comprar." });
+      return;
+    }
+    const plan = planes.find(p => p.id === packId);
+    if (!plan) {
+      setMsg({ type: "error", text: "Plan no encontrado." });
+      return;
+    }
+    try {
+      setLoadingBuy(packId);
+      setMsg(null);
+
+      // persistimos por redundancia
+      try { localStorage.setItem("userEmail", normalizedEmail); } catch {}
+
+      const resp = await fetch("/api/pagos/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userEmail: email,
+          userEmail: normalizedEmail,
           planId: plan.id,
-          precioCLP: precioNum,
+          precioCLP: plan.precioCLP,  // precio REAL del backend
         }),
       });
 
-      const raw = await r.text(); // leer crudo SIEMPRE
-      let data: any = {};
-      try { data = raw ? JSON.parse(raw) : {}; }
-      catch { data = { raw }; }
-
-      console.log("STATUS:", r.status);
-      console.log("RAW:", raw);
-      console.log("DATA:", data);
-      setDebug({ status: r.status, raw, data });
-
-      if (!r.ok || !data?.url) {
-        setError(data?.error || `No se pudo crear el pago (HTTP ${r.status})`);
+      const data = await resp.json();
+      if (!resp.ok) {
+        console.error("Pago falló:", data);
+        setMsg({ type: "error", text: data?.error || "No se pudo iniciar el pago. Revisa los datos." });
         return;
       }
 
-      window.location.href = data.url; // Redirige a Khipu
+      const url = data?.url;
+      if (!url) {
+        setMsg({ type: "error", text: "Khipu no devolvió URL de pago." });
+        return;
+      }
+
+      // redirige directo a Khipu
+      window.location.href = url;
     } catch (e: any) {
-      setError(e?.message || String(e));
-      setDebug({ data: { exception: String(e) } });
+      setMsg({ type: "error", text: e?.message || "Error inesperado al iniciar el pago." });
     } finally {
-      setComprando(null);
+      setLoadingBuy(null);
     }
   };
 
   return (
-    <main className="max-w-3xl mx-auto p-6 space-y-6">
-      <h1 className="text-2xl font-bold">Planes</h1>
-
-      {/* Email del usuario */}
-      <div className="border rounded-lg p-4 flex items-end gap-3">
-        <div className="flex-1">
-          <label className="block text-sm font-medium">Tu correo</label>
-        <input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="profe@colegio.cl"
-            className="mt-1 w-full border rounded px-3 py-2"
-          />
-          <p className="text-xs opacity-70 mt-1">
-            Usamos tu correo para asociar el pago y acreditar los créditos. (Siempre puedes ir a <a className="underline" href="/pagos">/pagos</a>)
-          </p>
+    <main className="max-w-5xl mx-auto px-5 py-10 space-y-8">
+      {savedEmail && !email && (
+        <div className="rounded-xl border px-5 py-4 bg-gray-50 flex items-center justify-between gap-3">
+          <div className="text-sm">Se encontró un correo guardado: <b>{savedEmail}</b></div>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={useSavedEmail} className="px-3 py-1.5 rounded bg-black text-white text-sm">Usar este correo</button>
+            <button type="button" onClick={clearSavedEmail} className="px-3 py-1.5 rounded border text-sm">Cambiar</button>
+          </div>
         </div>
-        <button onClick={guardarEmail} className="px-4 py-2 rounded bg-black text-white">Guardar</button>
-      </div>
-
-      {loading && <p>Cargando planes…</p>}
-      {error && <p className="text-red-600">Error: {error}</p>}
-
-      {/* Panel de depuración visible si hay error */}
-      {error && debug && (
-        <pre className="text-xs bg-neutral-100 p-3 rounded border overflow-auto max-h-64">
-{JSON.stringify(debug, null, 2)}
-        </pre>
       )}
 
-      <div className="space-y-4">
-        {planes.map((plan) => (
-          <div key={plan.id} className="border rounded-lg p-4 flex items-center justify-between">
-            <div>
-              <h2 className="font-semibold">{plan.nombre}</h2>
-              <p className="text-sm opacity-80">{plan.creditos} créditos · {plan.vigenciaDias} días</p>
-              <p className="font-bold mt-1">${Number(plan.precioCLP).toLocaleString("es-CL")} CLP</p>
-            </div>
-            <button
-              onClick={() => comprar(plan)}
-              disabled={!!comprando}
-              className="px-4 py-2 rounded bg-blue-600 text-white disabled:opacity-50"
-            >
-              {comprando === plan.id ? "Creando pago..." : (Number(plan.precioCLP) ? "Comprar" : "Obtener gratis")}
-            </button>
-          </div>
-        ))}
-        {!loading && planes.length === 0 && <p>No hay planes disponibles.</p>}
-      </div>
+      <header className="text-center space-y-3">
+        <h1 className="text-3xl md:text-4xl font-bold">Elige tu plan</h1>
+        <p className="text-base md:text-lg opacity-80">Activa 10 créditos gratis (≈ 2 evaluaciones). Cuando los necesites, compra más.</p>
+      </header>
+
+      <section className="max-w-xl mx-auto w-full space-y-3">
+        <label className="block text-sm font-medium">Tu correo</label>
+        <input
+          type="email"
+          placeholder="ej: profesor@colegio.cl"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="w-full border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-black/30"
+          autoComplete="email"
+        />
+
+        <div className="flex items-center justify-between text-sm">
+          <span className="opacity-80">
+            {emailOk
+              ? (loadingSaldo ? "Consultando saldo…" : (saldo === null ? "Saldo: —" : <>Saldo: <b>{saldo}</b> crédito(s)</>))
+              : "Escribe un correo válido para ver tu saldo"}
+          </span>
+
+          {emailOk && (saldo ?? 0) > 0 && (
+            <a href="/evaluar" className="px-4 py-2 rounded-xl bg-black text-white" title="Usar tus créditos ahora">
+              Ir a Evaluar
+            </a>
+          )}
+        </div>
+      </section>
+
+      {msg && (
+        <div className={`max-w-xl mx-auto rounded-xl px-4 py-3 text-sm ${
+          msg.type === "ok" ? "bg-green-50 text-green-700"
+          : msg.type === "error" ? "bg-red-50 text-red-700"
+          : "bg-yellow-50 text-yellow-800"
+        }`}>
+          {msg.text}
+        </div>
+      )}
+
+      {/* Cards de planes desde /api/planes */}
+      <section className="grid gap-5 md:grid-cols-3">
+        <PackCard
+          title={loadingPlanes ? "Cargando..." : planes.find(p => p.id === "free")?.nombre || "Plan gratuito"}
+          price={loadingPlanes ? "—" : `${(planes.find(p => p.id === "free")?.precioCLP ?? 0).toLocaleString("es-CL")} CLP`}
+          subtitle={
+            loadingPlanes ? "—"
+            : `${planes.find(p => p.id === "free")?.creditos ?? 0} créditos • ${(planes.find(p => p.id === "free")?.vigenciaDias ?? 0)} días`
+          }
+          bullets={loadingPlanes ? ["—", "—", "—"] : ["Ideal para probar", "Corrección automática", "Sin tarjeta de crédito"]}
+          cta={loadingFree ? "Activando…" : "Probar gratis"}
+          onClick={activarGratis}
+        />
+
+        <PackCard
+          title={loadingPlanes ? "Cargando..." : planes.find(p => p.id === "basic")?.nombre || "Plan Básico"}
+          price={loadingPlanes ? "$ —" : `$ ${(planes.find(p => p.id === "basic")?.precioCLP ?? 0).toLocaleString("es-CL")}`}
+          subtitle={
+            loadingPlanes ? "—"
+            : `${planes.find(p => p.id === "basic")?.creditos ?? 0} imágenes • ${(planes.find(p => p.id === "basic")?.vigenciaDias ?? 0)} días`
+          }
+          bullets={loadingPlanes ? ["—", "—", "—"] : [
+            "OCR + IA",
+            (planes.find(p => p.id === "basic")?.equivEvaluaciones ?? 0) > 0
+              ? `≈ ${planes.find(p => p.id === "basic")?.equivEvaluaciones} evaluaciones`
+              : "Créditos por imágenes",
+            "Soporte por email",
+          ]}
+          cta={loadingBuy === "basic" ? "Redirigiendo…" : "Comprar"}
+          onClick={() => comprarPlan("basic")}
+          highlight
+        />
+
+        <PackCard
+          title={loadingPlanes ? "Cargando..." : planes.find(p => p.id === "pro")?.nombre || "Plan Colegio"}
+          price={loadingPlanes ? "$ —" : `$ ${(planes.find(p => p.id === "pro")?.precioCLP ?? 0).toLocaleString("es-CL")}`}
+          subtitle={
+            loadingPlanes ? "—"
+            : `${planes.find(p => p.id === "pro")?.creditos ?? 0} imágenes • ${(planes.find(p => p.id === "pro")?.vigenciaDias ?? 0)} días`
+          }
+          bullets={loadingPlanes ? ["—", "—", "—"] : [
+            "Para 8–12 cursos",
+            (planes.find(p => p.id === "pro")?.equivEvaluaciones ?? 0) > 0
+              ? `≈ ${planes.find(p => p.id === "pro")?.equivEvaluaciones} evaluaciones`
+              : "Mejor precio por imagen",
+            "Soporte prioritario",
+          ]}
+          cta={loadingBuy === "pro" ? "Redirigiendo…" : "Comprar"}
+          onClick={() => comprarPlan("pro")}
+        />
+      </section>
+
+      <section className="rounded-xl border px-5 py-4 text-sm bg-gray-50">
+        <p className="font-medium mb-1">¿Cómo funciona?</p>
+        <ul className="list-disc pl-5 space-y-1 opacity-80">
+          <li>Si hay un correo guardado, puedes “Usar este correo” o “Cambiar”.</li>
+          <li>Activa el plan gratuito (10 créditos) o compra un pack.</li>
+          <li>Sube tus pruebas en <a className="underline" href="/evaluar">Evaluar</a>.</li>
+        </ul>
+      </section>
     </main>
+  );
+}
+
+function PackCard({
+  title,
+  price,
+  subtitle,
+  bullets,
+  cta,
+  onClick,
+  highlight,
+}: {
+  title: string;
+  price: string;
+  subtitle: string;
+  bullets: string[];
+  cta: string;
+  onClick: () => void;
+  highlight?: boolean;
+}) {
+  // Toda la tarjeta clickea y además tiene botón
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onClick()}
+      className={`rounded-2xl border p-6 flex flex-col gap-4 cursor-pointer select-none focus:outline-none ${
+        highlight ? "shadow-lg border-black/20" : "border-gray-200"
+      }`}
+      style={{ pointerEvents: "auto" }}
+    >
+      <div className="space-y-1">
+        <h3 className="text-lg font-semibold">{title}</h3>
+        <div className="text-3xl font-bold">{price}</div>
+        <div className="text-sm opacity-70">{subtitle}</div>
+      </div>
+
+      <ul className="space-y-2 text-sm">
+        {bullets.map((b, i) => (
+          <li key={i} className="flex items-start gap-2">
+            <span className="mt-1 inline-block w-1.5 h-1.5 rounded-full" style={{ background: "rgba(0,0,0,.7)" }} />
+            <span className="opacity-90">{b}</span>
+          </li>
+        ))}
+      </ul>
+
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onClick(); }}
+        className={`mt-2 px-4 py-3 rounded-xl text-sm font-medium ${
+          highlight ? "bg-black text-white" : "border hover:bg-black/5"
+        }`}
+        style={{ pointerEvents: "auto" }}
+      >
+        {cta}
+      </button>
+    </div>
   );
 }
