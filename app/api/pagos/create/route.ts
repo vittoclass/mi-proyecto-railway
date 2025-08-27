@@ -1,14 +1,12 @@
 // app/api/pagos/create/route.ts
 import { NextResponse } from "next/server";
 
-// Crea un pago en Khipu (API v3 - x-api-key, sin firmas)
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     const userEmail = String(body?.userEmail || "").toLowerCase();
     const planId = String(body?.planId || "");
-    // 👇 importante: amount en CLP, entero
-    const amount = Math.round(Number(body?.precioCLP));
+    const amount = Math.round(Number(body?.precioCLP)); // CLP entero
 
     // -------- validaciones de entrada --------
     if (!userEmail || !/\S+@\S+\.\S+/.test(userEmail)) {
@@ -22,40 +20,37 @@ export async function POST(req: Request) {
     }
 
     // -------- env obligatorios --------
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL; // ej: http://localhost:3000 o https://tu-railway.app
-    const apiKey = process.env.KHIPU_API_KEY;         // clave secreta v3 (x-api-key)
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL; // ej: https://libel-ia.up.railway.app
+    const apiKey = process.env.KHIPU_API_KEY;         // API v3 (x-api-key)
+    const responsibleEmail = process.env.KHIPU_RESPONSIBLE_EMAIL || ""; // correo habilitado en Khipu
+    // Límite opcional (por defecto 5000 si tu cuenta/plan lo exige)
+    const khipuMax = Number(process.env.KHIPU_MAX_AMOUNT ?? 5000);
 
-    if (!baseUrl) {
-      return NextResponse.json({ error: "Falta NEXT_PUBLIC_BASE_URL" }, { status: 500 });
-    }
-    if (!apiKey) {
-      return NextResponse.json({ error: "Falta KHIPU_API_KEY" }, { status: 500 });
-    }
+    if (!baseUrl) return NextResponse.json({ error: "Falta NEXT_PUBLIC_BASE_URL" }, { status: 500 });
+    if (!apiKey) return NextResponse.json({ error: "Falta KHIPU_API_KEY" }, { status: 500 });
 
     // -------- URLs de retorno / cancelación / webhook --------
-    // OJO: para producción, usa dominio público (no localhost) o Khipu lo rechaza.
     const return_url = `${baseUrl}/pagos/success?plan=${encodeURIComponent(planId)}`;
     const cancel_url = `${baseUrl}/pagos/cancel`;
     const notify_url = `${baseUrl}/api/pagos/webhook`;
 
-    // -------- planes gratis: no llamar a Khipu --------
+    // -------- plan gratis: sin Khipu --------
     if (amount === 0) {
-      // aquí podrías acreditar créditos gratis si corresponde (en webhook/otro endpoint)
-      return NextResponse.json({
-        url: `${return_url}&free=1`
-      });
+      return NextResponse.json({ url: `${return_url}&free=1` });
     }
 
-    // (opcional) límites para evitar errores típicos:
-    // si tu Khipu está configurado con tope de 5.000.000 CLP:
-    // if (amount > 5_000_000) {
-    //   return NextResponse.json({ error: "amount excede el máximo permitido" }, { status: 400 });
-    // }
+    // -------- protección por límite de Khipu --------
+    if (khipuMax > 0 && amount > khipuMax) {
+      return NextResponse.json(
+        { error: `El monto (${amount}) excede el máximo permitido por Khipu (${khipuMax}).` },
+        { status: 400 }
+      );
+    }
 
-    // -------- cuerpo v3 --------
-    const payload = {
+    // -------- payload v3 --------
+    const payload: Record<string, any> = {
       subject: `Libel-IA — ${planId}`,
-      amount,                 // entero CLP
+      amount,                 // CLP
       currency: "CLP",
       return_url,
       cancel_url,
@@ -63,8 +58,12 @@ export async function POST(req: Request) {
       send_email: false,
       send_reminders: false,
       custom: JSON.stringify({ userEmail, planId }),
-      responsible_user_email: userEmail,
     };
+
+    // Usa SIEMPRE el email habilitado en Khipu (no el del comprador)
+    if (responsibleEmail) {
+      payload.responsible_user_email = responsibleEmail;
+    }
 
     const resp = await fetch("https://payment-api.khipu.com/v3/payments", {
       method: "POST",
@@ -80,13 +79,14 @@ export async function POST(req: Request) {
     try { data = raw ? JSON.parse(raw) : {}; } catch { data = { raw }; }
 
     if (!resp.ok) {
+      // Log detallado para depurar en Railway
+      console.error("[KHIPU][ERROR]", { status: resp.status, data });
       return NextResponse.json(
         { error: `Error Khipu (HTTP ${resp.status})`, detalle: data },
         { status: 502 }
       );
     }
 
-    // v3 suele retornar payment_url (o simplified_transfer_url / transfer_url)
     const url = data?.payment_url || data?.simplified_transfer_url || data?.transfer_url || null;
     if (!url) {
       return NextResponse.json(
@@ -97,6 +97,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ url });
   } catch (e: any) {
+    console.error("[KHIPU][EXCEPTION]", e);
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 });
   }
 }
