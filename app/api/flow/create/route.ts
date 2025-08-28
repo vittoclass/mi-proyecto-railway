@@ -1,4 +1,3 @@
-// app/api/flow/create/route.ts
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -8,34 +7,45 @@ export const dynamic = "force-dynamic";
 const FLOW_API_KEY = process.env.FLOW_API_KEY || "";
 const FLOW_SECRET_KEY = process.env.FLOW_SECRET_KEY || "";
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-const FLOW_ENV = (process.env.FLOW_ENV || "sandbox").toLowerCase(); // "sandbox" | "prod"
+const FLOW_ENV = (process.env.FLOW_ENV || "sandbox").toLowerCase();
 
-// ENDPOINT según ambiente
-const FLOW_HOST =
-  FLOW_ENV === "prod" ? "https://www.flow.cl" : "https://sandbox.flow.cl";
+const FLOW_HOST = FLOW_ENV === "prod" ? "https://www.flow.cl" : "https://sandbox.flow.cl";
 const FLOW_CREATE_URL = `${FLOW_HOST}/api/payment/create`;
 
-// Créditos por plan (asegúrate de que coincidan con tu UI)
 const PLAN_CREDITS: Record<string, number> = {
-  basic: 90,           // Khipu normalmente, pero lo dejo mapeado
-  intermediate: 640,   // Flow
-  pro: 1280,           // Flow
+  basic: 90,
+  intermediate: 640,
+  pro: 1280,
 };
 
-// Flow firma HMAC-SHA256 sobre los pares ordenados alfabéticamente,
-// con el MISMO string que se envía (application/x-www-form-urlencoded).
-async function signFlow(params: Record<string, string>, secret: string) {
-  const entries = Object.entries(params).sort(([a], [b]) => a.localeCompare(b));
-  // construimos exactamente "k1=v1&k2=v2..." con encodeURIComponent como hará el body
-  const bodyStr = entries
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-    .join("&");
-
+// firma sobre string codificado (k=v con encodeURIComponent)
+async function signEncoded(params: Record<string,string>, secret: string) {
   const { createHmac } = await import("crypto");
-  const h = createHmac("sha256", secret);
-  h.update(bodyStr);
-  const s = h.digest("hex");
-  return { s, bodyStr };
+  const entries = Object.entries(params).sort(([a],[b]) => a.localeCompare(b));
+  const bodyStr = entries.map(([k,v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
+  const s = createHmac("sha256", secret).update(bodyStr).digest("hex");
+  return { s, bodyStr, mode: "encoded" as const };
+}
+
+// firma sobre string sin codificar (k=v sin encodeURIComponent)
+async function signRaw(params: Record<string,string>, secret: string) {
+  const { createHmac } = await import("crypto");
+  const entries = Object.entries(params).sort(([a],[b]) => a.localeCompare(b));
+  const bodyStr = entries.map(([k,v]) => `${k}=${v}`).join("&");
+  const s = createHmac("sha256", secret).update(bodyStr).digest("hex");
+  return { s, bodyStr, mode: "raw" as const };
+}
+
+async function callFlowCreate(body: string) {
+  const resp = await fetch(FLOW_CREATE_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" },
+    body,
+  });
+  const text = await resp.text();
+  let data: any = null;
+  try { data = JSON.parse(text); } catch { /* OK, queda text */ }
+  return { ok: resp.ok, status: resp.status, data, text };
 }
 
 export async function POST(req: Request) {
@@ -53,7 +63,7 @@ export async function POST(req: Request) {
     }
 
     const email = String(userEmail).toLowerCase();
-    const commerceOrder = Date.now().toString(); // único por pago
+    const commerceOrder = Date.now().toString();
     const subject = `Libel-IA — ${planId}`;
     const currency = "CLP";
     const amount = Number(precioCLP);
@@ -61,8 +71,8 @@ export async function POST(req: Request) {
     const urlReturn = `${BASE_URL}/pagos/success?plan=${encodeURIComponent(planId)}`;
     const urlConfirmation = `${BASE_URL}/api/flow/webhook`;
 
-    // Params requeridos (orden alfabético al firmar)
-    const baseParams: Record<string, string> = {
+    // Params + metadatos (planId) que nos devuelve Flow en webhook
+    const baseParams: Record<string,string> = {
       amount: String(amount),
       apiKey: FLOW_API_KEY,
       commerceOrder,
@@ -71,45 +81,37 @@ export async function POST(req: Request) {
       subject,
       urlConfirmation,
       urlReturn,
-      // Puedes agregar meta como planId explícito:
-      // flow acepta params extra y los reenvía en el webhook:
-      planId,
+      planId, // custom
     };
 
-    const { s, bodyStr } = await signFlow(baseParams, FLOW_SECRET_KEY);
-    const body = `${bodyStr}&s=${encodeURIComponent(s)}`;
-
-    const resp = await fetch(FLOW_CREATE_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Accept": "application/json",
-      },
-      body,
-    });
-
-    const text = await resp.text();
-    let data: any = null;
-    try { data = JSON.parse(text); } catch { /* deja text crudo */ }
-
-    if (!resp.ok || !(data && data.url)) {
-      return NextResponse.json(
-        {
-          error: "Error al crear pago en Flow",
-          detalle: data || text,
-          // ÚTIL para depurar firma en logs (NO en producción final):
-          // NOTE: comenta estas líneas si ya quedó estable
-          debug: {
-            FLOW_ENV,
-            host: FLOW_HOST,
-            sent: baseParams,
-          },
-        },
-        { status: 502 }
-      );
+    // 1) Intento con firma "encoded"
+    const enc = await signEncoded(baseParams, FLOW_SECRET_KEY);
+    const attempt1Body = `${enc.bodyStr}&s=${encodeURIComponent(enc.s)}`;
+    const r1 = await callFlowCreate(attempt1Body);
+    if (r1.ok && r1.data?.url) {
+      return NextResponse.json({ url: r1.data.url });
     }
 
-    return NextResponse.json({ url: data.url });
+    // 2) Si falla, intento con firma "raw"
+    const raw = await signRaw(baseParams, FLOW_SECRET_KEY);
+    const attempt2Body = `${raw.bodyStr}&s=${raw.s}`;
+    const r2 = await callFlowCreate(attempt2Body);
+    if (r2.ok && r2.data?.url) {
+      return NextResponse.json({ url: r2.data.url, note: "signed_raw_ok" });
+    }
+
+    // Si igualmente falla, devuelvo TODO el debug para que lo veamos altiro
+    return NextResponse.json({
+      error: "Error al crear pago en Flow",
+      detalle: {
+        host: FLOW_HOST,
+        env: FLOW_ENV,
+        baseParams,
+        attempt1: { mode: enc.mode, status: r1.status, data: r1.data ?? r1.text?.slice(0,500) },
+        attempt2: { mode: raw.mode, status: r2.status, data: r2.data ?? r2.text?.slice(0,500) }
+      }
+    }, { status: 502 });
+
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Error inesperado en Flow" }, { status: 500 });
   }
