@@ -15,28 +15,65 @@ export async function POST(req: Request) {
   try {
     const { userEmail } = await req.json();
     const email = String(userEmail || "").trim().toLowerCase();
-
     if (!isEmailValid(email)) {
       return NextResponse.json({ error: "Correo inválido" }, { status: 400 });
     }
 
-    // Llamada ATÓMICA al backend (no hay condiciones en el cliente)
-    const { data, error } = await supabase.rpc("grant_free_once", {
-      p_email: email,
-      p_amount: 10,
-    });
+    // 1) Leer si ya existe
+    const { data: row, error: selErr } = await supabase
+      .from("user_credits")
+      .select("email, credits, free_used")
+      .eq("email", email)
+      .maybeSingle();
 
-    if (error) {
-      // Esto aparece en Logs de Railway y nos dice la causa real
-      console.error("grant_free_once error:", error);
-      return NextResponse.json({ error: "No se pudo crear saldo" }, { status: 500 });
+    if (selErr) {
+      console.error("select user_credits error:", selErr);
+      return NextResponse.json({ error: "No se pudo leer saldo" }, { status: 500 });
     }
 
-    // data === true -> se otorgó ahora; data === false -> ya estaba usado
-    const creditsGranted = data ? 10 : 0;
-    return NextResponse.json({ ok: true, creditsGranted });
+    // 2) Si ya usó el gratis => no dar de nuevo
+    if (row?.free_used) {
+      return NextResponse.json({ ok: true, creditsGranted: 0 });
+    }
+
+    const GRANT = 10;
+
+    if (!row) {
+      // 3a) No existe: crear registro nuevo con 10 créditos
+      const { error: insErr } = await supabase
+        .from("user_credits")
+        .insert({
+          email,
+          credits: GRANT,
+          free_used: true,
+          last_order: "free-activation"
+        });
+
+      if (insErr) {
+        console.error("insert user_credits error:", insErr);
+        return NextResponse.json({ error: "No se pudo crear saldo" }, { status: 500 });
+      }
+    } else {
+      // 3b) Existe y no ha usado gratis: sumar 10 y marcar usado
+      const { error: updErr } = await supabase
+        .from("user_credits")
+        .update({
+          credits: (row.credits ?? 0) + GRANT,
+          free_used: true,
+          last_order: "free-activation",
+          updated_at: new Date().toISOString()
+        })
+        .eq("email", email);
+
+      if (updErr) {
+        console.error("update user_credits error:", updErr);
+        return NextResponse.json({ error: "No se pudo actualizar saldo" }, { status: 500 });
+      }
+    }
+
+    return NextResponse.json({ ok: true, creditsGranted: GRANT });
   } catch (e: any) {
-    console.error("gratis endpoint error:", e);
+    console.error("gratis endpoint fatal:", e);
     return NextResponse.json({ error: e?.message || "Error" }, { status: 500 });
   }
 }
