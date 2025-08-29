@@ -11,7 +11,7 @@ const PRICE_TO_CREDITS: Record<number, number> = {
 async function sumarCreditosPorEmail(email: string, creditos: number, referencia: string) {
   // 1) Verifica si referencia ya existe (evita duplicar)
   // 2) Busca user por email
-  // 3) user_credits.balance += creditos
+  // 3) user_credits.credits += creditos   // <<< CAMBIADO (antes decía balance)
   // 4) Guarda registro pago 'paid'
 }
 
