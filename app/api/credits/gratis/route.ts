@@ -3,10 +3,9 @@ import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
 
-// --- Supabase (server only) ---
 const supabase = createClient(
   process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!, // SERVICE ROLE (solo en servidor)
+  process.env.SUPABASE_SERVICE_ROLE_KEY!, // SERVICE ROLE (server only)
   { auth: { persistSession: false } }
 );
 
@@ -21,58 +20,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Correo inválido" }, { status: 400 });
     }
 
-    // 1) Leer registro actual (credits, free_used)
-    const { data: row, error: selErr } = await supabase
-      .from("user_credits")
-      .select("email, credits, free_used")
-      .eq("email", email)
-      .maybeSingle();
+    // Llamada ATÓMICA al backend (no hay condiciones en el cliente)
+    const { data, error } = await supabase.rpc("grant_free_once", {
+      p_email: email,
+      p_amount: 10,
+    });
 
-    if (selErr) {
-      return NextResponse.json({ error: "Error leyendo saldo" }, { status: 500 });
+    if (error) {
+      // Esto aparece en Logs de Railway y nos dice la causa real
+      console.error("grant_free_once error:", error);
+      return NextResponse.json({ error: "No se pudo crear saldo" }, { status: 500 });
     }
 
-    // 2) Si ya usó el gratis, no volvemos a otorgar
-    if (row?.free_used) {
-      return NextResponse.json({ ok: true, creditsGranted: 0 });
-    }
-
-    const creditsGranted = 10; // GRATIS = 10
-
-    // 3) Otorgar gratis una sola vez
-    if (row) {
-      // existe: sumar y marcar free_used
-      const { error: updErr } = await supabase
-        .from("user_credits")
-        .update({
-          credits: (row.credits ?? 0) + creditsGranted,
-          free_used: true,
-          updated_at: new Date().toISOString(),
-          last_order: "free-activation"
-        })
-        .eq("email", email);
-
-      if (updErr) {
-        return NextResponse.json({ error: "No se pudo actualizar créditos" }, { status: 500 });
-      }
-    } else {
-      // no existe: crear con credits = 10 y free_used = true
-      const { error: insErr } = await supabase
-        .from("user_credits")
-        .insert({
-          email,
-          credits: creditsGranted,
-          free_used: true,
-          last_order: "free-activation"
-        });
-
-      if (insErr) {
-        return NextResponse.json({ error: "No se pudo crear el saldo" }, { status: 500 });
-      }
-    }
-
+    // data === true -> se otorgó ahora; data === false -> ya estaba usado
+    const creditsGranted = data ? 10 : 0;
     return NextResponse.json({ ok: true, creditsGranted });
   } catch (e: any) {
+    console.error("gratis endpoint error:", e);
     return NextResponse.json({ error: e?.message || "Error" }, { status: 500 });
   }
 }
