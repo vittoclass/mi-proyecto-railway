@@ -7,7 +7,7 @@ type Equiv = { cursos3imgs?: string; cursos4imgs?: string; cursos5imgs?: string 
 type Plan = {
   id: string;
   nombre: string;
-  precioCLP: number;     // decide pasarela: Khipu si <= 5000, Flow si > 5000
+  precioCLP: number;     // decide pasarela: Khipu si id === "basic", Flow si es "intermediate" o "pro"
   creditos: number;      // 1 crédito = 1 imagen
   vigenciaDias: number;
   equivEvaluaciones?: Equiv;
@@ -65,7 +65,7 @@ const CLIENT_PLANS: Plan[] = [
   {
     id: "intermediate",    // Flow
     nombre: "Plan Intermedio",
-    precioCLP: 29900,
+    precioCLP: 29990,      // <<< ACTUALIZADO
     creditos: 640,
     vigenciaDias: 60,
     equivEvaluaciones: {
@@ -88,7 +88,7 @@ const CLIENT_PLANS: Plan[] = [
   {
     id: "pro",             // Flow
     nombre: "Plan Pro",
-    precioCLP: 49900,
+    precioCLP: 49990,      // <<< ACTUALIZADO
     creditos: 1280,
     vigenciaDias: 90,
     equivEvaluaciones: {
@@ -191,7 +191,7 @@ export default function PlanesPage() {
     }
   };
 
-  // Comprar (Khipu <= 5000 / Flow > 5000)
+  // Comprar: Khipu (basic) / Flow (intermediate, pro)
   const comprarPlan = async (plan: Plan) => {
     if (!emailOk) { setMsg({ type: "error", text: "Escribe un correo válido para comprar." }); return; }
 
@@ -206,27 +206,45 @@ export default function PlanesPage() {
       setMsg(null);
       try { localStorage.setItem("userEmail", normalizedEmail); } catch {}
 
-      const endpoint = plan.precioCLP <= 5000 ? "/api/pagos/create" : "/api/flow/create";
-      const resp = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userEmail: normalizedEmail, planId: plan.id, precioCLP: plan.precioCLP }),
-      });
+      if (plan.id === "basic") {
+        // KHIPU (YA FUNCIONA): deja tu flujo existente
+        const resp = await fetch("/api/pagos/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userEmail: normalizedEmail, planId: plan.id, precioCLP: plan.precioCLP }),
+        });
 
-      let data: any = null, raw = "";
-      try { data = await resp.clone().json(); } catch { try { raw = await resp.text(); } catch {} }
+        let data: any = null, raw = "";
+        try { data = await resp.clone().json(); } catch { try { raw = await resp.text(); } catch {} }
 
-      if (!resp.ok) {
-        console.error("Pago falló:", data || raw || { status: resp.status });
-        const message = (data && (data.error || data.message)) || raw || `No se pudo iniciar el pago (HTTP ${resp.status}).`;
-        setMsg({ type: "error", text: message });
+        if (!resp.ok) {
+          const message = (data && (data.error || data.message)) || raw || `No se pudo iniciar el pago (HTTP ${resp.status}).`;
+          setMsg({ type: "error", text: message });
+          return;
+        }
+
+        const url = (data && (data.url || data.payment_url)) || null;
+        if (!url) { setMsg({ type: "error", text: "La pasarela no devolvió URL de pago." }); return; }
+        window.location.href = url;
         return;
       }
 
-      const url = (data && (data.url || data.payment_url)) || null;
-      if (!url) { setMsg({ type: "error", text: "La pasarela no devolvió URL de pago." }); return; }
+      // FLOW (LINKS FIJOS): abre el link del plan
+      if (plan.id === "intermediate") {
+        const link = process.env.NEXT_PUBLIC_FLOW_LINK_INTERMEDIO;
+        if (!link) { setMsg({ type: "error", text: "Falta configurar el LINK del Plan Intermedio." }); return; }
+        window.open(link, "_blank", "noopener,noreferrer");
+        return;
+      }
 
-      window.location.href = url;
+      if (plan.id === "pro") {
+        const link = process.env.NEXT_PUBLIC_FLOW_LINK_PRO;
+        if (!link) { setMsg({ type: "error", text: "Falta configurar el LINK del Plan Pro." }); return; }
+        window.open(link, "_blank", "noopener,noreferrer");
+        return;
+      }
+
+      setMsg({ type: "error", text: "Plan no reconocido." });
     } catch (e: any) {
       setMsg({ type: "error", text: e?.message || "Error inesperado al iniciar el pago." });
     } finally {
