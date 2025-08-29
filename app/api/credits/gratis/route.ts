@@ -19,8 +19,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Content-Type inválido" }, { status: 415 });
     }
 
-    const { userEmail } = await req.json();
-    const email = String(userEmail || "").trim().toLowerCase();
+    const body = await req.json().catch(() => ({}));
+    const email = String(body?.userEmail || "").trim().toLowerCase();
     if (!isEmailValid(email)) {
       return NextResponse.json({ error: "Correo inválido" }, { status: 400 });
     }
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
 
     if (selErr) {
       console.error("select user_credits error:", selErr);
-      return NextResponse.json({ error: "No se pudo leer saldo" }, { status: 500 });
+      return NextResponse.json({ error: "No se pudo leer saldo", supabaseError: selErr }, { status: 500 });
     }
 
     // 2) Si ya usó gratis => no otorgar otra vez
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
       });
       if (insErr) {
         console.error("insert user_credits error:", insErr);
-        return NextResponse.json({ error: "No se pudo crear saldo" }, { status: 500 });
+        return NextResponse.json({ error: "No se pudo crear saldo", supabaseError: insErr }, { status: 500 });
       }
     } else {
       const { error: updErr } = await supabase
@@ -78,7 +78,7 @@ export async function POST(req: Request) {
         .eq("email", email);
       if (updErr) {
         console.error("update user_credits error:", updErr);
-        return NextResponse.json({ error: "No se pudo actualizar saldo" }, { status: 500 });
+        return NextResponse.json({ error: "No se pudo actualizar saldo", supabaseError: updErr }, { status: 500 });
       }
     }
 
