@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!, // Service Role (server-only)
   { auth: { persistSession: false } }
 );
 
@@ -13,7 +13,7 @@ const isEmailValid = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
 export async function POST(req: Request) {
   try {
-    // Soporta JSON o form-data
+    // Acepta JSON o form
     const ct = (req.headers.get("content-type") || "").toLowerCase();
     let email = "";
     if (ct.includes("application/json")) {
@@ -23,7 +23,6 @@ export async function POST(req: Request) {
       const form = await req.formData();
       email = String(form.get("userEmail") || "").trim().toLowerCase();
     } else {
-      // intentar igual como JSON por si el front no puso el header
       const body = await req.json().catch(() => ({}));
       email = String(body?.userEmail || "").trim().toLowerCase();
     }
@@ -34,7 +33,7 @@ export async function POST(req: Request) {
 
     const GRANT = 10;
 
-    // 1) Buscar si existe
+    // Lee si existe y si ya usó gratis
     const { data: row, error: selErr } = await supabase
       .from("user_credits")
       .select("email, credits, free_used")
@@ -45,20 +44,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No se pudo leer saldo", supabaseError: selErr }, { status: 500 });
     }
 
-    // 2) Ya usó gratis → no regalar otra vez
     if (row?.free_used) {
       return NextResponse.json({ ok: true, creditsGranted: 0 });
     }
 
-    // 3) Crear o actualizar (la BD ahora rellena expires_at por default)
+    // Crea o actualiza. La BD ahora tiene defaults (incluye expires_at)
     if (!row) {
-      const { error: insErr } = await supabase.from("user_credits").insert({
-        email,
-        credits: GRANT,
-        free_used: true,
-        last_order: "free-activation",
-        // expires_at: omitido a propósito (la BD lo rellena por default)
-      });
+      const { error: insErr } = await supabase
+        .from("user_credits")
+        .insert({
+          email,
+          credits: GRANT,
+          free_used: true,
+          last_order: "free-activation"
+        });
       if (insErr) {
         return NextResponse.json({ error: "No se pudo crear saldo", supabaseError: insErr }, { status: 500 });
       }
@@ -69,8 +68,7 @@ export async function POST(req: Request) {
           credits: (row.credits ?? 0) + GRANT,
           free_used: true,
           last_order: "free-activation",
-          updated_at: new Date().toISOString(),
-          // expires_at: omitido (default ya existe y probablemente ya estaba seteado)
+          updated_at: new Date().toISOString()
         })
         .eq("email", email);
       if (updErr) {
