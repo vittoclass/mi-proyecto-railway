@@ -7,7 +7,7 @@ type Equiv = { cursos3imgs?: string; cursos4imgs?: string; cursos5imgs?: string 
 type Plan = {
   id: string;
   nombre: string;
-  precioCLP: number;     // decide pasarela: Khipu si id === "basic", Flow si es "intermediate" o "pro"
+  precioCLP: number;     // decide pasarela: Khipu si id === "basic", Flow si es "intermediate" | "pro" | "flow400"
   creditos: number;      // 1 crédito = 1 imagen
   vigenciaDias: number;
   equivEvaluaciones?: Equiv;
@@ -62,6 +62,31 @@ const CLIENT_PLANS: Plan[] = [
     policy:
       "Al comprar confirmas que aceptas las Condiciones de Uso. Créditos no transferibles. Sin almacenamiento permanente tras cerrar o refrescar.",
   },
+
+  // === NUEVO PLAN DESTACADO (FLOW) ===
+  {
+    id: "flow400",         // Flow (link fijo)
+    nombre: "Plan 400 créditos",
+    precioCLP: 12990,      // IVA incluido
+    creditos: 400,
+    vigenciaDias: 60,
+    equivEvaluaciones: {
+      cursos3imgs: "≈ 3 cursos (3 imágenes/est.)",     // 400 / 120 ≈ 3,3
+      cursos4imgs: "≈ 2 cursos (4 imágenes/est.)",     // 400 / 160 = 2,5 (2 completos + resto)
+      cursos5imgs: "≈ 2 cursos (5 imágenes/est.)",     // 400 / 200 = 2
+    },
+    bullets: [
+      "Mejor rendimiento precio/volumen",
+      "1 crédito = 1 imagen evaluada",
+      "Cubre 2–3 cursos reales según 3–5 imágenes/est.",
+      "Ideal para colegios que parten",
+    ],
+    descripcion:
+      "La opción recomendada por relación costo/beneficio. Permite evaluar varios cursos manteniendo calidad.",
+    policy:
+      "Al comprar confirmas que aceptas las Condiciones de Uso. Créditos no transferibles. Sin reembolsos parciales.",
+  },
+
   {
     id: "intermediate",    // Flow
     nombre: "Plan Intermedio",
@@ -191,7 +216,7 @@ export default function PlanesPage() {
     }
   };
 
-  // Comprar: Khipu (basic) / Flow (intermediate, pro)
+  // Comprar: Khipu (basic) / Flow (intermediate, pro, flow400)
   const comprarPlan = async (plan: Plan) => {
     if (!emailOk) { setMsg({ type: "error", text: "Escribe un correo válido para comprar." }); return; }
 
@@ -244,6 +269,13 @@ export default function PlanesPage() {
         return;
       }
 
+      if (plan.id === "flow400") {
+        const link = process.env.NEXT_PUBLIC_FLOW_LINK_400;
+        if (!link) { setMsg({ type: "error", text: "Falta configurar el LINK del Plan 400 créditos." }); return; }
+        window.open(link, "_blank", "noopener,noreferrer");
+        return;
+      }
+
       setMsg({ type: "error", text: "Plan no reconocido." });
     } catch (e: any) {
       setMsg({ type: "error", text: e?.message || "Error inesperado al iniciar el pago." });
@@ -271,7 +303,7 @@ export default function PlanesPage() {
         <p className="text-base md:text-lg opacity-80">
           1 crédito = 1 imagen evaluada. Activa 10 créditos de prueba. Luego compra el plan que necesites.
         </p>
-        <p className="text-xs opacity-60 mt-1">UI /planes v-27-08-01</p>
+        <p className="text-xs opacity-60 mt-1">UI /planes v-29-08-02</p>
       </header>
 
       {/* Correo + Saldo */}
@@ -293,7 +325,7 @@ export default function PlanesPage() {
               : "Escribe un correo válido para ver tu saldo"}
           </span>
 
-          {emailOk && (saldo ?? 0) > 0 && (
+        {emailOk && (saldo ?? 0) > 0 && (
             <a href="/evaluar" className="px-4 py-2 rounded-xl bg-black text-white" title="Usar tus créditos ahora">
               Ir a Evaluar
             </a>
@@ -317,10 +349,24 @@ export default function PlanesPage() {
           const price = p.precioCLP > 0 ? `$ ${(p.precioCLP ?? 0).toLocaleString("es-CL")}` : "0 CLP";
           const subtitle = `${p.creditos} imágenes • ${p.vigenciaDias} días`;
 
+          const destacado = p.id === "flow400"; // marcar el plan de mejor rendimiento
+
           return (
-            <div key={p.id} className={`rounded-2xl border p-6 flex flex-col gap-4 ${p.id === "basic" ? "shadow-sm border-black/20" : ""}`}>
+            <div
+              key={p.id}
+              className={`rounded-2xl p-6 flex flex-col gap-4 border ${
+                p.id === "basic" ? "shadow-sm border-black/20" : ""
+              } ${destacado ? "border-2 border-yellow-500 shadow-lg" : ""}`}
+            >
               <div className="space-y-1">
-                <h3 className="text-lg font-semibold">{p.nombre}</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">{p.nombre}</h3>
+                  {destacado && (
+                    <span className="text-xxs md:text-xs px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 font-semibold">
+                      ⭐ Mejor rendimiento
+                    </span>
+                  )}
+                </div>
                 <div className="text-3xl font-bold">{price}</div>
                 <div className="text-sm opacity-70">{subtitle}</div>
               </div>
@@ -373,7 +419,7 @@ export default function PlanesPage() {
                 onClick={() => (p.precioCLP === 0 ? activarGratis() : comprarPlan(p))}
                 className={`mt-2 px-4 py-3 rounded-xl text-sm font-medium ${
                   p.id === "basic" ? "bg-black text-white" : "border hover:bg-black/5"
-                }`}
+                } ${destacado ? "!border-yellow-500" : ""}`}
               >
                 {loading ? (p.precioCLP === 0 ? "Activando…" : "Procesando…") : (p.precioCLP === 0 ? "Probar gratis" : "Comprar")}
               </button>
