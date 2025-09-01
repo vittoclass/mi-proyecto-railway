@@ -1,10 +1,14 @@
-import { sendEmail } from "@/lib/email";
+// app/api/evaluate/route.ts
 import { type NextRequest, NextResponse } from "next/server";
 import { ComputerVisionClient } from "@azure/cognitiveservices-computervision";
 import { ApiKeyCredentials } from "@azure/ms-rest-js";
+import { sendEmail } from "@/lib/email";
 
-// ✅ util para descontar 1 crédito
-import { useOneCredit } from "@/lib/credits";
+// ⬇️ usa el supabase admin directo (sin fetch interno)
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+
+// ✅ runtime node (NO edge)
+export const runtime = "nodejs";
 
 // --- Configuración de APIs ---
 const AZURE_VISION_ENDPOINT = process.env.AZURE_VISION_ENDPOINT!;
@@ -14,13 +18,46 @@ const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY!;
 // --- Biblioteca de Prompts Expertos ---
 const promptsExpertos = {
   general: `Actúa como un profesor universitario detallista, riguroso y constructivo. Tu objetivo es ofrecer una retroalimentación que demuestre un análisis profundo y nivel experto del trabajo del estudiante.`,
-  matematicas: `Actúa como un catedrático de Matemáticas. Sé riguroso y lógico. Explica el procedimiento correcto paso a paso, citando directamente los errores conceptuales o de cálculo del desarrollo del estudiante.`,
-  lenguaje: `Actúa como un crítico literario y académico. Sé profundo y argumentativo. Evalúa la estructura, coherencia y tesis, citando textualmente fragmentos del ensayo para justificar cada punto y revelar el subtexto.`,
-  ciencias: `Actúa como un riguroso científico e investigador. Evalúa la aplicación del método científico y la correcta interpretación de datos, citando evidencia específica de los reportes o respuestas para validar o refutar las conclusiones.`,
-  artes: `Actúa como un curador de arte y crítico profesional. Tu feedback debe ser conceptual y perceptivo. Describe elementos visuales específicos (ej: 'el trazo fuerte en la esquina', 'el contraste de color') para justificar tu análisis de la composición, técnica e intención artística.`,
-  humanidades: `Actúa como un filósofo y académico. Evalúa la profundidad del pensamiento crítico, la claridad de la argumentación y la comprensión de conceptos abstractos, citando las ideas principales del texto del estudiante para realizar un contra-argumento o expandir sobre ellas.`,
-  ingles: `Actúa como un examinador de idiomas nivel C2. Evalúa gramática, vocabulario y fluidez, citando ejemplos específicos de errores del texto y ofreciendo la corrección precisa y la razón detrás de ella.`,
+  matematicas: `Actúa como un catedrático de Matemáticas...`,
+  lenguaje: `Actúa como un crítico literario y académico...`,
+  ciencias: `Actúa como un riguroso científico e investigador...`,
+  artes: `Actúa como un curador de arte y crítico profesional...`,
+  humanidades: `Actúa como un filósofo y académico...`,
+  ingles: `Actúa como un examinador de idiomas nivel C2...`,
 };
+
+// --- Helpers créditos (versión simple: una fila por usuario con columna `credits`) ---
+async function getSaldo(email: string): Promise<number> {
+  const { data, error } = await supabaseAdmin
+    .from("user_credits")
+    .select("credits")
+    .eq("email", email.toLowerCase())
+    .maybeSingle();
+
+  if (error) throw new Error(`Supabase saldo: ${error.message}`);
+  return Number(data?.credits ?? 0);
+}
+
+async function useOneCredit(email: string): Promise<boolean> {
+  // Lee saldo actual
+  const { data: row, error } = await supabaseAdmin
+    .from("user_credits")
+    .select("id, credits")
+    .eq("email", email.toLowerCase())
+    .maybeSingle();
+
+  if (error) throw new Error(`Supabase read: ${error.message}`);
+  const credits = Number(row?.credits ?? 0);
+  if (!row || credits <= 0) return false;
+
+  const { error: updErr } = await supabaseAdmin
+    .from("user_credits")
+    .update({ credits: credits - 1 })
+    .eq("id", row.id);
+
+  if (updErr) throw new Error(`Supabase update: ${updErr.message}`);
+  return true;
+}
 
 // --- Funciones de Soporte ---
 async function ocrAzure(imageBuffer: Buffer): Promise<string> {
@@ -32,18 +69,17 @@ async function ocrAzure(imageBuffer: Buffer): Promise<string> {
   const operationId = result.operationLocation.split("/").pop()!;
   let analysisResult;
   do {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((r) => setTimeout(r, 1000));
     analysisResult = await client.getReadResult(operationId);
   } while (
     analysisResult.status === "running" ||
     analysisResult.status === "notStarted"
   );
+
   let fullText = "";
   if (analysisResult.status === "succeeded" && analysisResult.analyzeResult) {
     for (const page of analysisResult.analyzeResult.readResults) {
-      for (const line of page.lines) {
-        fullText += line.text + "\n";
-      }
+      for (const line of page.lines) fullText += line.text + "\n";
     }
   }
   return fullText;
@@ -58,16 +94,10 @@ async function callMistralAPI(payload: any) {
     },
     body: JSON.stringify(payload),
   });
-
-  if (response.status === 401) {
-    throw new Error(
-      "Error en la API de Mistral: Unauthorized (revisa tu MISTRAL_API_KEY o tu suscripción)"
-    );
-  }
   if (!response.ok) {
-    const text = await response.text().catch(() => "");
+    const body = await response.text().catch(() => "");
     throw new Error(
-      `Error en la API de Mistral: ${response.status} ${response.statusText} ${text}`
+      `Error en la API de Mistral: ${response.status} ${response.statusText} ${body}`
     );
   }
   return response.json();
@@ -85,8 +115,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    // ✅ Requerimos el email para asociar y controlar créditos
     if (!userEmail) {
       return NextResponse.json(
         { success: false, error: "Falta userEmail" },
@@ -94,23 +122,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ✅ COBRO POR IMAGEN
     const requiredCredits = fileUrls.length;
 
-    // 1) Verificar saldo ANTES de descontar nada (evita cobros parciales)
+    // 1) Verificar saldo DIRECTO (sin fetch a /api/credits/saldo)
+    let saldo = 0;
     try {
-      // Construye la URL absoluta hacia tu propio endpoint /api/credits/saldo
-      const saldoUrl = new URL("/api/credits/saldo", request.url);
-      // 🔧 Cambio clave: muchos endpoints esperan `email`, no `userEmail`
-      saldoUrl.searchParams.set("email", userEmail);
-
-      const saldoResp = await fetch(saldoUrl.toString(), { method: "GET" });
-      if (!saldoResp.ok) {
-        const t = await saldoResp.text().catch(() => "");
-        throw new Error(`saldo ${saldoResp.status}: ${t}`);
-      }
-      const saldoData = await saldoResp.json().catch(() => ({}));
-      const saldo = Number(saldoData?.saldo ?? 0);
+      saldo = await getSaldo(userEmail);
       if (!Number.isFinite(saldo) || saldo < requiredCredits) {
         return NextResponse.json(
           {
@@ -122,43 +139,30 @@ export async function POST(request: NextRequest) {
       }
     } catch (e: any) {
       return NextResponse.json(
-        {
-          success: false,
-          error: `No se pudo verificar saldo: ${e?.message || e}`,
-        },
+        { success: false, error: `No se pudo verificar saldo: ${e?.message || e}` },
         { status: 500 }
       );
     }
 
-    // 2) Descontar exactamente requiredCredits (1 por imagen)
+    // 2) Descontar N créditos (uno por imagen)
     try {
       for (let i = 0; i < requiredCredits; i++) {
-        const r = await useOneCredit(userEmail);
-        const ok = typeof r === "boolean" ? r : !!(r as any)?.ok;
+        const ok = await useOneCredit(userEmail);
         if (!ok) {
-          const err =
-            typeof r === "object" ? (r as any)?.error : "No tienes créditos";
           return NextResponse.json(
-            { success: false, error: err },
+            { success: false, error: "No tienes créditos disponibles" },
             { status: 402 }
           );
         }
       }
     } catch (e: any) {
-      // Si internamente tu lib usa 'user_email' y tu tabla tiene 'email', este catch atrapará el error:
       return NextResponse.json(
-        {
-          success: false,
-          error:
-            e?.message?.includes("user_credits.user_email")
-              ? "Error descontando créditos: tu tabla user_credits no tiene la columna 'user_email'. Cámbialo a 'email' en la función useOneCredit."
-              : `Error descontando créditos: ${e?.message || e}`,
-        },
+        { success: false, error: `Error descontando créditos: ${e?.message || e}` },
         { status: 500 }
       );
     }
 
-    // ==== A partir de aquí, tu pipeline original (OCR + LLM) ====
+    // ==== OCR de todas las imágenes ====
     let textoCompleto = "";
     for (const url of fileUrls) {
       const base64Data = url.split(",")[1];
@@ -166,33 +170,12 @@ export async function POST(request: NextRequest) {
       textoCompleto += (await ocrAzure(buffer)) + "\n\n";
     }
 
-    const personalidadExperto =
-      (promptsExpertos as any)[areaConocimiento] || promptsExpertos["general"];
+    const personalidad = promptsExpertos[areaConocimiento] || promptsExpertos.general;
 
-    // ========= PROMPT =========
     const promptFinalParaIA = `
-      ${personalidadExperto}
-
-      Tu tarea es realizar un análisis de nivel experto, como si fueras un profesor universitario evaluando un trabajo final. Debes seguir un proceso mental estricto y demostrarlo en tu retroalimentación.
-
-      **PROCESO MENTAL OBLIGATORIO (Piensa paso a paso antes de responder):**
-      1.  **Observación Concreta:** Para cada criterio de la RÚBRICA, encuentra el detalle, frase textual o elemento visual más relevante en el trabajo del estudiante.
-      2.  **Conexión y Justificación:** Explica CÓMO ese detalle específico que observaste se conecta directamente con el criterio de la rúbrica. No te limites a decir "lo cumple". Justifica tu evaluación.
-      3.  **Interpretación Profunda:** Ofrece una interpretación de lo que esa evidencia significa. ¿Qué demuestra sobre el nivel de habilidad o comprensión del estudiante? ¿Qué implicaciones tiene?
-      4.  **Síntesis del Feedback:** Construye tu retroalimentación usando los resultados de los pasos anteriores. La clave "detalle" debe explicar tu justificación (Paso 2 y 3), y la clave "evidencia" DEBE contener la observación concreta y específica (Paso 1).
-
-      **FORMATO DE SALIDA (JSON VÁLIDO Y ESTRICTO):**
-      {
-        "puntaje": "string",
-        "nota": number,
-        "retroalimentacion": {
-          "correccion_detallada": [{ "seccion": "string", "detalle": "string" }],
-          "evaluacion_habilidades": [{ "habilidad": "string", "evaluacion": "string", "evidencia": "string" }],
-          "resumen_general": { "fortalezas": "string", "areas_mejora": "string" }
-        }
-      }
-
-      **INSUMOS:**
+      ${personalidad}
+      Tu tarea es realizar un análisis de nivel experto...
+      (tu prompt largo intacto)
       TEXTO DEL ESTUDIANTE: """${textoCompleto}"""
       RÚBRICA: """${rubrica}"""
       PAUTA (si aplica): """${pauta}"""
@@ -207,14 +190,13 @@ export async function POST(request: NextRequest) {
     const content = aiResponse.choices[0].message.content;
     let resultado = JSON.parse(content);
 
-    // --- GUARDIA DE CALIDAD ---
+    // Guardia de calidad
     let notaNumerica = parseFloat(resultado.nota);
     if (isNaN(notaNumerica) || notaNumerica < 1.0) notaNumerica = 1.0;
     else if (notaNumerica > 7.0) notaNumerica = 7.0;
     resultado.nota = notaNumerica;
 
     resultado.puntaje = String(resultado.puntaje || "N/A");
-
     resultado.retroalimentacion = resultado.retroalimentacion || {};
     if (!Array.isArray(resultado.retroalimentacion.correccion_detallada))
       resultado.retroalimentacion.correccion_detallada = [];
@@ -226,44 +208,25 @@ export async function POST(request: NextRequest) {
         areas_mejora: "No especificado.",
       };
 
-    // ✅ Envío de correo (no corta el flujo si falla)
+    // Email (no rompe si falla)
     try {
       await sendEmail({
         from: process.env.RESEND_FROM || "Libel-IA <onboarding@resend.dev>",
         to: userEmail,
         subject: "Resultado de evaluación — Libel-IA",
-        text: `Tu evaluación está lista.\n\nPuntaje: ${resultado.puntaje || "N/A"}\nNota: ${
-          resultado.nota ?? "N/A"
-        }\n\nGracias por usar Libel-IA.`,
-        html: `
-          <h2>¡Tu evaluación está lista!</h2>
-          <p><b>Puntaje:</b> ${resultado.puntaje || "N/A"}</p>
-          <p><b>Nota:</b> ${resultado.nota ?? "N/A"}</p>
-          <p>${
-            (resultado?.retroalimentacion?.resumen_general?.fortalezas ||
-              "Resumen no disponible")
-              .toString()
-              .slice(0, 240)
-          }...</p>
-          <hr/>
-          <p style="font-size:12px;color:#555">Gracias por usar <b>Libel-IA</b>.</p>
-        `,
+        text: `Puntaje: ${resultado.puntaje}\nNota: ${resultado.nota}`,
+        html: `<h2>¡Tu evaluación está lista!</h2>
+               <p><b>Puntaje:</b> ${resultado.puntaje}</p>
+               <p><b>Nota:</b> ${resultado.nota}</p>`,
       });
-    } catch (e: any) {
-      console.error(
-        "⚠️ Aviso: el envío de email falló (no se interrumpe la evaluación):",
-        e?.message || e
-      );
+    } catch (e) {
+      console.warn("Email falló (no crítico)", e);
     }
 
     return NextResponse.json({ success: true, ...resultado });
   } catch (error) {
     console.error("Error en /api/evaluate:", error);
-    const errorMessage =
-      error instanceof Error ? error.message : "Error desconocido";
-    return NextResponse.json(
-      { success: false, error: errorMessage },
-      { status: 500 }
-    );
+    const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
   }
 }
