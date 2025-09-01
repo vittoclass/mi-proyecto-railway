@@ -24,19 +24,26 @@ const promptsExpertos = {
 
 // --- Funciones de Soporte ---
 async function ocrAzure(imageBuffer: Buffer): Promise<string> {
-  const credentials = new ApiKeyCredentials({ inHeader: { "Ocp-Apim-Subscription-Key": AZURE_VISION_KEY } });
+  const credentials = new ApiKeyCredentials({
+    inHeader: { "Ocp-Apim-Subscription-Key": AZURE_VISION_KEY },
+  });
   const client = new ComputerVisionClient(credentials, AZURE_VISION_ENDPOINT);
   const result = await client.readInStream(imageBuffer);
   const operationId = result.operationLocation.split("/").pop()!;
   let analysisResult;
   do {
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     analysisResult = await client.getReadResult(operationId);
-  } while (analysisResult.status === "running" || analysisResult.status === "notStarted");
+  } while (
+    analysisResult.status === "running" ||
+    analysisResult.status === "notStarted"
+  );
   let fullText = "";
   if (analysisResult.status === "succeeded" && analysisResult.analyzeResult) {
     for (const page of analysisResult.analyzeResult.readResults) {
-      for (const line of page.lines) { fullText += line.text + "\n"; }
+      for (const line of page.lines) {
+        fullText += line.text + "\n";
+      }
     }
   }
   return fullText;
@@ -45,10 +52,24 @@ async function ocrAzure(imageBuffer: Buffer): Promise<string> {
 async function callMistralAPI(payload: any) {
   const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${MISTRAL_API_KEY}` },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${MISTRAL_API_KEY}`,
+    },
     body: JSON.stringify(payload),
   });
-  if (!response.ok) { throw new Error(`Error en la API de Mistral: ${response.statusText}`); }
+
+  if (response.status === 401) {
+    throw new Error(
+      "Error en la API de Mistral: Unauthorized (revisa tu MISTRAL_API_KEY o tu suscripción)"
+    );
+  }
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `Error en la API de Mistral: ${response.status} ${response.statusText} ${text}`
+    );
+  }
   return response.json();
 }
 
@@ -59,12 +80,18 @@ export async function POST(request: NextRequest) {
     const { fileUrls, rubrica, pauta, areaConocimiento, userEmail } = payload;
 
     if (!fileUrls || fileUrls.length === 0) {
-      return NextResponse.json({ success: false, error: "No se proporcionaron archivos." }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: "No se proporcionaron archivos." },
+        { status: 400 }
+      );
     }
 
     // ✅ Requerimos el email para asociar y controlar créditos
     if (!userEmail) {
-      return NextResponse.json({ success: false, error: "Falta userEmail" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: "Falta userEmail" },
+        { status: 400 }
+      );
     }
 
     // ✅ COBRO POR IMAGEN
@@ -74,19 +101,31 @@ export async function POST(request: NextRequest) {
     try {
       // Construye la URL absoluta hacia tu propio endpoint /api/credits/saldo
       const saldoUrl = new URL("/api/credits/saldo", request.url);
-      saldoUrl.searchParams.set("userEmail", userEmail);
+      // 🔧 Cambio clave: muchos endpoints esperan `email`, no `userEmail`
+      saldoUrl.searchParams.set("email", userEmail);
+
       const saldoResp = await fetch(saldoUrl.toString(), { method: "GET" });
+      if (!saldoResp.ok) {
+        const t = await saldoResp.text().catch(() => "");
+        throw new Error(`saldo ${saldoResp.status}: ${t}`);
+      }
       const saldoData = await saldoResp.json().catch(() => ({}));
       const saldo = Number(saldoData?.saldo ?? 0);
       if (!Number.isFinite(saldo) || saldo < requiredCredits) {
         return NextResponse.json(
-          { success: false, error: `Saldo insuficiente: necesitas ${requiredCredits}, disponible ${saldo}` },
+          {
+            success: false,
+            error: `Saldo insuficiente: necesitas ${requiredCredits}, disponible ${saldo}`,
+          },
           { status: 402 }
         );
       }
     } catch (e: any) {
       return NextResponse.json(
-        { success: false, error: `No se pudo verificar saldo: ${e?.message || e}` },
+        {
+          success: false,
+          error: `No se pudo verificar saldo: ${e?.message || e}`,
+        },
         { status: 500 }
       );
     }
@@ -97,16 +136,24 @@ export async function POST(request: NextRequest) {
         const r = await useOneCredit(userEmail);
         const ok = typeof r === "boolean" ? r : !!(r as any)?.ok;
         if (!ok) {
-          const err = typeof r === "object" ? (r as any)?.error : undefined;
+          const err =
+            typeof r === "object" ? (r as any)?.error : "No tienes créditos";
           return NextResponse.json(
-            { success: false, error: err || "No tienes créditos disponibles" },
+            { success: false, error: err },
             { status: 402 }
           );
         }
       }
     } catch (e: any) {
+      // Si internamente tu lib usa 'user_email' y tu tabla tiene 'email', este catch atrapará el error:
       return NextResponse.json(
-        { success: false, error: `Error descontando créditos: ${e?.message || e}` },
+        {
+          success: false,
+          error:
+            e?.message?.includes("user_credits.user_email")
+              ? "Error descontando créditos: tu tabla user_credits no tiene la columna 'user_email'. Cámbialo a 'email' en la función useOneCredit."
+              : `Error descontando créditos: ${e?.message || e}`,
+        },
         { status: 500 }
       );
     }
@@ -116,12 +163,13 @@ export async function POST(request: NextRequest) {
     for (const url of fileUrls) {
       const base64Data = url.split(",")[1];
       const buffer = Buffer.from(base64Data, "base64");
-      textoCompleto += await ocrAzure(buffer) + "\n\n";
+      textoCompleto += (await ocrAzure(buffer)) + "\n\n";
     }
 
-    const personalidadExperto = promptsExpertos[areaConocimiento] || promptsExpertos["general"];
+    const personalidadExperto =
+      (promptsExpertos as any)[areaConocimiento] || promptsExpertos["general"];
 
-    // ========= INICIO: PROMPT FINAL DE CALIDAD SUPERIOR =========
+    // ========= PROMPT =========
     const promptFinalParaIA = `
       ${personalidadExperto}
 
@@ -133,35 +181,22 @@ export async function POST(request: NextRequest) {
       3.  **Interpretación Profunda:** Ofrece una interpretación de lo que esa evidencia significa. ¿Qué demuestra sobre el nivel de habilidad o comprensión del estudiante? ¿Qué implicaciones tiene?
       4.  **Síntesis del Feedback:** Construye tu retroalimentación usando los resultados de los pasos anteriores. La clave "detalle" debe explicar tu justificación (Paso 2 y 3), y la clave "evidencia" DEBE contener la observación concreta y específica (Paso 1).
 
-      **EJEMPLO PERFECTO DE TU TRABAJO (Este es tu estándar de calidad):**
-      * **RÚBRICA dice:** "Crítica Social: La ilustración aborda de manera clara y crítica un tema relevante de la sociedad."
-      * **TU PROCESO MENTAL:**
-          1.  *Observación:* "Veo un cráneo humano pintado de negro. La cara no tiene boca y los ojos son barrotes de una celda."
-          2.  *Conexión:* "Los barrotes son un símbolo universal de 'prisión' y 'falta de libertad', lo que conecta directamente con la idea de una 'crítica social'."
-          3.  *Interpretación:* "El uso del cráneo sugiere que esta es una condición humana fundamental, no temporal. Podría interpretarse como una crítica a cómo nuestras propias mentes, o la sociedad misma, nos aprisionan de forma predeterminada, limitando nuestra perspectiva."
-      * **TU SALIDA JSON (para ese criterio):**
-          "habilidad": "Crítica Social",
-          "evaluacion": "Excelente",
-          "evidencia": "La cara del cráneo está representada por barrotes de celda."
-          // El detalle en "correccion_detallada" incluiría la interpretación completa.
-
       **FORMATO DE SALIDA (JSON VÁLIDO Y ESTRICTO):**
       {
-        "puntaje": "string (ej: '40/42' o 'Sobresaliente')",
-        "nota": number (decimal entre 1.0 y 7.0, ajustado a la realidad de la evaluación),
+        "puntaje": "string",
+        "nota": number,
         "retroalimentacion": {
-          "correccion_detallada": [{ "seccion": "string", "detalle": "string (tu justificación e interpretación profunda aquí)" }],
-          "evaluacion_habilidades": [{ "habilidad": "string (criterio de la rúbrica)", "evaluacion": "string (ej: Logrado)", "evidencia": "string (la cita textual o descripción visual específica)" }],
+          "correccion_detallada": [{ "seccion": "string", "detalle": "string" }],
+          "evaluacion_habilidades": [{ "habilidad": "string", "evaluacion": "string", "evidencia": "string" }],
           "resumen_general": { "fortalezas": "string", "areas_mejora": "string" }
         }
       }
 
-      **INSUMOS PARA TU EVALUACIÓN:**
+      **INSUMOS:**
       TEXTO DEL ESTUDIANTE: """${textoCompleto}"""
       RÚBRICA: """${rubrica}"""
       PAUTA (si aplica): """${pauta}"""
     `;
-    // ========= FIN: PROMPT FINAL DE CALIDAD SUPERIOR =========
 
     const aiResponse = await callMistralAPI({
       model: "mistral-large-latest",
@@ -172,9 +207,7 @@ export async function POST(request: NextRequest) {
     const content = aiResponse.choices[0].message.content;
     let resultado = JSON.parse(content);
 
-    // --- GUARDIA DE CALIDAD Y REPARACIÓN DE DATOS (VERSIÓN FINAL) ---
-    console.log("Respuesta de la IA antes de corregir:", resultado);
-
+    // --- GUARDIA DE CALIDAD ---
     let notaNumerica = parseFloat(resultado.nota);
     if (isNaN(notaNumerica) || notaNumerica < 1.0) notaNumerica = 1.0;
     else if (notaNumerica > 7.0) notaNumerica = 7.0;
@@ -183,38 +216,54 @@ export async function POST(request: NextRequest) {
     resultado.puntaje = String(resultado.puntaje || "N/A");
 
     resultado.retroalimentacion = resultado.retroalimentacion || {};
-    if (!Array.isArray(resultado.retroalimentacion.correccion_detallada)) resultado.retroalimentacion.correccion_detallada = [];
-    if (!Array.isArray(resultado.retroalimentacion.evaluacion_habilidades)) resultado.retroalimentacion.evaluacion_habilidades = [];
-    resultado.retroalimentacion.resumen_general = resultado.retroalimentacion.resumen_general || { fortalezas: "No especificado.", areas_mejora: "No especificado." };
+    if (!Array.isArray(resultado.retroalimentacion.correccion_detallada))
+      resultado.retroalimentacion.correccion_detallada = [];
+    if (!Array.isArray(resultado.retroalimentacion.evaluacion_habilidades))
+      resultado.retroalimentacion.evaluacion_habilidades = [];
+    resultado.retroalimentacion.resumen_general =
+      resultado.retroalimentacion.resumen_general || {
+        fortalezas: "No especificado.",
+        areas_mejora: "No especificado.",
+      };
 
-    console.log("Respuesta corregida y enviada al frontend:", resultado);
-
-    // ✅ Envío de correo (no afecta si falla)
+    // ✅ Envío de correo (no corta el flujo si falla)
     try {
       await sendEmail({
         from: process.env.RESEND_FROM || "Libel-IA <onboarding@resend.dev>",
         to: userEmail,
         subject: "Resultado de evaluación — Libel-IA",
-        text: `Tu evaluación está lista.\n\nPuntaje: ${resultado.puntaje || "N/A"}\nNota: ${resultado.nota ?? "N/A"}\n\nGracias por usar Libel-IA.`,
+        text: `Tu evaluación está lista.\n\nPuntaje: ${resultado.puntaje || "N/A"}\nNota: ${
+          resultado.nota ?? "N/A"
+        }\n\nGracias por usar Libel-IA.`,
         html: `
           <h2>¡Tu evaluación está lista!</h2>
           <p><b>Puntaje:</b> ${resultado.puntaje || "N/A"}</p>
           <p><b>Nota:</b> ${resultado.nota ?? "N/A"}</p>
-          <p>${(resultado?.retroalimentacion?.resumen_general?.fortalezas || "Resumen no disponible")
-            .toString().slice(0, 240)}...</p>
+          <p>${
+            (resultado?.retroalimentacion?.resumen_general?.fortalezas ||
+              "Resumen no disponible")
+              .toString()
+              .slice(0, 240)
+          }...</p>
           <hr/>
           <p style="font-size:12px;color:#555">Gracias por usar <b>Libel-IA</b>.</p>
         `,
       });
     } catch (e: any) {
-      console.error("⚠️ Aviso: el envío de email falló (no se interrumpe la evaluación):", e?.message || e);
+      console.error(
+        "⚠️ Aviso: el envío de email falló (no se interrumpe la evaluación):",
+        e?.message || e
+      );
     }
 
     return NextResponse.json({ success: true, ...resultado });
-
   } catch (error) {
     console.error("Error en /api/evaluate:", error);
-    const errorMessage = error instanceof Error ? error.message : "Error desconocido";
-    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
+    const errorMessage =
+      error instanceof Error ? error.message : "Error desconocido";
+    return NextResponse.json(
+      { success: false, error: errorMessage },
+      { status: 500 }
+    );
   }
 }

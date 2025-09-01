@@ -23,14 +23,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Loader2, Sparkles, FileUp, Camera, Users, X, Printer, CalendarIcon, ImageUp, ClipboardList, Home, Palette, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// App hooks/components (tus originales)
-import { useEvaluator } from './useEvaluator';
-import { NotesDashboard } from '../components/NotesDashboard';
+// ✅ usa alias @ como en shadcn
+import { NotesDashboard } from '@/components/NotesDashboard';
 
 // PDF
 import { Document, Page, Text, View, StyleSheet, PDFDownloadLink, Image as PDFImage, PDFViewer, pdf } from '@react-pdf/renderer';
 
-const SmartCameraModal = dynamic(() => import('../components/smart-camera-modal'), { ssr: false, loading: () => <p>Cargando...</p> });
+// ❗️si tu hook está en `app/useEvaluator.ts` usa './useEvaluator'
+// si está en `app/evaluador/useEvaluator.ts` usa './evaluador/useEvaluator'
+import { useEvaluator } from './useEvaluator';
+
+// ✅ también con alias @ (si vive fuera de app/)
+const SmartCameraModal = dynamic(() => import('@/components/smart-camera-modal'), { ssr: false, loading: () => <p>Cargando...</p> });
 
 const Label = React.forwardRef<HTMLLabelElement, React.ComponentPropsWithoutRef<'label'>>(({ className, ...props }, ref) => (
   <label ref={ref} className={cn('text-sm font-medium', className)} {...props} />
@@ -82,13 +86,11 @@ const GlobalStyles = () => (
       --text-secondary: #475569; --text-on-primary: #FFFFFF; --text-accent: #2563EB;
       --border-color: #CBD5E1; --border-focus: #2563EB; --ring-color: #2563EB;
     }
-    /* Modal PDF */
     .pdf-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 60; }
     .pdf-modal { width: 95vw; height: 90vh; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
     .pdf-modal-header { padding: 10px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); }
     .pdf-modal-body { flex: 1; }
     .pdf-modal-actions { display: flex; gap: 8px; }
-    /* Bloque "Nivel" compacto en UI */
     .compact-field { margin-top: 4px; }
     .compact-field label { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
     .compact-field .range-hints { font-size: 10px; margin-top: 2px; }
@@ -96,7 +98,7 @@ const GlobalStyles = () => (
   `}</style>
 );
 
-// ==== Estilos PDF (compactos; sin cortes a la derecha) ====
+// ==== Estilos PDF ====
 const styles = StyleSheet.create({
   page: { padding: 20, fontSize: 10, lineHeight: 1.25 },
   header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, paddingBottom: 5, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
@@ -127,36 +129,25 @@ const styles = StyleSheet.create({
   tableCol: { width: '35%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', padding: 2 },
   tableColDetail: { width: '65%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', padding: 2 },
 
-  // Alternativas 40/30/30
   col40: { width: '40%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', padding: 2 },
   col30: { width: '30%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', padding: 2 },
 
-  // Habilidades: Nivel delgado (45/18/37)
   habCol45: { width: '45%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', padding: 2 },
   habCol18: { width: '18%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', padding: 2, textAlign: 'center' as any },
   habCol37: { width: '37%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', padding: 2 },
 
   tableCellHeader: { margin: 1, fontSize: 8, fontWeight: 'bold' },
-  tableCell: { margin: 1, fontSize: 8, flexWrap: 'wrap' as any, textAlign: 'left' as any },
-
-  section: { marginBottom: 6, breakInside: 'avoid' as any },
-
-  // Mini tarjetas para llenar bien la P1
-  miniGrid: { flexDirection: 'row', gap: 6, marginTop: 6 },
-  miniCard: { flex: 1, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', padding: 5, borderRadius: 6, textAlign: 'center' as any },
-  miniLabel: { fontSize: 8, fontWeight: 'bold', color: '#4B5563', marginBottom: 2 },
-  miniValue: { fontSize: 11, fontWeight: 'bold', color: '#4F46E5' },
+  tableCell: { margin: 1, fontSize: 8, textAlign: 'left' as any },
 });
 
-// ====== Helpers para balancear las 2 páginas ======
+// ====== Helpers ======
 const splitCorreccionForTwoPages = (lista: any[] | undefined) => {
   if (!lista || lista.length === 0) return { first: [], rest: [] };
-  // Máximo conservador para P1 para no empujar a P2 “en blanco”
-  const MAX_P1 = Math.min(5, lista.length); // 4-5 filas suelen caber con fortalezas/áreas y KPIs
+  const MAX_P1 = Math.min(5, lista.length);
   return { first: lista.slice(0, MAX_P1), rest: lista.slice(MAX_P1) };
 };
 
-// ==== Documento PDF: P1 llena, P2 continúa; sin saltos raros ====
+// ==== Documento PDF ====
 const ReportDocument = ({ group, formData, logoPreview }: any) => {
   const resumen = group.retroalimentacion?.resumen_general || { fortalezas: 'N/A', areas_mejora: 'N/A' };
   const puntaje = group.puntaje || 'N/A';
@@ -190,37 +181,37 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
         <Text style={styles.studentLine}>Alumno: {group.studentName} · Curso: {formData.curso || 'N/A'}</Text>
 
         {/* KPIs */}
-        <View style={styles.miniGrid}>
-          <View style={styles.miniCard}>
-            <Text style={styles.miniLabel}>Puntaje</Text>
-            <Text style={styles.miniValue}>{puntaje}</Text>
+        <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
+          <View style={{ flex: 1, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', padding: 5, borderRadius: 6, textAlign: 'center' as any }}>
+            <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#4B5563', marginBottom: 2 }}>Puntaje</Text>
+            <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#4F46E5' }}>{puntaje}</Text>
           </View>
-          <View style={styles.miniCard}>
-            <Text style={styles.miniLabel}>Nota</Text>
-            <Text style={styles.miniValue}>{notaFinal}</Text>
+          <View style={{ flex: 1, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', padding: 5, borderRadius: 6, textAlign: 'center' as any }}>
+            <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#4B5563', marginBottom: 2 }}>Nota</Text>
+            <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#4F46E5' }}>{notaFinal}</Text>
           </View>
-          <View style={styles.miniCard}>
-            <Text style={styles.miniLabel}>Fecha</Text>
-            <Text style={styles.miniValue}>{format(new Date(), 'dd/MM/yyyy')}</Text>
+          <View style={{ flex: 1, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', padding: 5, borderRadius: 6, textAlign: 'center' as any }}>
+            <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#4B5563', marginBottom: 2 }}>Fecha</Text>
+            <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#4F46E5' }}>{format(new Date(), 'dd/MM/yyyy')}</Text>
           </View>
         </View>
 
         {/* Fortalezas / Áreas */}
-        <View style={styles.feedbackGrid}>
-          <View style={[styles.feedbackCard, styles.fortalezas]}>
-            <Text style={styles.feedbackTitle}>✅ Fortalezas</Text>
-            <Text style={styles.feedbackText}>{resumen.fortalezas}</Text>
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+          <View style={{ padding: 6, borderRadius: 6, flex: 1, backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#BBF7D0' }}>
+            <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#166534', marginBottom: 3 }}>✅ Fortalezas</Text>
+            <Text style={{ fontSize: 8, lineHeight: 1.15 }}>{resumen.fortalezas}</Text>
           </View>
-          <View style={[styles.feedbackCard, styles.areasMejora]}>
-            <Text style={styles.feedbackImproveTitle}>✏️ Áreas de Mejora</Text>
-            <Text style={styles.feedbackText}>{resumen.areas_mejora}</Text>
+          <View style={{ padding: 6, borderRadius: 6, flex: 1, backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A' }}>
+            <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#854D0E', marginBottom: 3 }}>✏️ Áreas de Mejora</Text>
+            <Text style={{ fontSize: 8, lineHeight: 1.15 }}>{resumen.areas_mejora}</Text>
           </View>
         </View>
 
-        {/* Corrección Detallada (solo primeras filas, sin wrap para no empujar salto raro) */}
+        {/* Corrección Detallada (solo primeras filas) */}
         {correccionP1.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Corrección Detallada</Text>
+          <View style={{ marginBottom: 6 }}>
+            <Text style={{ fontSize: 10, fontWeight: 'bold', paddingBottom: 2, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', marginBottom: 5, marginTop: 8 }}>Corrección Detallada</Text>
             <View style={styles.table}>
               <View style={[styles.tableRow, { backgroundColor: '#F9FAFB' }]}>
                 <View style={styles.tableColHeader}><Text style={styles.tableCellHeader}>Sección</Text></View>
@@ -241,8 +232,8 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
       <Page size="A4" style={styles.page}>
         {/* Resto de Corrección */}
         {correccionP2.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Corrección Detallada (cont.)</Text>
+          <View style={{ marginBottom: 6 }}>
+            <Text style={{ fontSize: 10, fontWeight: 'bold', paddingBottom: 2, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', marginBottom: 5, marginTop: 8 }}>Corrección Detallada (cont.)</Text>
             <View style={styles.table}>
               <View style={[styles.tableRow, { backgroundColor: '#F9FAFB' }]}>
                 <View style={styles.tableColHeader}><Text style={styles.tableCellHeader}>Sección</Text></View>
@@ -260,8 +251,8 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
 
         {/* Habilidades */}
         {group.retroalimentacion?.evaluacion_habilidades?.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Evaluación de Habilidades</Text>
+          <View style={{ marginBottom: 6 }}>
+            <Text style={{ fontSize: 10, fontWeight: 'bold', paddingBottom: 2, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', marginBottom: 5, marginTop: 8 }}>Evaluación de Habilidades</Text>
             <View style={styles.table}>
               <View style={[styles.tableRow, { backgroundColor: '#F9FAFB' }]}>
                 <View style={styles.habCol45}><Text style={styles.tableCellHeader}>Habilidad</Text></View>
@@ -281,8 +272,8 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
 
         {/* Alternativas */}
         {group.retroalimentacion?.retroalimentacion_alternativas?.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Respuestas Alternativas</Text>
+          <View style={{ marginBottom: 6 }}>
+            <Text style={{ fontSize: 10, fontWeight: 'bold', paddingBottom: 2, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', marginBottom: 5, marginTop: 8 }}>Respuestas Alternativas</Text>
             <View style={styles.table}>
               <View style={[styles.tableRow, { backgroundColor: '#F9FAFB' }]}>
                 <View style={styles.col40}><Text style={styles.tableCellHeader}>Pregunta</Text></View>
@@ -304,7 +295,7 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
   );
 };
 
-// ==== Tipos (coinciden con tu flujo) ====
+// ==== Tipos ====
 interface CorreccionDetallada { seccion: string; detalle: string; }
 interface EvaluacionHabilidad { habilidad: string; evaluacion: string; evidencia: string; }
 interface RetroalimentacionEstructurada {
@@ -344,9 +335,10 @@ interface StudentGroup {
 
 // ==== Componente Principal ====
 export default function EvaluatorClient() {
-  // 🔹 NUEVO: email del usuario para créditos
-  const [userEmail, setUserEmail] = useState<string>("");
+  // ✅ pestaña por defecto: Presentación
+  const [activeTab, setActiveTab] = useState('presentacion');
 
+  const [userEmail, setUserEmail] = useState<string>('');
   const [unassignedFiles, setUnassignedFiles] = useState<FilePreview[]>([]);
   const [studentGroups, setStudentGroups] = useState<StudentGroup[]>([]);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -354,9 +346,7 @@ export default function EvaluatorClient() {
   const [classSize, setClassSize] = useState(1);
   const [isExtractingNames, setIsExtractingNames] = useState(false);
   const [theme, setTheme] = useState('theme-ocaso');
-  const [activeTab, setActiveTab] = useState('inicio');
 
-  // NUEVO: modal de vista previa (desktop) / blob (móvil)
   const [previewGroupId, setPreviewGroupId] = useState<string | null>(null);
   const isMobile = typeof window !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
@@ -381,15 +371,11 @@ export default function EvaluatorClient() {
     },
   });
 
-  // 🔹 NUEVO: cargar correo guardado (minúsculas)
   useEffect(() => {
     const saved = (localStorage.getItem('userEmail') || '').toLowerCase();
-    if (saved && /\S+@\S+\.\S+/.test(saved)) {
-      setUserEmail(saved);
-    }
+    if (saved && /\S+@\S+\.\S+/.test(saved)) setUserEmail(saved);
   }, []);
 
-  // Inicializar grupos con tamaño de curso
   useEffect(() => {
     const count = Math.max(1, classSize);
     setStudentGroups(Array.from({ length: count }, (_, i) => ({
@@ -403,7 +389,6 @@ export default function EvaluatorClient() {
     setUnassignedFiles([]);
   }, [classSize]);
 
-  // === Funciones existentes (no tocadas) ===
   const processFiles = (files: File[]) => {
     const validFiles = Array.from(files).filter(file => {
       if (['image/jpeg', 'image/png', 'image/bmp', 'application/pdf', 'image/tiff'].includes(file.type)) return true;
@@ -474,7 +459,6 @@ export default function EvaluatorClient() {
       if (!response.ok || !data.success) throw new Error(data.error || 'Error desconocido.');
       if (data.suggestions && data.suggestions.length > 0) {
         const bestSuggestion = data.suggestions[0];
-        alert(`Sugerencia detectada: ${bestSuggestion}`);
         const firstDefaultStudentIndex = studentGroups.findIndex(g => g.studentName.startsWith('Alumno'));
         if (firstDefaultStudentIndex !== -1) updateStudentName(studentGroups[firstDefaultStudentIndex].id, bestSuggestion);
       } else alert('No se detectaron nombres en la imagen.');
@@ -487,7 +471,6 @@ export default function EvaluatorClient() {
   };
 
   const onEvaluateAll = async () => {
-    // 🔹 NUEVO: verificar que haya correo (necesario para descontar crédito)
     if (!userEmail) {
       alert('Falta confirmar tu correo. Ve a "Planes", activa o confirma tu correo y vuelve a evaluar.');
       return;
@@ -504,7 +487,6 @@ export default function EvaluatorClient() {
 
       setStudentGroups(prev => prev.map(g => g.id === group.id ? { ...g, isEvaluating: true, isEvaluated: false, error: undefined } : g));
 
-      // 🔹 NUEVO: userEmail va en el payload (clave para /api/evaluate)
       const payload = {
         fileUrls: group.files.map(f => f.dataUrl),
         rubrica,
@@ -512,7 +494,7 @@ export default function EvaluatorClient() {
         flexibilidad: flexibilidad[0],
         tipoEvaluacion,
         areaConocimiento,
-        userEmail, // <<<<<<<<<<<<<<<<<<<<<< AQUI LA CLAVE
+        userEmail,
       };
 
       const result = await evaluate(payload);
@@ -525,31 +507,27 @@ export default function EvaluatorClient() {
   };
 
   const exportToDocOrCsv = (formatType: 'csv' | 'doc') => {
-    const { curso, fechaEvaluacion } = form.getValues();
-    const fechaStr = fechaEvaluacion ? format(fechaEvaluacion, 'dd/MM/yyyy') : '';
     const evaluatedGroups = studentGroups.filter(g => g.isEvaluated);
     if (evaluatedGroups.length === 0) {
       alert('No hay evaluaciones para exportar.');
       return;
     }
-    // Mantén tu export original aquí (no se modifica)
+    // tu export original…
   };
 
   const isCurrentlyEvaluatingAny = studentGroups.some(g => g.isEvaluating);
   const previewGroup = previewGroupId ? studentGroups.find(g => g.id === previewGroupId) : null;
 
-  // ==== Vista previa: desktop modal / móvil nueva pestaña (blob) ====
   const handlePreview = async (groupId: string) => {
     const group = studentGroups.find(g => g.id === groupId);
     if (!group || !group.retroalimentacion) return;
 
     if (isMobile) {
-      // Generar blob y abrir en nueva pestaña (mejor compatibilidad móvil)
       const blob = await pdf(<ReportDocument group={group} formData={form.getValues()} logoPreview={logoPreview} />).toBlob();
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
     } else {
-      setPreviewGroupId(groupId); // modal con PDFViewer en desktop
+      setPreviewGroupId(groupId);
     }
   };
 
@@ -601,12 +579,14 @@ export default function EvaluatorClient() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 bg-[var(--bg-muted)]">
+          <TabsList className="grid w-full grid-cols-4 bg-[var(--bg-muted)]">
             <TabsTrigger value="inicio"><Home className="mr-2 h-4 w-4" />Inicio</TabsTrigger>
             <TabsTrigger value="evaluator"><Sparkles className="mr-2 h-4 w-4" />Evaluador</TabsTrigger>
             <TabsTrigger value="dashboard"><ClipboardList className="mr-2 h-4 w-4" />Resumen</TabsTrigger>
+            <TabsTrigger value="presentacion"><Eye className="mr-2 h-4 w-4" />Presentación</TabsTrigger>
           </TabsList>
 
+          {/* Inicio */}
           <TabsContent value="inicio" className="mt-8 text-center">
             <Card className="max-w-3xl mx-auto border-2 shadow-lg bg-[var(--bg-card)] border-[var(--border-color)]" style={{ backgroundImage: 'radial-gradient(circle, rgba(124, 58, 237, 0.15) 0%, rgba(9, 9, 11, 0) 70%)' }}>
               <CardContent className="p-12">
@@ -621,6 +601,7 @@ export default function EvaluatorClient() {
             </Card>
           </TabsContent>
 
+          {/* Evaluador */}
           <TabsContent value="evaluator" className="space-y-8 mt-4">
             <div className="flex items-center gap-3">
               <img src={DRAGONFLY_DATA_URL} alt="Logo Libel-IA" className="h-8 w-8" />
@@ -665,7 +646,7 @@ export default function EvaluatorClient() {
                       </FormItem>
                     )} />
 
-                    {/* ---- BLOQUE "NIVEL" COMPACTO ---- */}
+                    {/* Nivel */}
                     <FormField control={form.control} name="flexibilidad" render={({ field }) => (
                       <FormItem className="compact-field space-y-1">
                         <FormLabel className="text-[var(--text-accent)]">Nivel (flexibilidad)</FormLabel>
@@ -743,7 +724,7 @@ export default function EvaluatorClient() {
               </CardContent>
             </Card>
 
-            {/* Paso 2: Cargar y agrupar (igual) */}
+            {/* Paso 2: Cargar y agrupar */}
             <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
               <CardHeader>
                 <CardTitle className="text-[var(--text-accent)]">Paso 2: Cargar y Agrupar Trabajos</CardTitle>
@@ -841,11 +822,9 @@ export default function EvaluatorClient() {
                           {group.isEvaluating && <div className="flex items-center text-sm text-[var(--text-secondary)]"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Procesando...</div>}
                           {group.isEvaluated && !group.error && (
                             <div className="flex items-center gap-2">
-                              {/* Ver informe (modal desktop / blob móvil) */}
                               <Button variant="outline" size="sm" onClick={() => handlePreview(group.id)}>
                                 <Eye className="mr-2 h-4 w-4" /> Ver informe
                               </Button>
-                              {/* Descargar PDF */}
                               <PDFDownloadLink
                                 document={<ReportDocument group={group} formData={form.getValues()} logoPreview={logoPreview} />}
                                 fileName={`informe_${group.studentName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`}
@@ -881,7 +860,6 @@ export default function EvaluatorClient() {
                                   </div>
                                 </div>
 
-                                {/* Pantalla: tablas/resumen sin cambios */}
                                 <div>
                                   <h4 className="font-bold mb-2 text-[var(--text-accent)]">Corrección Detallada</h4>
                                   <div className="overflow-x-auto">
@@ -954,6 +932,7 @@ export default function EvaluatorClient() {
             )}
           </TabsContent>
 
+          {/* Dashboard */}
           <TabsContent value="dashboard" className="mt-4 space-y-4">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-xl font-semibold text-[var(--text-accent)]">Resumen de Notas</h2>
@@ -963,6 +942,33 @@ export default function EvaluatorClient() {
               </div>
             </div>
             <NotesDashboard studentGroups={studentGroups} curso={form.getValues('curso')} fecha={form.getValues('fechaEvaluacion')} />
+          </TabsContent>
+
+          {/* Presentación */}
+          <TabsContent value="presentacion" className="mt-8">
+            <Card className="max-w-4xl mx-auto border-2 shadow-xl bg-[var(--bg-card)] border-[var(--border-color)] p-10 text-center">
+              <img src={DRAGONFLY_DATA_URL} alt="Logo Libel-IA" className="mx-auto h-32 w-32 mb-6" />
+              <h1 className={`text-5xl font-bold ${wordmarkClass} font-logo mb-4`}>Libel-IA</h1>
+              <p className="text-lg text-[var(--text-secondary)] mb-6">
+                Plataforma chilena de evaluación educativa con inteligencia artificial.
+                Creada por un profesor, para profesores. Detecta respuestas, genera retroalimentación
+                y entrega informes pedagógicos profesionales en segundos. <b>1 crédito = 1 imagen.</b>
+              </p>
+              <ul className="text-left space-y-2 mx-auto max-w-xl text-[var(--text-secondary)]">
+                <li>✅ Análisis automático de pruebas (alternativas, desarrollo, V/F).</li>
+                <li>✅ Retroalimentación detallada y notas en escala chilena.</li>
+                <li>✅ Informes PDF listos para imprimir o enviar.</li>
+                <li>✅ Compatible con múltiples cursos y asignaturas.</li>
+              </ul>
+              <div className="flex items-center justify-center gap-3 mt-8">
+                <a href="/planes" className="inline-flex items-center rounded-xl bg-black text-white px-5 py-3 text-sm font-semibold hover:opacity-90">
+                  Empezar ahora (activar 10 gratis)
+                </a>
+                <Button size="lg" className="text-sm py-3 px-5" onClick={() => setActiveTab('evaluator')}>
+                  Ir al Evaluador <Sparkles className="ml-2 h-5 w-5" />
+                </Button>
+              </div>
+            </Card>
           </TabsContent>
         </Tabs>
       </main>
