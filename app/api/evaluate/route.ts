@@ -1,326 +1,447 @@
-// app/api/evaluate/route.ts
-import { type NextRequest, NextResponse } from 'next/server';
-import { ComputerVisionClient } from '@azure/cognitiveservices-computervision';
-import { ApiKeyCredentials } from '@azure/ms-rest-js';
-import { sendEmail } from '@/lib/email';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
-
-// ✅ runtime node (NO edge)
-export const runtime = 'nodejs';
+import { type NextRequest, NextResponse } from "next/server";
+import { ComputerVisionClient } from "@azure/cognitiveservices-computervision";
+import { ApiKeyCredentials } from "@azure/ms-rest-js";
+import { DocumentAnalysisClient, AzureKeyCredential } from "@azure/ai-form-recognizer";
+import sharp from 'sharp';
 
 // --- Configuración de APIs ---
 const AZURE_VISION_ENDPOINT = process.env.AZURE_VISION_ENDPOINT!;
 const AZURE_VISION_KEY = process.env.AZURE_VISION_KEY!;
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY!;
+const AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT = process.env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT!;
+const AZURE_DOCUMENT_INTELLIGENCE_KEY = process.env.AZURE_DOCUMENT_INTELLIGENCE_KEY!;
 
 // --- Biblioteca de Prompts Expertos ---
-const promptsExpertos: Record<string, string> = {
-  general: `Actúa como un profesor universitario detallista, riguroso y constructivo. Tu objetivo es ofrecer una retroalimentación que demuestre un análisis profundo y nivel experto del trabajo del estudiante.`,
-  matematicas: `Actúa como un catedrático de Matemáticas que evalúa procedimientos, justificación y resultados con precisión.`,
-  lenguaje: `Actúa como un crítico literario y académico que evalúa comprensión lectora, análisis, cohesión, coherencia y recursos de redacción.`,
-  ciencias: `Actúa como un riguroso científico e investigador que evalúa precisión conceptual, método y explicación de procesos.`,
-  artes: `Actúa como un curador de arte y crítico profesional que evalúa composición, técnica y argumentación estética.`,
-  humanidades: `Actúa como un filósofo y académico que evalúa argumentación, fuentes y claridad conceptual.`,
-  ingles: `Actúa como un examinador de idiomas nivel C2 que evalúa comprensión, gramática, vocabulario y cohesión.`,
+const promptsExpertos = {
+  general: `Actúa como un profesor universitario detallista, riguroso y constructivo. Tu objetivo es ofrecer una retroalimentación que demuestre un análisis profundo y nivel experto del trabajo del estudiante.
+
+**ESCALA DE EVALUACIÓN OBLIGATORIA (ajusta tu nota según esta guía):**
+- **7.0 (Excelente):** El trabajo es impecable, supera las expectativas y demuestra una comprensión profunda.
+- **6.0 (Muy Bueno):** El trabajo cumple con todos los criterios y presenta un alto nivel de calidad.
+- **5.0 (Bueno):** El trabajo es correcto y cumple con la mayoría de los criterios, con algunas áreas menores de oportunidad.
+- **4.0 (Aceptable):** El trabajo es básico, cumple con los criterios mínimos, pero carece de profundidad o tiene errores notables.
+- **3.0 (Deficiente):** El trabajo no cumple con los criterios mínimos. Hay errores graves o falta de comprensión.
+- **2.0 (Insuficiente):** El trabajo está incompleto o no aborda la tarea solicitada.
+- **1.0 (No Entregado):** El trabajo no fue entregado o es completamente irrelevante.
+
+**INSTRUCCIÓN CRÍTICA: TABLA RESUMEN**
+Debes crear una tabla resumen de preguntas correctas e incorrectas, detallando los puntos obtenidos. Esto es crucial para la retroalimentación.
+
+**INSTRUCCIÓN ADICIONAL PARA CORRECCIÓN DETALLADA:**
+En el campo "correccion_detallada", debes ser extremadamente específico. Si el trabajo contiene preguntas de desarrollo, verdadero/falso, o selección múltiple, identifica claramente las respuestas incorrectas y explícales al estudiante por qué están mal, citando la respuesta correcta.`,
+  matematicas: `Actúa como un catedrático de Matemáticas. Sé riguroso y lógico. Explica el procedimiento correcto paso a paso, citando directamente los errores conceptuales o de cálculo del desarrollo del estudiante.
+
+**ESCALA DE EVALUACIÓN OBLIGATORIA (ajusta tu nota según esta guía):**
+- **7.0 (Excelente):** Solución perfecta. El procedimiento es lógicamente impecable y demuestra total dominio del concepto.
+- **6.0 (Muy Bueno):** La solución es correcta, pero el procedimiento podría ser más eficiente o tener una explicación más clara.
+- **5.0 (Bueno):** La solución es parcialmente correcta. Se detectan errores de cálculo o un paso conceptual erróneo que no impide el avance.
+- **4.0 (Aceptable):** Se detectan múltiples errores de cálculo o un error conceptual grave que invalida parte del procedimiento.
+- **3.0 (Deficiente):** El procedimiento es incorrecto en su totalidad. No hay evidencia de la comprensión del problema.
+- **2.0 (Insuficiente):** El trabajo está incompleto o la solución es totalmente incorrecta.
+- **1.0 (No Entregado):** El trabajo no fue entregado o es completamente irrelevante.
+
+**INSTRUCCIÓN CRÍTICA: TABLA RESUMEN**
+Debes crear una tabla resumen de preguntas correctas e incorrectas, detallando los puntos obtenidos. Esto es crucial para la retroalimentación.
+
+**INSTRUCCIÓN ADICIONAL PARA CORRECCIÓN DETALLADA:**
+En el campo "correccion_detallada", debes ser extremadamente específico. Identifica claramente los ejercicios o problemas con errores y explícales al estudiante el error conceptual o de cálculo, mostrando el procedimiento correcto para la solución.`,
+  lenguaje: `Actúa como un crítico literario y académico. Sé profundo y argumentativo. Evalúa la estructura, coherencia y tesis, citando textualmente fragmentos del ensayo para justificar cada punto y revelar el subtexto.
+
+**ESCALA DE EVALUACIÓN OBLIGATORIA (ajusta tu nota según esta guía):**
+- **7.0 (Excelente):** El ensayo es magistral. La tesis es original, los argumentos son sólidos y la redacción es impecable.
+- **6.0 (Muy Bueno):** El ensayo es sólido. La tesis es clara, los argumentos son válidos y la redacción es fluida.
+- **5.0 (Bueno):** El ensayo es aceptable. La tesis es débil o los argumentos son superficiales. Se detectan errores de redacción o gramática.
+- **4.0 (Aceptable):** El ensayo es básico. La tesis es poco clara y los argumentos son inconsistentes. Hay errores de gramática y ortografía notorios.
+- **3.0 (Deficiente):** El ensayo es confuso y no tiene una tesis clara. La redacción es pobre y dificulta la comprensión.
+- **2.0 (Insuficiente):** El trabajo está incompleto o no corresponde a un ensayo.
+- **1.0 (No Entregado):** El trabajo no fue entregado o es completamente irrelevante.
+
+**INSTRUCCIÓN CRÍTICA: TABLA RESUMEN**
+Debes crear una tabla resumen de preguntas correctas e incorrectas, detallando los puntos obtenidos. Esto es crucial para la retroalimentación.
+
+**INSTRUCCIÓN ADICIONAL PARA CORRECCIÓN DETALLADA:**
+En el campo "correccion_detallada", debes ser extremadamente específico. Cita textualmente los fragmentos del ensayo que contienen errores gramaticales, de estilo o de coherencia, y explícale al estudiante la corrección y el porqué.`,
+  ciencias: `Actúa como un riguroso científico e investigador. Evalúa la aplicación del método científico y la correcta interpretación de datos, citando evidencia específica de los reportes o respuestas para validar o refutar las conclusiones.
+
+**ESCALA DE EVALUACIÓN OBLIGATORIA (ajusta tu nota según esta guía):**
+- **7.0 (Excelente):** El reporte es impecable. El método científico se aplica correctamente, la interpretación de datos es rigurosa y las conclusiones son válidas.
+- **6.0 (Muy Bueno):** El reporte es sólido. El método se aplica bien, la interpretación es mayormente correcta, con alguna debilidad menor.
+- **5.0 (Bueno):** El reporte es aceptable. Hay debilidades en la aplicación del método o en la interpretación de los datos, con conclusiones que no se justifican completamente.
+- **4.0 (Aceptable):** El reporte es básico. La aplicación del método es superficial y la interpretación de datos es errónea en puntos clave.
+- **3.0 (Deficiente):** El reporte no sigue el método científico. La interpretación de datos es incorrecta.
+- **2.0 (Insuficiente):** El trabajo está incompleto o no corresponde a un reporte científico.
+- **1.0 (No Entregado):** El trabajo no fue entregado o es completamente irrelevante.
+
+**INSTRUCCIÓN CRÍTICA: TABLA RESUMEN**
+Debes crear una tabla resumen de preguntas correctas e incorrectas, detallando los puntos obtenidos. Esto es crucial para la retroalimentación.
+
+**INSTRUCCIÓN ADICIONAL PARA CORRECCIÓN DETALLADA:**
+En el campo "correccion_detallada", debes ser extremadamente específico. Identifica claramente las respuestas o secciones con errores, explica el error conceptual y proporciona la información correcta, basándote en la pauta o en el conocimiento científico del tema.`,
+  artes: `Eres un docente de artes visuales con amplia experiencia en evaluar trabajos hechos a mano, con lápiz, tinta o cualquier medio tradicional. Has visto cientos de expresiones artísticas que no buscan la perfección técnica, sino la valentía y la honestidad en la expresión.
+
+Tu tarea NO es evaluar técnica o perfección, sino reconocer el valor humano y emocional detrás de cada trazo, símbolo o repetición.
+
+**IGNORA COMPLETAMENTE la técnica, composición, y colores.**
+
+Lo que importa es:
+- ¿Qué quiso comunicar el estudiante con su trabajo?
+- ¿Qué emociones, silencios o conflictos intenta expresar?
+- ¿Qué historias o rituales se esconden tras los símbolos y repeticiones?
+
+REGLAS ABSOLUTAS:
+- Nunca uses palabras como: "deficiente", "insuficiente", "en desarrollo", "carece de".
+- Usa: "está empezando", "tiene coraje", "intenta", "se atreve", "expresa", "nombra", "grita".
+- Si el trabajo es simple pero sincero: "No necesitas más líneas. Necesitabas decirlo. Y lo dijiste."
+- Si el mensaje es ambiguo: "No es confuso. Es abierto. Y eso es valiente."
+- Si hay símbolos repetidos: "No es repetición. Es insistencia. Es memoria."
+- Sé frío, claro y preciso.
+- Sé humano, porque solo un ser humano puede ver que un garabato puede ser un testamento.
+
+Sigue este proceso mental OBLIGATORIO:
+1. ANÁLISIS DESCRIPTIVO (Visual y Objetivo):
+   Describe en detalle las formas, líneas, patrones y elementos visibles, sin interpretarlos simbólicamente.
+
+2. INTERPRETACIÓN SIMBÓLICA (Conceptual):
+   Aplica los **PRINCIPIOS DE INTERPRETACIÓN** para explicar qué crees que el estudiante quiso decir o expresar con los elementos que describiste en el paso 1.
+
+3. MEMORIA DEL ESTUDIANTE (si hay trabajos previos):
+   Compara con trabajos anteriores para mostrar evolución o cambios en la expresión.
+
+4. EVALUACIÓN POSITIVA Y JUSTA:
+   Nunca uses términos negativos o de carencia.
+   Usa frases que reconozcan el esfuerzo, la valentía y la búsqueda personal.
+
+**PRINCIPIOS DE INTERPRETACIÓN:**
+- **CABEZA, CEREBRO, MENTE:** Representan la conciencia, el pensamiento, las ideas, la identidad o la salud mental.
+- **JAULA, REJAS, BARROTES:** Representan la prisión, el confinamiento, la falta de libertad, las limitaciones o un estado de sentirse atrapado.
+- **MANOS, PUÑOS:** Representan el esfuerzo, la lucha, la conexión o la desesperación.
+- **RELOJ DE ARENA, RELOJES:** Simbolizan el tiempo, la fugacidad, la vida que se agota o la muerte.
+- **DINERO, SÍMBOLO 'RIP':** Representan el materialismo, la riqueza, la pérdida de sentido o la inevitabilidad de la muerte.
+
+**SALIDA JSON — ESTRUCTURA RÍGIDA (NO MODIFICAR):**
+{
+  "puntaje": "string (ej: '40/42' o 'Sobresaliente')",
+  "nota": number (decimal entre 1.0 y 7.0, ajustado a la evaluación real),
+  "retroalimentacion": {
+    "correccion_detallada": [
+      {
+        "seccion": "string (criterio de la rúbrica)",
+        "detalle": "string (tu interpretación humana, basada en lo que el estudiante intentó decir, no en lo que falló)"
+      }
+    ],
+    "evaluacion_habilidades": [
+      {
+        "habilidad": "string (criterio de la rúbrica)",
+        "evaluacion": "string (Logrado / Parcialmente Logrado / No Logrado)",
+        "evidencia": "string (solo lo que viste: descripción técnica, sin interpretación)"
+      }
+    ],
+    "resumen_general": {
+      "fortalezas": "string (3-5 puntos clave, positivos, enfocados en valor, intención y coraje)",
+      "areas_mejora": "string (solo si hay error claro; siempre en tono constructivo)"
+    },
+    "resumen_respuestas": [
+      {
+        "pregunta": "string (ej: 'P1' o 'Problema 2')",
+        "estado": "string (ej: 'Correcta' o 'Incorrecta')",
+        "puntos_obtenidos": "number (ej: 10)"
+      }
+    ]
+  }
+}
+`,
+  humanidades: `Actúa como un filósofo y académico. Evalúa la profundidad del pensamiento crítico, la claridad de la argumentación y la comprensión de conceptos abstractos, citando las ideas principales del texto del estudiante para realizar un contra-argumento o expandir sobre ellas.
+
+**ESCALA DE EVALUACIÓN OBLIGATORIA (ajusta tu nota según esta guía):**
+- **7.0 (Excelente):** El trabajo es sobresaliente, demuestra pensamiento crítico original y argumentos impecables.
+- **6.0 (Muy Bueno):** El trabajo es sólido, los argumentos son claros y la comprensión de los conceptos es alta.
+- **5.0 (Bueno):** El trabajo es aceptable, los argumentos son superficiales o hay debilidades en la comprensión de los conceptos.
+- **4.0 (Aceptable):** El trabajo es básico. El pensamiento crítico es limitado y los argumentos son inconsistentes.
+- **3.0 (Deficiente):** El trabajo es confuso, no demuestra pensamiento crítico y los conceptos no se comprenden.
+- **2.0 (Insuficiente):** El trabajo está incompleto o no corresponde a una tarea de humanidades.
+- **1.0 (No Entregado):** El trabajo no fue entregado o es completamente irrelevante.
+
+**INSTRUCCIÓN CRÍTICA: TABLA RESUMEN**
+Debes crear una tabla resumen de preguntas correctas e incorrectas, detallando los puntos obtenidos. Esto es crucial para la retroalimentación.
+
+**INSTRUCCIÓN ADICIONAL PARA CORRECCIÓN DETALLADA:**
+En el campo "correccion_detallada", debes ser extremadamente específico. Identifica claramente las respuestas o secciones con errores, explica el error conceptual y proporciona la información correcta, basándote en la pauta o en el conocimiento del tema.`,
+  ingles: `Actúa como un examinador de idiomas nivel C2. Evalúa gramática, vocabulario y fluidez, citando ejemplos específicos de errores del texto y ofreciendo la corrección precisa y la razón detrás de ella.
+
+**ESCALA DE EVALUACIÓN OBLIGATORIA (ajusta tu nota según esta guía):**
+- **7.0 (Excelente):** El texto es impecable, con gramática, vocabulario y fluidez de nivel nativo.
+- **6.0 (Muy Bueno):** El texto es sólido. Se detectan errores menores que no afectan la comunicación.
+- **5.0 (Bueno):** El texto es aceptable. Se detectan errores gramaticales o de vocabulario que afectan la fluidez pero no la comprensión.
+- **4.0 (Aceptable):** El texto es básico. Los errores gramaticales son frecuentes y dificultan la comprensión.
+- **3.0 (Deficiente):** El texto no se entiende. Los errores son graves y generalizados.
+- **2.0 (Insuficiente):** El trabajo está incompleto o la producción escrita es nula.
+- **1.0 (No Entregado):** El trabajo no fue entregado o es completamente irrelevante.
+
+**INSTRUCCIÓN CRÍTICA: TABLA RESUMEN**
+Debes crear una tabla resumen de preguntas correctas e incorrectas, detallando los puntos obtenidos. Esto es crucial para la retroalimentación.
+
+**INSTRUCCIÓN ADICIONAL PARA CORRECCIÓN DETALLADA:**
+En el campo "correccion_detallada", debes ser extremadamente específico. Cita textualmente los fragmentos del texto que contienen errores y explícale al estudiante la corrección y el porqué, ofreciendo la versión correcta.`,
 };
 
-// --- Helpers créditos (una fila por usuario con columna `credits`) ---
-async function getSaldo(email: string): Promise<number> {
-  const { data, error } = await supabaseAdmin
-    .from('user_credits')
-    .select('credits')
-    .eq('email', email.toLowerCase())
-    .maybeSingle();
-  if (error) throw new Error(`Supabase saldo: ${error.message}`);
-  return Number(data?.credits ?? 0);
+// --- Funciones de Soporte ---
+async function resizeImage(imageBuffer: Buffer): Promise<Buffer> {
+  console.log("🛠️ Redimensionando la imagen para cumplir con los límites de la API...");
+  return await sharp(imageBuffer).resize(1600).toBuffer();
 }
 
-async function useOneCredit(email: string): Promise<boolean> {
-  const { data: row, error } = await supabaseAdmin
-    .from('user_credits')
-    .select('id, credits')
-    .eq('email', email.toLowerCase())
-    .maybeSingle();
-  if (error) throw new Error(`Supabase read: ${error.message}`);
-  const credits = Number(row?.credits ?? 0);
-  if (!row || credits <= 0) return false;
-
-  const { error: updErr } = await supabaseAdmin
-    .from('user_credits')
-    .update({ credits: credits - 1 })
-    .eq('id', row.id);
-  if (updErr) throw new Error(`Supabase update: ${updErr.message}`);
-  return true;
-}
-
-// --- Soporte OCR Azure ---
 async function ocrAzure(imageBuffer: Buffer): Promise<string> {
-  const credentials = new ApiKeyCredentials({
-    inHeader: { 'Ocp-Apim-Subscription-Key': AZURE_VISION_KEY },
-  });
+  const credentials = new ApiKeyCredentials({ inHeader: { "Ocp-Apim-Subscription-Key": AZURE_VISION_KEY } });
   const client = new ComputerVisionClient(credentials, AZURE_VISION_ENDPOINT);
   const result = await client.readInStream(imageBuffer);
-  const operationId = result.operationLocation!.split('/').pop()!;
-  let analysisResult: any;
+  const operationId = result.operationLocation.split("/").pop()!;
+  let analysisResult;
   do {
-    await new Promise((r) => setTimeout(r, 1000));
+    await new Promise(resolve => setTimeout(resolve, 1000));
     analysisResult = await client.getReadResult(operationId);
-  } while (analysisResult.status === 'running' || analysisResult.status === 'notStarted');
-
-  let fullText = '';
-  if (analysisResult.status === 'succeeded' && analysisResult.analyzeResult) {
+  } while (analysisResult.status === "running" || analysisResult.status === "notStarted");
+  let fullText = "";
+  if (analysisResult.status === "succeeded" && analysisResult.analyzeResult) {
     for (const page of analysisResult.analyzeResult.readResults) {
-      for (const line of page.lines) fullText += line.text + '\n';
+      for (const line of page.lines) { fullText += line.text + "\n"; }
     }
   }
   return fullText;
 }
 
-// --- Mistral ---
+async function analyzeDocumentAzure(imageBuffer: Buffer): Promise<any> {
+    const docIntelClient = new DocumentAnalysisClient(
+        AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT,
+        new AzureKeyCredential(AZURE_DOCUMENT_INTELLIGENCE_KEY)
+    );
+    const poller = await docIntelClient.beginAnalyzeDocument("prebuilt-layout", imageBuffer);
+    return await poller.pollUntilDone();
+}
+
+
 async function callMistralAPI(payload: any) {
-  const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${MISTRAL_API_KEY}`,
-    },
+  const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${MISTRAL_API_KEY}` },
     body: JSON.stringify(payload),
   });
+  const responseText = await response.text();
+  console.log("📝 Respuesta RAW de la API de Mistral:", responseText);
   if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    throw new Error(`Error en la API de Mistral: ${response.status} ${response.statusText} ${body}`);
+    console.error("❌ ERROR DE LA API DE MISTRAL:", responseText);
+    throw new Error(`Error en la API de Mistral: ${response.status} - ${response.statusText}. Respuesta: ${responseText}`);
   }
-  return response.json();
+  try {
+    return JSON.parse(responseText);
+  } catch (error) {
+    console.error("❌ ERROR AL PARSEAR JSON:", error);
+    throw new Error(`El modelo no devolvió un JSON válido. Respuesta RAW: ${responseText}`);
+  }
 }
 
-// --- Utilidades de forma segura ---
-const asArray = (v: any) => (Array.isArray(v) ? v : []);
-const asResumen = (v: any) =>
-  v && typeof v === 'object'
-    ? { fortalezas: v.fortalezas ?? '', areas_mejora: v.areas_mejora ?? '' }
-    : { fortalezas: '', areas_mejora: '' };
+// --- Nueva función de validación del JSON de respuesta ---
+const validateEvaluationResponse = (response: any): any => {
+    // Definimos la estructura de un objeto de retroalimentación seguro y por defecto
+    const defaultFeedback = {
+        correccion_detallada: [],
+        evaluacion_habilidades: [],
+        resumen_general: {
+            fortalezas: "No se pudo generar una retroalimentación detallada. Por favor, intente de nuevo o revise el trabajo.",
+            areas_mejora: "No se pudo generar una retroalimentación detallada. Por favor, intente de nuevo o revise el trabajo."
+        },
+        resumen_respuestas: []
+    };
+    
+    // Si la respuesta no es un objeto, devolvemos el valor por defecto
+    if (typeof response !== 'object' || response === null) {
+        console.error("⚠️ La respuesta de la IA no es un objeto JSON válido.");
+        return { puntaje: "N/A", nota: 1.0, retroalimentacion: defaultFeedback };
+    }
 
-function computeFromPuntaje(puntajeStr?: string) {
-  const m = String(puntajeStr || '').match(/(\d+)\s*\/\s*(\d+)/);
-  if (!m) return null;
-  const aciertos = parseInt(m[1], 10);
-  const total = parseInt(m[2], 10);
-  if (!total) return null;
-  const ratio = Math.max(0, Math.min(1, aciertos / total));
-  let nota = 1 + 6 * ratio; // escala 1.0–7.0
-  nota = Math.round(nota * 10) / 10;
-  const decimas = Math.max(0, Math.min(9, Math.round((nota - Math.floor(nota)) * 10)));
-  return { aciertos, total, nota, decimas };
-}
+    // Validación de las claves principales
+    let validatedResponse = { ...response };
+    if (typeof validatedResponse.puntaje !== 'string') {
+        validatedResponse.puntaje = "N/A";
+    }
 
-// Normalización de niveles aceptados para habilidades
-function normalizeLevel(v: any): 'Logrado' | 'Parcialmente logrado' | 'En desarrollo' | 'No logrado' {
-  const s = String(v || '').toLowerCase();
-  if (/logrado|avanzado|alto|excelente/.test(s)) return 'Logrado';
-  if (/parcial|medio|intermedio|aceptable/.test(s)) return 'Parcialmente logrado';
-  if (/desarrollo|b[aá]sico|incipiente/.test(s)) return 'En desarrollo';
-  return 'No logrado';
-}
+    if (typeof validatedResponse.nota !== 'number') {
+        validatedResponse.nota = 1.0;
+    }
 
-// --- API Principal ---
+    // Validación de la retroalimentación
+    if (typeof validatedResponse.retroalimentacion !== 'object' || validatedResponse.retroalimentacion === null) {
+        validatedResponse.retroalimentacion = defaultFeedback;
+    } else {
+        // Validación de las sub-claves de retroalimentación
+        if (!Array.isArray(validatedResponse.retroalimentacion.correccion_detallada)) {
+            validatedResponse.retroalimentacion.correccion_detallada = defaultFeedback.correccion_detallada;
+        }
+        if (!Array.isArray(validatedResponse.retroalimentacion.evaluacion_habilidades)) {
+            validatedResponse.retroalimentacion.evaluacion_habilidades = defaultFeedback.evaluacion_habilidades;
+        }
+        if (typeof validatedResponse.retroalimentacion.resumen_general !== 'object' || validatedResponse.retroalimentacion.resumen_general === null) {
+            validatedResponse.retroalimentacion.resumen_general = defaultFeedback.resumen_general;
+        }
+        // VALIDACIÓN DEL NUEVO CAMPO
+        if (!Array.isArray(validatedResponse.retroalimentacion.resumen_respuestas)) {
+          validatedResponse.retroalimentacion.resumen_respuestas = defaultFeedback.resumen_respuestas;
+        }
+    }
+
+    // Asegurar que la nota esté dentro del rango 1.0-7.0
+    if (validatedResponse.nota < 1.0) validatedResponse.nota = 1.0;
+    if (validatedResponse.nota > 7.0) validatedResponse.nota = 7.0;
+
+    return validatedResponse;
+};
+
+// --- API Principal de Evaluación ---
 export async function POST(request: NextRequest) {
   try {
     const payload = await request.json();
-    const { fileUrls, rubrica, pauta, areaConocimiento, userEmail } = payload;
+    const { fileUrls, rubrica, pauta, areaConocimiento } = payload;
+    if (!fileUrls || fileUrls.length === 0) throw new Error("No se proporcionaron archivos.");
 
-    if (!fileUrls || fileUrls.length === 0) {
-      return NextResponse.json({ success: false, error: 'No se proporcionaron archivos.' }, { status: 400 });
-    }
-    if (!userEmail) {
-      return NextResponse.json({ success: false, error: 'Falta userEmail' }, { status: 400 });
-    }
-
-    const requiredCredits = fileUrls.length;
-
-    // 1) Verificar saldo
-    let saldo = 0;
-    try {
-      saldo = await getSaldo(userEmail);
-      if (!Number.isFinite(saldo) || saldo < requiredCredits) {
-        return NextResponse.json(
-          { success: false, error: `Saldo insuficiente: necesitas ${requiredCredits}, disponible ${saldo}` },
-          { status: 402 }
-        );
-      }
-    } catch (e: any) {
-      return NextResponse.json(
-        { success: false, error: `No se pudo verificar saldo: ${e?.message || e}` },
-        { status: 500 }
-      );
-    }
-
-    // 2) Descontar N créditos
-    try {
-      for (let i = 0; i < requiredCredits; i++) {
-        const ok = await useOneCredit(userEmail);
-        if (!ok) {
-          return NextResponse.json({ success: false, error: 'No tienes créditos disponibles' }, { status: 402 });
-        }
-      }
-    } catch (e: any) {
-      return NextResponse.json(
-        { success: false, error: `Error descontando créditos: ${e?.message || e}` },
-        { status: 500 }
-      );
-    }
-
-    // 3) OCR de todas las imágenes
-    let textoCompleto = '';
+    let additionalContext = "";
+    let messages: any[] = [];
+    
+    // Procesa todos los archivos para enviar la información a la IA
     for (const url of fileUrls) {
-      const base64Data = String(url).includes(',') ? String(url).split(',')[1] : url;
-      const buffer = Buffer.from(base64Data, 'base64');
-      textoCompleto += (await ocrAzure(buffer)) + '\n\n';
-    }
+      const base64Data = url.split(',')[1];
+      let buffer = Buffer.from(base64Data, 'base64');
+      
+      // Redimensionar la imagen ANTES de procesarla
+      buffer = await resizeImage(buffer);
+      
+      if (areaConocimiento === 'artes') {
+        // Para artes, envía la imagen directamente a Mistral para la visión
+        messages.push({
+          role: "user",
+          content: [
+            { type: "text", text: promptsExpertos.artes },
+            { type: "image_url", image_url: { url: `data:image/jpeg;base64,${buffer.toString('base64')}` } }
+          ]
+        });
+      } else {
+        // Para otras áreas, usa Azure para OCR y Document Intelligence
+        const fullText = await ocrAzure(buffer);
+        let documentAnalysis;
+        try {
+          documentAnalysis = await analyzeDocumentAzure(buffer);
+        } catch (azureError) {
+          console.error("❌ Error al analizar el documento con Azure:", azureError);
+          // Continúa sin el análisis de tablas/párrafos si falla
+        }
 
-    const personalidad = promptsExpertos[areaConocimiento] || promptsExpertos.general;
+        let tablesContext = "";
+        if (documentAnalysis && documentAnalysis.tables && documentAnalysis.tables.length > 0) {
+            tablesContext = `
+- **Tablas Detectadas:**
+    ${documentAnalysis.tables.map(t => `   - Contenido: ${t.cells.map(c => c.content).join(', ')}`).join('\n')}
+`;
+        }
+        
+        additionalContext += `
+**TEXTO EXTRAÍDO POR AZURE:**
+"""
+${fullText}
+"""
+**ANÁLISIS DE DOCUMENTO (Azure AI Document Intelligence):**
+- Número de páginas: ${documentAnalysis?.pages?.length || 'N/A'}
+- Texto y estructura: ${documentAnalysis?.paragraphs?.map(p => p.content).join('\n') || 'N/A'}
+${tablesContext}
+`;
+        messages.push({
+          role: "user",
+          content: [{ type: "text", text: `
+${promptsExpertos[areaConocimiento]}
+${additionalContext}
+RÚBRICA: """${rubrica}"""
+PAUTA (si aplica): """${pauta}"""
 
-    // 4) Prompt con contrato ESTRICTO basado en RÚBRICA (sin copiarla literal)
-    const promptFinalParaIA = `
-${personalidad}
-
-Evalúa el TEXTO DEL ESTUDIANTE utilizando EXCLUSIVAMENTE la RÚBRICA proporcionada. 
-Devuelve SOLO un JSON con este esquema EXACTO (sin texto adicional fuera del JSON):
-
+**SALIDA JSON — ESTRUCTURA ESTRICTA:**
 {
-  "puntaje": "string | N/A",
-  "nota": number, 
+  "puntaje": "string (ej: '40/42' o 'Sobresaliente')",
+  "nota": number (decimal entre 1.0 y 7.0),
   "retroalimentacion": {
     "correccion_detallada": [
-      { "seccion": "string", "detalle": "string" }
+      {
+        "seccion": "string",
+        "detalle": "string (tu justificación aquí)"
+      }
     ],
     "evaluacion_habilidades": [
-      { "habilidad": "string", "evaluacion": "Logrado | Parcialmente logrado | En desarrollo | No logrado", "evidencia": "string" }
+      {
+        "habilidad": "string (criterio de la rúbrica)",
+        "evaluacion": "string (ej: Logrado)",
+        "evidencia": "string (la cita textual o descripción específica)"
+      }
     ],
-    "resumen_general": { "fortalezas": "string", "areas_mejora": "string" },
-    "retroalimentacion_alternativas": []
+    "resumen_general": {
+      "fortalezas": "string (3-5 puntos clave, positivos)",
+      "areas_mejora": "string (constructivo)"
+    },
+    "resumen_respuestas": [
+      {
+        "pregunta": "string (ej: 'P1' o 'Problema 2')",
+        "estado": "string (ej: 'Correcta' o 'Incorrecta')",
+        "puntos_obtenidos": "number (ej: 10)"
+      }
+    ]
   }
 }
-
-REGLAS IMPORTANTES:
-- "correccion_detallada": crea 4–8 entradas, **una por criterio/pregunta de la rúbrica**. 
-  *NO* pegues la rúbrica literal. Resume cada criterio en 2–4 oraciones con recomendaciones específicas.
-- "evaluacion_habilidades": genera 5–8 habilidades **derivadas de la rúbrica/preguntas** (no genéricas), con "evaluacion" en 
-  {Logrado, Parcialmente logrado, En desarrollo, No logrado}. Usa evidencia breve del texto cuando exista; si no, di "No hay evidencia clara".
-- "nota": si no puedes calcularla, deja 1.0. 
-- Responde SIEMPRE en español. 
-- NO uses markdown ni backticks. 
-- NO agregues campos distintos a los del esquema.
-
-TEXTO DEL ESTUDIANTE:
-"""${textoCompleto}"""
-
-RÚBRICA:
-"""${rubrica ?? ''}"""
-
-PAUTA (si aplica):
-"""${pauta ?? ''}"""
-`;
+`}]
+        });
+      }
+    }
 
     const aiResponse = await callMistralAPI({
-      model: 'mistral-large-latest',
-      messages: [{ role: 'user', content: promptFinalParaIA }],
-      response_format: { type: 'json_object' },
-      temperature: 0.3,
+        model: "mistral-large-latest",
+        messages: messages,
+        response_format: { type: "json_object" },
     });
 
-    // 5) Parse robusto
-    const content = aiResponse?.choices?.[0]?.message?.content;
-    const rawStr = typeof content === 'string' ? content : JSON.stringify(content ?? '{}');
-    let resultado: any = {};
-    try {
-      resultado = JSON.parse(rawStr);
-    } catch {
-      resultado = {};
-    }
+    const content = aiResponse.choices[0].message.content;
 
-    // 6) Normalización/Coerción SEGURA
-    let notaNumerica = parseFloat(resultado?.nota);
-    if (!Number.isFinite(notaNumerica)) notaNumerica = 1.0;
-    if (notaNumerica < 1.0) notaNumerica = 1.0;
-    if (notaNumerica > 7.0) notaNumerica = 7.0;
-
-    const retro = resultado?.retroalimentacion ?? {};
-    const normalizado: any = {
-      puntaje: String(resultado?.puntaje ?? 'N/A'),
-      nota: notaNumerica,
-      retroalimentacion: {
-        correccion_detallada: asArray(retro.correccion_detallada),
-        evaluacion_habilidades: asArray(retro.evaluacion_habilidades),
-        resumen_general: asResumen(retro.resumen_general),
-        retroalimentacion_alternativas: asArray(retro.retroalimentacion_alternativas),
-      },
+    // --- LIMPIADOR ROBUSTO DE JSON ---
+    const cleanJson = (str: string): string => {
+      const match = str.match(/({[\s\S]*})/);
+      return match ? match[1] : "{}";
     };
 
-    // 7) Normalización de estructuras (sin modificar formato del PDF/cliente)
-    // 7.a) correccion_detallada -> siempre objetos {seccion, detalle} y sin copiar rubrica literal
-    normalizado.retroalimentacion.correccion_detallada =
-      (normalizado.retroalimentacion.correccion_detallada || []).map((it: any, idx: number) => {
-        if (typeof it === 'string') {
-          return { seccion: idx === 0 ? 'General' : `Criterio ${idx + 1}`, detalle: it };
-        }
-        return {
-          seccion: String(it?.seccion ?? it?.Seccion ?? it?.section ?? `Criterio ${idx + 1}`),
-          detalle: String(it?.detalle ?? it?.Detalle ?? it?.detail ?? ''),
-        };
-      }).filter((x: any) => x.detalle && x.detalle.trim().length > 0);
+    const cleanedContent = cleanJson(content);
+    let resultado;
 
-    if (!normalizado.retroalimentacion.correccion_detallada.length) {
-      normalizado.retroalimentacion.correccion_detallada = [
-        { seccion: 'General', detalle: 'Ajusta el trabajo a los criterios de la rúbrica con observaciones concretas y ejemplos del texto.' },
-      ];
-    }
-
-    // 7.b) evaluacion_habilidades -> {habilidad, evaluacion, evidencia} y niveles normalizados
-    normalizado.retroalimentacion.evaluacion_habilidades =
-      (normalizado.retroalimentacion.evaluacion_habilidades || []).map((it: any) => {
-        const habilidad = String(it?.habilidad ?? it?.skill ?? it?.competencia ?? '').trim() || 'Criterio de la rúbrica';
-        const evaluacion = normalizeLevel(it?.evaluacion ?? it?.nivel ?? it?.level);
-        const evidencia = String(it?.evidencia ?? '').trim() || 'No hay evidencia clara.';
-        return { habilidad, evaluacion, evidencia };
-      });
-
-    // 7.c) Fortalezas/Áreas si faltan
-    if (!normalizado.retroalimentacion.resumen_general.fortalezas) {
-      normalizado.retroalimentacion.resumen_general.fortalezas =
-        'Se observan avances alineados parcialmente con los criterios de la rúbrica.';
-    }
-    if (!normalizado.retroalimentacion.resumen_general.areas_mejora) {
-      normalizado.retroalimentacion.resumen_general.areas_mejora =
-        'Profundizar en los criterios de la rúbrica y mejorar precisión, organización y redacción.';
-    }
-
-    // 7.d) Nota y décimas desde puntaje si aplica
-    const calc = computeFromPuntaje(normalizado.puntaje);
-    if (calc && !(normalizado.nota >= 1 && normalizado.nota <= 7)) {
-      normalizado.nota = calc.nota;
-      normalizado.decimas = calc.decimas;
-    }
-
-    // 8) Email (no crítico)
     try {
-      await sendEmail({
-        from: process.env.RESEND_FROM || 'Libel-IA <onboarding@resend.dev>',
-        to: userEmail,
-        subject: 'Resultado de evaluación — Libel-IA',
-        text: `Puntaje: ${normalizado.puntaje}\nNota: ${normalizado.nota}`,
-        html: `<h2>¡Tu evaluación está lista!</h2>
-               <p><b>Puntaje:</b> ${normalizado.puntaje}</p>
-               <p><b>Nota:</b> ${normalizado.nota}</p>`,
-      });
-    } catch (e) {
-      console.warn('Email falló (no crítico)', e);
+      resultado = JSON.parse(cleanedContent);
+    } catch (error) {
+      console.error("❌ Error al parsear JSON:", error);
+      console.error("📝 Respuesta recibida:", cleanedContent);
+      resultado = {
+        puntaje: "0/42",
+        nota: 1.0,
+        retroalimentacion: {
+          correccion_detallada: [],
+          evaluacion_habilidades: [],
+          resumen_general: {
+            fortalezas: "No se pudo analizar el trabajo correctamente.",
+            areas_mejora: "Verifica que el modelo devuelva un JSON válido."
+          },
+          resumen_respuestas: []
+        }
+      };
     }
 
-    // 9) Respuesta final estable para tu UI/PDF
-    return NextResponse.json({ success: true, ...normalizado });
-  } catch (error: any) {
-    console.error('Error en /api/evaluate:', error);
-    const msg = error?.message || 'Error desconocido';
-    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    // --- APLICA LA NUEVA FUNCIÓN DE VALIDACIÓN FINAL PARA ASEGURAR EL FORMATO ---
+    const finalResult = validateEvaluationResponse(resultado);
+    
+    console.log("Respuesta final enviada al frontend:", finalResult);
+
+    return NextResponse.json({ success: true, ...finalResult });
+
+  } catch (error) {
+    console.error("Error en /api/evaluate:", error);
+    const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
   }
 }

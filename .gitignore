@@ -24,4 +24,4 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
-next-env.d.tsapp/EvaluatorClient.tsx encuadrado para materias con alternativas y desarrollo.txt
+next-env.d.ts

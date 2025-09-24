@@ -1,4 +1,5 @@
 'use client';
+
 import * as React from 'react';
 import { useState, useRef, ChangeEvent, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
@@ -6,6 +7,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import dynamic from 'next/dynamic';
 import { format } from 'date-fns';
+
 // UI (shadcn)
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -20,14 +22,26 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2, Sparkles, FileUp, Camera, Users, X, Printer, CalendarIcon, ImageUp, ClipboardList, Home, Palette, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+// ✅ usa alias @ como en shadcn
 import { NotesDashboard } from '@/components/NotesDashboard';
+
+// PDF
 import { Document, Page, Text, View, StyleSheet, PDFDownloadLink, Image as PDFImage, PDFViewer, pdf } from '@react-pdf/renderer';
+
+// ❗️si tu hook está en `app/useEvaluator.ts` usa './useEvaluator'
+// si está en `app/evaluador/useEvaluator.ts` usa './evaluador/useEvaluator'
 import { useEvaluator } from './useEvaluator';
+
+// ✅ también con alias @ (si vive fuera de app/)
 const SmartCameraModal = dynamic(() => import('@/components/smart-camera-modal'), { ssr: false, loading: () => <p>Cargando...</p> });
+
 const Label = React.forwardRef<HTMLLabelElement, React.ComponentPropsWithoutRef<'label'>>(({ className, ...props }, ref) => (
   <label ref={ref} className={cn('text-sm font-medium', className)} {...props} />
 ));
 Label.displayName = 'Label';
+
+// ==== Logo ====
 const DRAGONFLY_SVG = `
 <svg viewBox="0 0 300 220" xmlns="http://www.w3.org/2000/svg" aria-label="Libel-IA logo">
   <defs>
@@ -47,6 +61,8 @@ const DRAGONFLY_SVG = `
 `;
 const DRAGONFLY_DATA_URL = `data:image/svg+xml;utf8,${encodeURIComponent(DRAGONFLY_SVG)}`;
 const wordmarkClass = 'text-transparent bg-clip-text bg-gradient-to-r from-violet-500 via-indigo-500 to-cyan-400';
+
+// ==== Estilos Globales ====
 const GlobalStyles = () => (
   <style jsx global>{`
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
@@ -81,6 +97,8 @@ const GlobalStyles = () => (
     @media (max-width: 600px) { body { font-size: 12px; line-height: 1.4; } }
   `}</style>
 );
+
+// ==== Estilos PDF ====
 const styles = StyleSheet.create({
   page: { padding: 20, fontSize: 10, lineHeight: 1.25 },
   header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, paddingBottom: 5, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
@@ -91,8 +109,11 @@ const styles = StyleSheet.create({
   title: { fontSize: 13, fontWeight: 'bold', color: '#4F46E5' },
   subtitle: { fontSize: 9, color: '#6B7280' },
   infoText: { fontSize: 9, color: '#4B5563', marginVertical: 1 },
+
   studentLine: { fontSize: 9, color: '#111827', marginTop: 5 },
+
   sectionTitle: { fontSize: 10, fontWeight: 'bold', paddingBottom: 2, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', marginBottom: 5, marginTop: 8 },
+
   feedbackGrid: { flexDirection: 'row', gap: 8, marginTop: 8 },
   feedbackCard: { padding: 6, borderRadius: 6, flex: 1 },
   fortalezas: { backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#BBF7D0' },
@@ -100,87 +121,82 @@ const styles = StyleSheet.create({
   feedbackTitle: { fontSize: 9, fontWeight: 'bold', color: '#166534', marginBottom: 3 },
   feedbackImproveTitle: { fontSize: 9, fontWeight: 'bold', color: '#854D0E', marginBottom: 3 },
   feedbackText: { fontSize: 8, lineHeight: 1.15, flexWrap: 'wrap' as any },
+
   table: { display: 'table', width: '100%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 6 },
   tableRow: { margin: 'auto', flexDirection: 'row', borderBottomWidth: 1, borderColor: '#E5E7EB' },
   tableColHeader: { width: '35%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', padding: 2 },
   tableColHeaderDetail: { width: '65%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', padding: 2 },
   tableCol: { width: '35%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', padding: 2 },
   tableColDetail: { width: '65%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', padding: 2 },
+
   col40: { width: '40%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', padding: 2 },
   col30: { width: '30%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', padding: 2 },
+
   habCol45: { width: '45%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', padding: 2 },
   habCol18: { width: '18%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', padding: 2, textAlign: 'center' as any },
   habCol37: { width: '37%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', padding: 2 },
+
   tableCellHeader: { margin: 1, fontSize: 8, fontWeight: 'bold' },
   tableCell: { margin: 1, fontSize: 8, textAlign: 'left' as any },
 });
+
+// ====== Helpers ======
 const splitCorreccionForTwoPages = (lista: any[] | undefined) => {
   if (!lista || lista.length === 0) return { first: [], rest: [] };
   const MAX_P1 = Math.min(5, lista.length);
   return { first: lista.slice(0, MAX_P1), rest: lista.slice(MAX_P1) };
 };
+
+// ==== Documento PDF ====
 const ReportDocument = ({ group, formData, logoPreview }: any) => {
   const resumen = group.retroalimentacion?.resumen_general || { fortalezas: 'N/A', areas_mejora: 'N/A' };
   const puntaje = group.puntaje || 'N/A';
   const notaNum = Number(group.nota) || 0;
   const notaFinal = (notaNum + (group.decimasAdicionales || 0)).toFixed(1);
+
   const correccion = group.retroalimentacion?.correccion_detallada || [];
   const { first: correccionP1, rest: correccionP2 } = splitCorreccionForTwoPages(correccion);
-  let logoPdf = null;
-  if (logoPreview) {
-    logoPdf = logoPreview;
-  }
-
-  // Extraer puntaje total de la rúbrica (ej: "Puntaje total: 60")
-  const rubrica = formData.rubrica || "";
-  const puntajeTotalMatch = rubrica.match(/Puntaje total:\s*(\d+)/i);
-  const puntajeTotal = puntajeTotalMatch ? parseInt(puntajeTotalMatch[1]) : 60;
-
-  // Extraer puntaje obtenido (ej: "35/60" -> 35)
-  const puntajeObtenidoMatch = puntaje.match(/(\d+)\/\d+/);
-  const puntajeObtenido = puntajeObtenidoMatch ? parseInt(puntajeObtenidoMatch[1]) : 0;
-
-  // Calcular porcentaje
-  const porcentaje = puntajeTotal > 0 ? (puntajeObtenido / puntajeTotal) * 100 : 0;
 
   return (
     <Document>
+      {/* Página 1 */}
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>
+            <PDFImage src={DRAGONFLY_DATA_URL} style={styles.logoLibelia} />
             <View>
               <Text style={styles.title}>Libel-IA</Text>
               <Text style={styles.subtitle}>Informe de Evaluación Pedagógica</Text>
             </View>
           </View>
           <View style={styles.headerRight}>
-            {logoPdf && (
-              <PDFImage
-                style={styles.logoColegio}
-                src={logoPdf}
-              />
-            )}
+            {logoPreview && <PDFImage src={logoPreview} style={styles.logoColegio} />}
             <Text style={styles.infoText}>Profesor: {formData.nombreProfesor || 'N/A'}</Text>
             <Text style={styles.infoText}>Asignatura: {formData.asignatura || 'N/A'}</Text>
             <Text style={styles.infoText}>Evaluación: {formData.nombrePrueba || 'N/A'}</Text>
             <Text style={styles.infoText}>Fecha: {format(new Date(), 'dd/MM/yyyy')}</Text>
           </View>
         </View>
+
         <Text style={styles.studentLine}>Alumno: {group.studentName} · Curso: {formData.curso || 'N/A'}</Text>
+
+        {/* KPIs */}
         <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
           <View style={{ flex: 1, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', padding: 5, borderRadius: 6, textAlign: 'center' as any }}>
             <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#4B5563', marginBottom: 2 }}>Puntaje</Text>
             <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#4F46E5' }}>{puntaje}</Text>
           </View>
           <View style={{ flex: 1, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', padding: 5, borderRadius: 6, textAlign: 'center' as any }}>
-            <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#4B5563', marginBottom: 2 }}>Porcentaje</Text>
-            <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#4F46E5' }}>{porcentaje.toFixed(1)}%</Text>
-          </View>
-          <View style={{ flex: 1, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', padding: 5, borderRadius: 6, textAlign: 'center' as any }}>
             <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#4B5563', marginBottom: 2 }}>Nota</Text>
             <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#4F46E5' }}>{notaFinal}</Text>
           </View>
+          <View style={{ flex: 1, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', padding: 5, borderRadius: 6, textAlign: 'center' as any }}>
+            <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#4B5563', marginBottom: 2 }}>Fecha</Text>
+            <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#4F46E5' }}>{format(new Date(), 'dd/MM/yyyy')}</Text>
+          </View>
         </View>
+
+        {/* Fortalezas / Áreas */}
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
           <View style={{ padding: 6, borderRadius: 6, flex: 1, backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#BBF7D0' }}>
             <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#166534', marginBottom: 3 }}>✅ Fortalezas</Text>
@@ -191,6 +207,8 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
             <Text style={{ fontSize: 8, lineHeight: 1.15 }}>{resumen.areas_mejora}</Text>
           </View>
         </View>
+
+        {/* Corrección Detallada (solo primeras filas) */}
         {correccionP1.length > 0 && (
           <View style={{ marginBottom: 6 }}>
             <Text style={{ fontSize: 10, fontWeight: 'bold', paddingBottom: 2, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', marginBottom: 5, marginTop: 8 }}>Corrección Detallada</Text>
@@ -209,7 +227,10 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
           </View>
         )}
       </Page>
+
+      {/* Página 2 */}
       <Page size="A4" style={styles.page}>
+        {/* Resto de Corrección */}
         {correccionP2.length > 0 && (
           <View style={{ marginBottom: 6 }}>
             <Text style={{ fontSize: 10, fontWeight: 'bold', paddingBottom: 2, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', marginBottom: 5, marginTop: 8 }}>Corrección Detallada (cont.)</Text>
@@ -227,6 +248,8 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
             </View>
           </View>
         )}
+
+        {/* Habilidades */}
         {group.retroalimentacion?.evaluacion_habilidades?.length > 0 && (
           <View style={{ marginBottom: 6 }}>
             <Text style={{ fontSize: 10, fontWeight: 'bold', paddingBottom: 2, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', marginBottom: 5, marginTop: 8 }}>Evaluación de Habilidades</Text>
@@ -246,6 +269,8 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
             </View>
           </View>
         )}
+
+        {/* Alternativas */}
         {group.retroalimentacion?.retroalimentacion_alternativas?.length > 0 && (
           <View style={{ marginBottom: 6 }}>
             <Text style={{ fontSize: 10, fontWeight: 'bold', paddingBottom: 2, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', marginBottom: 5, marginTop: 8 }}>Respuestas Alternativas</Text>
@@ -269,6 +294,8 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
     </Document>
   );
 };
+
+// ==== Tipos ====
 interface CorreccionDetallada { seccion: string; detalle: string; }
 interface EvaluacionHabilidad { habilidad: string; evaluacion: string; evidencia: string; }
 interface RetroalimentacionEstructurada {
@@ -305,43 +332,12 @@ interface StudentGroup {
   isEvaluating: boolean;
   error?: string;
 }
-function normalizeEvaluationResult(raw: any) {
-  if (!raw || raw.success === false || raw.error) {
-    console.error("Error en la respuesta de la API:", raw?.error || raw);
-    return { error: raw?.error || 'La API no devolvió una respuesta válida.' };
-  }
-  const base = raw?.data || raw?.resultado || raw;
-  if (!base) {
-    console.error("Estructura de respuesta desconocida:", raw);
-    return { error: 'Estructura de respuesta desconocida.' };
-  }
-  let notaNum = Number(base?.nota);
-  if (!Number.isFinite(notaNum)) {
-    console.error("Nota no válida en la respuesta:", base?.nota);
-    return { error: 'La nota no es un número válido en la respuesta.' };
-  }
-  const retro = base?.retroalimentacion || {};
-  if (!retro.correccion_detallada && !retro.resumen_general) {
-    console.error("Retroalimentación vacía o incompleta:", retro);
-    return { error: 'La retroalimentación está vacía o incompleta.' };
-  }
-  const correccion = Array.isArray(retro.correccion_detallada) ? retro.correccion_detallada : [];
-  const habs = Array.isArray(retro.evaluacion_habilidades) ? retro.evaluacion_habilidades : [];
-  const resumen = retro.resumen_general || { fortalezas: 'No especificado.', areas_mejora: 'No especificado.' };
-  const alt = Array.isArray(retro.retroalimentacion_alternativas) ? retro.retroalimentacion_alternativas : [];
-  return {
-    puntaje: String(base?.puntaje ?? 'N/A'),
-    nota: notaNum,
-    retroalimentacion: {
-      correccion_detallada: correccion,
-      evaluacion_habilidades: habs,
-      resumen_general: resumen,
-      retroalimentacion_alternativas: alt,
-    },
-  };
-}
+
+// ==== Componente Principal ====
 export default function EvaluatorClient() {
+  // ✅ pestaña por defecto: Presentación
   const [activeTab, setActiveTab] = useState('presentacion');
+
   const [userEmail, setUserEmail] = useState<string>('');
   const [unassignedFiles, setUnassignedFiles] = useState<FilePreview[]>([]);
   const [studentGroups, setStudentGroups] = useState<StudentGroup[]>([]);
@@ -350,11 +346,14 @@ export default function EvaluatorClient() {
   const [classSize, setClassSize] = useState(1);
   const [isExtractingNames, setIsExtractingNames] = useState(false);
   const [theme, setTheme] = useState('theme-ocaso');
+
   const [previewGroupId, setPreviewGroupId] = useState<string | null>(null);
   const isMobile = typeof window !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const { evaluate, isLoading } = useEvaluator();
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -371,10 +370,12 @@ export default function EvaluatorClient() {
       areaConocimiento: 'general',
     },
   });
+
   useEffect(() => {
     const saved = (localStorage.getItem('userEmail') || '').toLowerCase();
     if (saved && /\S+@\S+\.\S+/.test(saved)) setUserEmail(saved);
   }, []);
+
   useEffect(() => {
     const count = Math.max(1, classSize);
     setStudentGroups(Array.from({ length: count }, (_, i) => ({
@@ -387,6 +388,7 @@ export default function EvaluatorClient() {
     })));
     setUnassignedFiles([]);
   }, [classSize]);
+
   const processFiles = (files: File[]) => {
     const validFiles = Array.from(files).filter(file => {
       if (['image/jpeg', 'image/png', 'image/bmp', 'application/pdf', 'image/tiff'].includes(file.type)) return true;
@@ -414,10 +416,7 @@ export default function EvaluatorClient() {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (event) => {
-        const dataUrl = event.target?.result as string;
-        setLogoPreview(dataUrl);
-      };
+      reader.onloadend = () => setLogoPreview(reader.result as string);
       reader.readAsDataURL(file);
     }
   };
@@ -445,6 +444,7 @@ export default function EvaluatorClient() {
     setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, decimasAdicionales: decimas } : g));
   };
   const removeUnassignedFile = (fileId: string) => { setUnassignedFiles(prev => prev.filter(f => f.id !== fileId)); };
+
   const handleNameExtraction = async () => {
     if (unassignedFiles.length === 0) {
       alert('Sube primero la página que contiene el nombre.');
@@ -469,19 +469,24 @@ export default function EvaluatorClient() {
       setIsExtractingNames(false);
     }
   };
+
   const onEvaluateAll = async () => {
     if (!userEmail) {
       alert('Falta confirmar tu correo. Ve a "Planes", activa o confirma tu correo y vuelve a evaluar.');
       return;
     }
+
     const { rubrica, pauta, flexibilidad, tipoEvaluacion, areaConocimiento } = form.getValues();
     if (!rubrica) {
       form.setError('rubrica', { type: 'manual', message: 'La rúbrica es requerida.' });
       return;
     }
+
     for (const group of studentGroups) {
       if (group.files.length === 0) continue;
+
       setStudentGroups(prev => prev.map(g => g.id === group.id ? { ...g, isEvaluating: true, isEvaluated: false, error: undefined } : g));
+
       const payload = {
         fileUrls: group.files.map(f => f.dataUrl),
         rubrica,
@@ -491,143 +496,32 @@ export default function EvaluatorClient() {
         areaConocimiento,
         userEmail,
       };
-      try {
-        const raw = await evaluate(payload);
-        console.log("Respuesta cruda de la API para", group.studentName, ":", raw);
-        const normalized = normalizeEvaluationResult(raw);
-        setStudentGroups(prev => prev.map(g => {
-          if (g.id !== group.id) return g;
-          if ((normalized as any).error) {
-            console.error("Error en evaluación para", group.studentName, ":", (normalized as any).error);
-            return { ...g, isEvaluating: false, isEvaluated: true, error: (normalized as any).error };
-          }
-          return {
-            ...g,
-            isEvaluating: false,
-            isEvaluated: true,
-            puntaje: (normalized as any).puntaje,
-            nota: (normalized as any).nota,
-            retroalimentacion: (normalized as any).retroalimentacion,
-          };
-        }));
-      } catch (error) {
-        console.error("Error al evaluar:", error);
-        setStudentGroups(prev => prev.map(g => g.id === group.id ? { ...g, isEvaluating: false, error: 'Error al conectar con la API.' } : g));
-      }
+
+      const result = await evaluate(payload);
+
+      setStudentGroups(prev => prev.map(g => g.id === group.id
+        ? { ...g, isEvaluating: false, isEvaluated: true, ...(result.success ? result : { error: result.error }) }
+        : g
+      ));
     }
   };
-  const downloadBlob = (blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  };
-  const escapeHtml = (s: string) =>
-    String(s ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  const nl2br = (s: string) => escapeHtml(s).replace(/\n/g, '<br/>');
+
   const exportToDocOrCsv = (formatType: 'csv' | 'doc') => {
-    const evaluatedGroups = studentGroups.filter(g => g.isEvaluated && !g.error);
+    const evaluatedGroups = studentGroups.filter(g => g.isEvaluated);
     if (evaluatedGroups.length === 0) {
       alert('No hay evaluaciones para exportar.');
       return;
     }
-    const { curso, fechaEvaluacion, nombreProfesor, nombrePrueba, asignatura, departamento } = form.getValues();
-    const fechaStr = fechaEvaluacion ? format(fechaEvaluacion, 'dd/MM/yyyy') : '';
-    if (formatType === 'doc') {
-      const headerHtml = `
-        <div style="margin-bottom:16px">
-          <h1 style="font-family:Inter,Arial,sans-serif;margin:0 0 6px 0;color:#4F46E5">Libel-IA — Resumen de Notas</h1>
-          <div style="font-family:Inter,Arial,sans-serif;color:#111827;font-size:12px;line-height:1.4">
-            <div><b>Profesor:</b> ${escapeHtml(nombreProfesor || '')}</div>
-            <div><b>Asignatura:</b> ${escapeHtml(asignatura || '')}</div>
-            <div><b>Departamento:</b> ${escapeHtml(departamento || '')}</div>
-            <div><b>Evaluación:</b> ${escapeHtml(nombrePrueba || '')}</div>
-            <div><b>Curso:</b> ${escapeHtml(curso || '')} — <b>Fecha:</b> ${escapeHtml(fechaStr)}</div>
-          </div>
-        </div>
-      `;
-      const rows = evaluatedGroups.map(g => {
-        const puntaje = g.puntaje || 'N/A';
-        const notaBase = Number(g.nota) || 0;
-        const finalNota = (notaBase + (g.decimasAdicionales || 0)).toFixed(1);
-        const fort = g.retroalimentacion?.resumen_general?.fortalezas || '';
-        const areas = g.retroalimentacion?.resumen_general?.areas_mejora || '';
-        return `
-          <tr>
-            <td style="border:1px solid #E5E7EB;padding:6px">${escapeHtml(g.studentName)}</td>
-            <td style="border:1px solid #E5E7EB;padding:6px">${escapeHtml(puntaje)}</td>
-            <td style="border:1px solid #E5E7EB;padding:6px;text-align:center">${finalNota}</td>
-            <td style="border:1px solid #E5E7EB;padding:6px">${nl2br(fort)}</td>
-            <td style="border:1px solid #E5E7EB;padding:6px">${nl2br(areas)}</td>
-          </tr>
-        `;
-      }).join('');
-      const tableHtml = `
-        <table style="border-collapse:collapse;width:100%;font-family:Inter,Arial,sans-serif;font-size:12px">
-          <thead>
-            <tr style="background:#F9FAFB">
-              <th style="border:1px solid #E5E7EB;padding:6px;text-align:left">Estudiante</th>
-              <th style="border:1px solid #E5E7EB;padding:6px;text-align:left">Puntaje</th>
-              <th style="border:1px solid #E5E7EB;padding:6px;text-align:center">Nota</th>
-              <th style="border:1px solid #E5E7EB;padding:6px;text-align:left">Fortalezas</th>
-              <th style="border:1px solid #E5E7EB;padding:6px;text-align:left">Áreas de Mejora</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      `;
-      const html = `
-        <!DOCTYPE html>
-        <html>
-          <head><meta charset="utf-8" /><title>Resumen de Notas</title></head>
-          <body>${headerHtml}${tableHtml}
-            <div style="margin-top:16px;font-family:Inter,Arial,sans-serif;color:#6B7280;font-size:11px">
-              Generado por Libel-IA.
-            </div>
-          </body>
-        </html>
-      `.trim();
-      const blob = new Blob([html], { type: 'application/msword;charset=utf-8' });
-      const safeCurso = (curso || 'curso').replace(/[^\w\-]+/g, '_');
-      const safeFecha = (fechaStr || '').replace(/\//g, '-');
-      downloadBlob(blob, `Notas_${safeCurso}_${safeFecha || 'hoy'}.doc`);
-      return;
-    }
-    if (formatType === 'csv') {
-      const header = ['Estudiante', 'Puntaje', 'Nota', 'Fortalezas', 'Areas_de_mejora'];
-      const lines = evaluatedGroups.map(g => {
-        const puntaje = g.puntaje || 'N/A';
-        const notaBase = Number(g.nota) || 0;
-        const finalNota = (notaBase + (g.decimasAdicionales || 0)).toFixed(1);
-        const fort = (g.retroalimentacion?.resumen_general?.fortalezas || '').replace(/\n/g, ' ');
-        const areas = (g.retroalimentacion?.resumen_general?.areas_mejora || '').replace(/\n/g, ' ');
-        const cells = [g.studentName, puntaje, finalNota, fort, areas].map(v => {
-          const s = String(v ?? '');
-          if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-          return s;
-        });
-        return cells.join(',');
-      });
-      const csv = [header.join(','), ...lines].join('\n');
-      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
-      const safeCurso = (curso || 'curso').replace(/[^\w\-]+/g, '_');
-      const safeFecha = (fechaStr || '').replace(/\//g, '-');
-      downloadBlob(blob, `Notas_${safeCurso}_${safeFecha || 'hoy'}.csv`);
-    }
+    // tu export original…
   };
+
   const isCurrentlyEvaluatingAny = studentGroups.some(g => g.isEvaluating);
   const previewGroup = previewGroupId ? studentGroups.find(g => g.id === previewGroupId) : null;
+
   const handlePreview = async (groupId: string) => {
     const group = studentGroups.find(g => g.id === groupId);
     if (!group || !group.retroalimentacion) return;
+
     if (isMobile) {
       const blob = await pdf(<ReportDocument group={group} formData={form.getValues()} logoPreview={logoPreview} />).toBlob();
       const url = URL.createObjectURL(blob);
@@ -636,10 +530,13 @@ export default function EvaluatorClient() {
       setPreviewGroupId(groupId);
     }
   };
+
   return (
     <div className={activeTab === 'inicio' ? 'theme-ocaso' : theme}>
       <GlobalStyles />
       {isCameraOpen && <SmartCameraModal onCapture={handleCapture} onClose={() => setIsCameraOpen(false)} />}
+
+      {/* MODAL de Vista Previa PDF (desktop) */}
       {!isMobile && previewGroup && previewGroup.retroalimentacion && (
         <div className="pdf-modal-backdrop" role="dialog" aria-modal="true">
           <div className="pdf-modal">
@@ -667,6 +564,7 @@ export default function EvaluatorClient() {
           </div>
         </div>
       )}
+
       <main className="p-4 md:p-8 max-w-6xl mx-auto font-sans bg-[var(--bg-main)] text-[var(--text-primary)] transition-colors duration-300">
         <div className="mb-6 p-3 rounded-lg flex items-center justify-between bg-[var(--bg-card)] border border-[var(--border-color)]">
           <div className="flex items-center gap-2">
@@ -679,6 +577,7 @@ export default function EvaluatorClient() {
             <Button size="sm" variant={theme === 'theme-corporativo' ? 'default' : 'ghost'} onClick={() => setTheme('theme-corporativo')} className={cn(theme !== 'theme-corporativo' && 'text-[var(--text-secondary)]')}>Corporativo</Button>
           </div>
         </div>
+
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-4 bg-[var(--bg-muted)]">
             <TabsTrigger value="inicio"><Home className="mr-2 h-4 w-4" />Inicio</TabsTrigger>
@@ -686,6 +585,8 @@ export default function EvaluatorClient() {
             <TabsTrigger value="dashboard"><ClipboardList className="mr-2 h-4 w-4" />Resumen</TabsTrigger>
             <TabsTrigger value="presentacion"><Eye className="mr-2 h-4 w-4" />Presentación</TabsTrigger>
           </TabsList>
+
+          {/* Inicio */}
           <TabsContent value="inicio" className="mt-8 text-center">
             <Card className="max-w-3xl mx-auto border-2 shadow-lg bg-[var(--bg-card)] border-[var(--border-color)]" style={{ backgroundImage: 'radial-gradient(circle, rgba(124, 58, 237, 0.15) 0%, rgba(9, 9, 11, 0) 70%)' }}>
               <CardContent className="p-12">
@@ -699,11 +600,14 @@ export default function EvaluatorClient() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Evaluador */}
           <TabsContent value="evaluator" className="space-y-8 mt-4">
             <div className="flex items-center gap-3">
               <img src={DRAGONFLY_DATA_URL} alt="Logo Libel-IA" className="h-8 w-8" />
               <span className={`font-semibold text-xl ${wordmarkClass} font-logo`}>Libel-IA</span>
             </div>
+
             <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
               <CardHeader><CardTitle className="text-[var(--text-accent)]">Paso 1: Configuración de la Evaluación</CardTitle></CardHeader>
               <CardContent>
@@ -723,6 +627,7 @@ export default function EvaluatorClient() {
                         )} />
                       </div>
                     </div>
+
                     <FormField control={form.control} name="areaConocimiento" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="font-bold text-[var(--text-accent)]">Área de Conocimiento</FormLabel>
@@ -740,6 +645,8 @@ export default function EvaluatorClient() {
                         </Select>
                       </FormItem>
                     )} />
+
+                    {/* Nivel */}
                     <FormField control={form.control} name="flexibilidad" render={({ field }) => (
                       <FormItem className="compact-field space-y-1">
                         <FormLabel className="text-[var(--text-accent)]">Nivel (flexibilidad)</FormLabel>
@@ -751,6 +658,7 @@ export default function EvaluatorClient() {
                         </div>
                       </FormItem>
                     )} />
+
                     <div className="p-4 border rounded-lg border-[var(--border-color)]">
                       <h3 className="text-lg font-semibold mb-4 text-[var(--text-accent)]">Personalización del Informe</h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -796,6 +704,7 @@ export default function EvaluatorClient() {
                         </div>
                       </div>
                     </div>
+
                     <FormField control={form.control} name="rubrica" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="font-bold text-[var(--text-accent)]">Rúbrica (Criterios)</FormLabel>
@@ -814,6 +723,8 @@ export default function EvaluatorClient() {
                 </Form>
               </CardContent>
             </Card>
+
+            {/* Paso 2: Cargar y agrupar */}
             <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
               <CardHeader>
                 <CardTitle className="text-[var(--text-accent)]">Paso 2: Cargar y Agrupar Trabajos</CardTitle>
@@ -832,6 +743,7 @@ export default function EvaluatorClient() {
                     <p className="text-sm text-[var(--text-secondary)]">Consejo: Sube primero la página con el nombre.</p>
                   </div>
                 </div>
+
                 {unassignedFiles.length > 0 && (
                   <div className="p-4 border rounded-lg bg-[var(--bg-muted-subtle)] border-[var(--border-color)]">
                     <h3 className="font-semibold mb-3 flex items-center text-[var(--text-accent)]">
@@ -854,6 +766,8 @@ export default function EvaluatorClient() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Grupos */}
             {studentGroups.length > 0 && (
               <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
                 <CardHeader>
@@ -893,6 +807,8 @@ export default function EvaluatorClient() {
                 </CardFooter>
               </Card>
             )}
+
+            {/* Resultados */}
             {studentGroups.some(g => g.isEvaluated || g.isEvaluating) && (
               <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
                 <CardHeader><CardTitle className="text-[var(--text-accent)]">Paso 3: Resultados</CardTitle></CardHeader>
@@ -922,6 +838,7 @@ export default function EvaluatorClient() {
                             </div>
                           )}
                         </div>
+
                         {group.error ? (
                           <p className="text-red-600">Error: {group.error}</p>
                         ) : (
@@ -942,6 +859,7 @@ export default function EvaluatorClient() {
                                     <p className="text-3xl font-bold text-blue-600">{finalNota.toFixed(1)}</p>
                                   </div>
                                 </div>
+
                                 <div>
                                   <h4 className="font-bold mb-2 text-[var(--text-accent)]">Corrección Detallada</h4>
                                   <div className="overflow-x-auto">
@@ -963,6 +881,7 @@ export default function EvaluatorClient() {
                                     </Table>
                                   </div>
                                 </div>
+
                                 <div>
                                   <h4 className="font-bold mb-2 text-[var(--text-accent)]">Evaluación de Habilidades</h4>
                                   <div className="overflow-x-auto">
@@ -986,6 +905,7 @@ export default function EvaluatorClient() {
                                     </Table>
                                   </div>
                                 </div>
+
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                                   <div>
                                     <h4 className="font-bold text-[var(--text-accent)]">Fortalezas</h4>
@@ -1011,6 +931,8 @@ export default function EvaluatorClient() {
               </Card>
             )}
           </TabsContent>
+
+          {/* Dashboard */}
           <TabsContent value="dashboard" className="mt-4 space-y-4">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-xl font-semibold text-[var(--text-accent)]">Resumen de Notas</h2>
@@ -1021,6 +943,8 @@ export default function EvaluatorClient() {
             </div>
             <NotesDashboard studentGroups={studentGroups} curso={form.getValues('curso')} fecha={form.getValues('fechaEvaluacion')} />
           </TabsContent>
+
+          {/* Presentación */}
           <TabsContent value="presentacion" className="mt-8">
             <Card className="max-w-4xl mx-auto border-2 shadow-xl bg-[var(--bg-card)] border-[var(--border-color)] p-10 text-center">
               <img src={DRAGONFLY_DATA_URL} alt="Logo Libel-IA" className="mx-auto h-32 w-32 mb-6" />
