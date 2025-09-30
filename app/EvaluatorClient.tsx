@@ -13,7 +13,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -309,6 +309,8 @@ interface RetroalimentacionEstructurada {
 const formSchema = z.object({
   tipoEvaluacion: z.string().default('prueba'),
   rubrica: z.string().min(10, 'La rúbrica es necesaria.'),
+  // ✅ Nuevo campo para el puntaje total
+  puntajeTotal: z.string().min(1, 'El puntaje total es obligatorio.').regex(/^[0-9]+$/, 'El puntaje debe ser un número entero.'),
   pauta: z.string().optional(),
   flexibilidad: z.array(z.number()).default([3]),
   nombreProfesor: z.string().optional(),
@@ -359,6 +361,8 @@ export default function EvaluatorClient() {
     defaultValues: {
       tipoEvaluacion: 'prueba',
       rubrica: '',
+      // ✅ Valor por defecto para el nuevo campo
+      puntajeTotal: '100',
       pauta: '',
       flexibilidad: [3],
       nombreProfesor: '',
@@ -443,6 +447,15 @@ export default function EvaluatorClient() {
     const decimas = parseFloat(value) || 0;
     setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, decimasAdicionales: decimas } : g));
   };
+
+  const handlePuntajeChange = (groupId: string, value: string) => {
+    setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, puntaje: value } : g));
+  };
+  
+  const handleNotaChange = (groupId: string, value: string) => {
+    setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, nota: parseFloat(value) || 0 } : g));
+  };
+
   const removeUnassignedFile = (fileId: string) => { setUnassignedFiles(prev => prev.filter(f => f.id !== fileId)); };
 
   const handleNameExtraction = async () => {
@@ -476,7 +489,7 @@ export default function EvaluatorClient() {
       return;
     }
 
-    const { rubrica, pauta, flexibilidad, tipoEvaluacion, areaConocimiento } = form.getValues();
+    const { rubrica, pauta, flexibilidad, tipoEvaluacion, areaConocimiento, puntajeTotal } = form.getValues();
     if (!rubrica) {
       form.setError('rubrica', { type: 'manual', message: 'La rúbrica es requerida.' });
       return;
@@ -495,6 +508,8 @@ export default function EvaluatorClient() {
         tipoEvaluacion,
         areaConocimiento,
         userEmail,
+        // ✅ Se pasa el nuevo campo
+        puntajeTotal: Number(puntajeTotal),
       };
 
       const result = await evaluate(payload);
@@ -704,12 +719,22 @@ export default function EvaluatorClient() {
                         </div>
                       </div>
                     </div>
-
+                    {/* ✅ NUEVO CAMPO DE PUNTAJE TOTAL */}
+                    <FormField control={form.control} name="puntajeTotal" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="font-bold text-[var(--text-accent)]">Puntaje Total</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ej: 60" type="number" {...field} />
+                        </FormControl>
+                        <FormDescription>Ingresa el puntaje máximo de la evaluación. Esto es obligatorio.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
                     <FormField control={form.control} name="rubrica" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="font-bold text-[var(--text-accent)]">Rúbrica (Criterios)</FormLabel>
                         <FormControl><Textarea placeholder="Ej: Evalúa claridad, estructura, ortografía..." className="min-h-[100px]" {...field} /></FormControl>
-                        <FormDescription>Importante: Incluye el puntaje total de la evaluación (Ej: "Puntaje total: 60 puntos").</FormDescription>
+                        <FormDescription>Describe los criterios de evaluación. Ya no es necesario incluir el puntaje total aquí.</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )} />
@@ -848,7 +873,13 @@ export default function EvaluatorClient() {
                                 <div className="flex justify-between items-start bg-[var(--bg-muted-subtle)] p-4 rounded-lg">
                                   <div>
                                     <p className="text-sm font-bold">PUNTAJE</p>
-                                    <p className="text-xl font-semibold">{group.puntaje || 'N/A'}</p>
+                                    <Input
+                                      className="text-xl font-semibold w-24 h-12 text-center"
+                                      type="text"
+                                      value={group.puntaje || ''}
+                                      onChange={e => handlePuntajeChange(group.id, e.target.value)}
+                                      placeholder="N/A"
+                                    />
                                   </div>
                                   <div className="text-right">
                                     <div className="flex items-center gap-2">
@@ -856,7 +887,14 @@ export default function EvaluatorClient() {
                                       <Input id={`decimas-${group.id}`} type="number" step={0.1} defaultValue={group.decimasAdicionales} onChange={e => handleDecimasChange(group.id, e.target.value)} className="h-8 w-20" />
                                     </div>
                                     <p className="text-sm font-bold mt-2">NOTA FINAL</p>
-                                    <p className="text-3xl font-bold text-blue-600">{finalNota.toFixed(1)}</p>
+                                    <Input
+                                      className="text-3xl font-bold w-24 h-12 text-center text-blue-600 border-none bg-transparent"
+                                      type="number"
+                                      step={0.1}
+                                      value={group.nota ? (parseFloat(group.nota as string) + group.decimasAdicionales).toFixed(1) : ''}
+                                      onChange={e => handleNotaChange(group.id, e.target.value)}
+                                      placeholder="N/A"
+                                    />
                                   </div>
                                 </div>
 
