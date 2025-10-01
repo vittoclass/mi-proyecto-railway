@@ -1020,4 +1020,3 @@ export default function EvaluatorClient() {
     </div>
   );
 }
-<p className="mt-3 text-xl italic text-cyan-300">&ldquo;Evaluación con Inteligencia Docente: Hecha por un Profe, para Profes&rdquo;</p>
