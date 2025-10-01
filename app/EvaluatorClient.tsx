@@ -32,7 +32,7 @@ import { useEvaluator } from './useEvaluator';
 // PDF Components
 import { Document, Page, Text, View, StyleSheet, PDFDownloadLink, Image as PDFImage, PDFViewer, pdf } from '@react-pdf/renderer';
 
-const SmartCameraModal = dynamic(() => import('@/components/smart-camera-modal'), { ssr: false, loading: () => <p>Loading...</p> });
+const SmartCameraModal = dynamic(() => import('@/components/smart-camera-modal'), { ssr: false, loading: () => <p>Cargando...</p> });
 
 const Label = React.forwardRef<HTMLLabelElement, React.ComponentPropsWithoutRef<'label'>>(({ className, ...props }, ref) => (
   <label ref={ref} className={cn('text-sm font-medium', className)} {...props} />
@@ -108,7 +108,8 @@ const styles = StyleSheet.create({
     infoText: { fontSize: 9, color: '#4B5563', marginVertical: 1 },
     studentLine: { fontSize: 9, color: '#111827', marginTop: 5 },
     sectionTitle: { fontSize: 10, fontWeight: 'bold' as 'bold', paddingBottom: 2, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', marginBottom: 5, marginTop: 8 },
-    table: { display: 'table', width: '100%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 6 },
+    // CORRECCIÓN: Se elimina 'display: "table"' que no es compatible con la librería de PDF.
+    table: { width: '100%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 6 },
     tableRow: { margin: 'auto', flexDirection: 'row', borderBottomWidth: 1, borderColor: '#E5E7EB' },
     tableColHeader: { width: '35%', backgroundColor: '#F9FAFB', padding: 2, borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB' },
     tableCol: { width: '35%', padding: 2, borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB' },
