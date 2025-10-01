@@ -7,7 +7,6 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import dynamic from 'next/dynamic';
 import { format } from 'date-fns';
-// CORRECCIÓN: Se importa el componente Image de Next.js
 import Image from 'next/image';
 
 // UI (shadcn)
@@ -105,7 +104,7 @@ const styles = StyleSheet.create({
   page: { padding: 20, fontSize: 10, lineHeight: 1.25 },
   header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, paddingBottom: 5, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
   headerLeft: { flexDirection: 'row', alignItems: 'center' },
-  headerRight: { textAlign: 'right' },
+  headerRight: { textAlign: 'right' as 'right' },
   logoLibelia: { height: 28, width: 28 },
   logoColegio: { maxHeight: 30, maxWidth: 110, objectFit: 'contain' },
   title: { fontSize: 13, fontWeight: 'bold', color: '#4F46E5' },
@@ -122,7 +121,7 @@ const styles = StyleSheet.create({
   areasMejora: { backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A' },
   feedbackTitle: { fontSize: 9, fontWeight: 'bold', color: '#166534', marginBottom: 3 },
   feedbackImproveTitle: { fontSize: 9, fontWeight: 'bold', color: '#854D0E', marginBottom: 3 },
-  feedbackText: { fontSize: 8, lineHeight: 1.15, flexWrap: 'wrap' as any },
+  feedbackText: { fontSize: 8, lineHeight: 1.15, flexWrap: 'wrap' },
 
   table: { display: 'table', width: '100%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 6 },
   tableRow: { margin: 'auto', flexDirection: 'row', borderBottomWidth: 1, borderColor: '#E5E7EB' },
@@ -135,11 +134,11 @@ const styles = StyleSheet.create({
   col30: { width: '30%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', padding: 2 },
 
   habCol45: { width: '45%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', padding: 2 },
-  habCol18: { width: '18%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', padding: 2, textAlign: 'center' as any },
+  habCol18: { width: '18%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', padding: 2, textAlign: 'center' as 'center' },
   habCol37: { width: '37%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', padding: 2 },
 
   tableCellHeader: { margin: 1, fontSize: 8, fontWeight: 'bold' },
-  tableCell: { margin: 1, fontSize: 8, textAlign: 'left' as any },
+  tableCell: { margin: 1, fontSize: 8, textAlign: 'left' as 'left' },
 });
 
 // ====== Helpers ======
@@ -184,15 +183,15 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
 
         {/* KPIs */}
         <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
-          <View style={{ flex: 1, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', padding: 5, borderRadius: 6, textAlign: 'center' as any }}>
+          <View style={{ flex: 1, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', padding: 5, borderRadius: 6, textAlign: 'center' as 'center' }}>
             <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#4B5563', marginBottom: 2 }}>Puntaje</Text>
             <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#4F46E5' }}>{puntaje}</Text>
           </View>
-          <View style={{ flex: 1, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', padding: 5, borderRadius: 6, textAlign: 'center' as any }}>
+          <View style={{ flex: 1, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', padding: 5, borderRadius: 6, textAlign: 'center' as 'center' }}>
             <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#4B5563', marginBottom: 2 }}>Nota</Text>
             <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#4F46E5' }}>{notaFinal}</Text>
           </View>
-          <View style={{ flex: 1, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', padding: 5, borderRadius: 6, textAlign: 'center' as any }}>
+          <View style={{ flex: 1, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', padding: 5, borderRadius: 6, textAlign: 'center' as 'center' }}>
             <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#4B5563', marginBottom: 2 }}>Fecha</Text>
             <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#4F46E5' }}>{format(new Date(), 'dd/MM/yyyy')}</Text>
           </View>
@@ -610,8 +609,7 @@ export default function EvaluatorClient() {
                 {/* CORRECCIÓN: Se usa el componente Image de Next.js */}
                 <Image src={DRAGONFLY_DATA_URL} alt="Logo" width={144} height={144} className="mx-auto mb-4" />
                 <h1 className={`text-6xl font-bold ${wordmarkClass} font-logo`}>Libel-IA</h1>
-                {/* CORRECCIÓN: Se escapan las comillas con entidades HTML */}
-                <p className="mt-3 text-xl italic text-cyan-300">&ldquo;Evaluación con Inteligencia Docente: Hecha por un Profe, para Profes&rdquo;</p>
+                <p className="mt-3 text-xl italic text-cyan-300">“Evaluación con Inteligencia Docente: Hecha por un Profe, para Profes”</p>
                 <p className="mt-6 text-lg text-[var(--text-secondary)]">Asistente pedagógico inteligente que analiza las respuestas de tus estudiantes, genera retroalimentación detallada y crea informes al instante.</p>
                 <Button size="lg" className="mt-8 text-lg py-6 px-8" onClick={() => setActiveTab('evaluator')}>
                   Comenzar a Evaluar <Sparkles className="ml-2 h-5 w-5" />
@@ -783,7 +781,7 @@ export default function EvaluatorClient() {
                     <div className="flex flex-wrap gap-4 items-center">
                       {unassignedFiles.map(file => (
                         <div key={file.id} className="relative w-24 h-24">
-                          {/* CORRECCIÓN: Se usa el componente Image de Next.js con 'fill' */}
+                          {/* CORRECCIÓN: Se usa el componente Image de Next.s con 'fill' */}
                           <Image src={file.previewUrl} alt={file.file.name} fill={true} className="object-cover rounded-md" />
                           <button onClick={() => removeUnassignedFile(file.id)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 transition-colors" aria-label="Eliminar archivo">
                             <X className="h-3 w-3" />
@@ -814,7 +812,7 @@ export default function EvaluatorClient() {
                       <div className="flex flex-wrap gap-2 min-h-[50px] bg-[var(--bg-muted-subtle)] p-2 rounded-md">
                         {group.files.map(file => (
                           <div key={file.id} className="relative w-20 h-20">
-                            {/* CORRECCIÓN: Se usa el componente Image de Next.js con 'fill' */}
+                            {/* CORRECCIÓN: Se usa el componente Image de Next.s con 'fill' */}
                             <Image src={file.previewUrl} alt={file.file.name} fill={true} className="object-cover rounded-md" />
                             <button onClick={() => removeFileFromGroup(file.id, group.id)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5">
                               <X className="h-3 w-3" />

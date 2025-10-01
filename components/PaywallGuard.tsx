@@ -21,20 +21,14 @@ function SaveEmailFromQuery({ children }: { children: React.ReactNode }) {
 }
 
 export default function PaywallGuard({ userEmail, children, redirect = false }: Props) {
+  // CORRECCIÓN: Todos los hooks se declaran al principio del componente.
   const pathname = usePathname();
   const search = useSearchParams();
-
   const [loading, setLoading] = useState(true);
   const [saldo, setSaldo] = useState<number>(0);
-
-  // 🔓 Siempre permitir /pagos PERO guardando el email si viene por query
-  if (pathname?.startsWith("/pagos")) {
-    return <SaveEmailFromQuery>{children}</SaveEmailFromQuery>;
-  }
-
-  // Email efectivo: prop -> query -> localStorage
   const [effectiveEmail, setEffectiveEmail] = useState<string | null>(null);
 
+  // Email efectivo: prop -> query -> localStorage
   useEffect(() => {
     const qEmail = search.get("email");
     let chosen = (userEmail ?? "") || "";
@@ -86,6 +80,12 @@ export default function PaywallGuard({ userEmail, children, redirect = false }: 
     };
     run();
   }, [effectiveEmail]);
+
+  // CORRECCIÓN: La lógica de retorno anticipado ahora se ejecuta DESPUÉS de llamar a todos los hooks.
+  // 🔓 Siempre permitir /pagos PERO guardando el email si viene por query
+  if (pathname?.startsWith("/pagos")) {
+    return <SaveEmailFromQuery>{children}</SaveEmailFromQuery>;
+  }
 
   if (loading) {
     return <div className="p-6 text-sm opacity-70">Comprobando acceso…</div>;

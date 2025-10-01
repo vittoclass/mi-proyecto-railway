@@ -1,4 +1,3 @@
-@'
 import type { NextApiRequest, NextApiResponse } from "next";
 
 function normBase(raw: string) {
@@ -74,8 +73,3 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ error: e?.message || "Error creando pago" });
   }
 }
-'@ | Out-File -Encoding utf8 -NoNewline "pages\api\khipu.ts"
-
-git add -A
-git commit -m "diag: /api/khipu muestra used_url, env y preview de respuesta"
-git push
