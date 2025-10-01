@@ -11,7 +11,7 @@ import { format } from 'date-fns';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -38,7 +38,24 @@ const DRAGONFLY_DATA_URL = `...`;
 const wordmarkClass = '...';
 const GlobalStyles = () => ( <style jsx global>{`...`}</style> );
 const styles = StyleSheet.create({ /* ... tus estilos PDF ... */ });
-const splitCorreccionForTwoPages = (lista: any[] | undefined) => { /* ... tu helper ... */ };
+
+// --- CORRECCIÓN: IMPLEMENTACIÓN DE LA FUNCIÓN splitCorreccionForTwoPages ---
+const splitCorreccionForTwoPages = (lista: any[] | undefined) => {
+  if (!lista || lista.length === 0) {
+    // Asegura que siempre se devuelva el objeto esperado, incluso si la lista está vacía
+    return { first: [], rest: [] };
+  }
+  
+  // Calcula el punto medio para dividir la lista
+  const halfIndex = Math.ceil(lista.length / 2);
+  
+  return {
+    first: lista.slice(0, halfIndex),
+    rest: lista.slice(halfIndex),
+  };
+};
+// --- FIN DE LA CORRECCIÓN ---
+
 
 // --- CAMBIO CLAVE: Componente PDF más robusto y con la corrección del logo ---
 const ReportDocument = ({ group, formData, logoPreview }: any) => {
@@ -48,6 +65,7 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
   const habilidades = retro.evaluacion_habilidades || [];
   const alternativas = retro.retroalimentacion_alternativas || [];
   
+  // Ahora esta línea funciona correctamente porque la función devuelve un objeto.
   const { first: correccionP1, rest: correccionP2 } = splitCorreccionForTwoPages(correccion);
 
   return (
@@ -72,8 +90,115 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
             <Text style={styles.infoText}>Fecha: {format(new Date(), 'dd/MM/yyyy')}</Text>
           </View>
         </View>
-        {/* ... (El resto de tu documento PDF se mantiene igual) ... */}
+        
+        {/* Sección de Puntaje y Fortalezas/Mejoras */}
+        <View style={styles.sectionHeader}>
+            <View style={styles.scoreBox}>
+                <Text style={styles.scoreText}>Puntaje</Text>
+                <Text style={styles.scoreValue}>{group.puntaje || 'N/A'}</Text>
+            </View>
+            <View style={styles.scoreBox}>
+                <Text style={styles.scoreText}>Nota</Text>
+                <Text style={styles.scoreValue}>{group.nota || 'N/A'}</Text>
+            </View>
+            <View style={styles.headerRightInfo}>
+                <Text style={styles.infoText}>Alumno: {group.studentName}</Text>
+                <Text style={styles.infoText}>Curso: {formData.curso || 'N/A'}</Text>
+            </View>
+        </View>
+
+        <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Fortalezas</Text>
+            <Text style={styles.bodyText}>{resumen.fortalezas}</Text>
+        </View>
+
+        <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Áreas de Mejora</Text>
+            <Text style={styles.bodyText}>{resumen.areas_mejora}</Text>
+        </View>
+
+        <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Corrección Detallada</Text>
+            <View style={styles.table}>
+                <View style={styles.tableRowHeader}>
+                    <Text style={styles.tableColHeaderSeccion}>Sección</Text>
+                    <Text style={styles.tableColHeaderDetalle}>Detalle</Text>
+                </View>
+                {correccionP1.map((item: any, index: number) => (
+                    <View style={styles.tableRow} key={index}>
+                        <Text style={styles.tableColSeccion}>{item.seccion}</Text>
+                        <Text style={styles.tableColDetalle}>{item.detalle}</Text>
+                    </View>
+                ))}
+            </View>
+        </View>
       </Page>
+      
+      {/* Segunda Página (si hay contenido de corrección o habilidades) */}
+      {(correccionP2.length > 0 || habilidades.length > 0 || alternativas.length > 0) && (
+        <Page size="A4" style={styles.page}>
+            {/* Si hay corrección que no cupo en la P1, la mostramos aquí */}
+            {correccionP2.length > 0 && (
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Corrección Detallada (Cont.)</Text>
+                    <View style={styles.table}>
+                        <View style={styles.tableRowHeader}>
+                            <Text style={styles.tableColHeaderSeccion}>Sección</Text>
+                            <Text style={styles.tableColHeaderDetalle}>Detalle</Text>
+                        </View>
+                        {correccionP2.map((item: any, index: number) => (
+                            <View style={styles.tableRow} key={index}>
+                                <Text style={styles.tableColSeccion}>{item.seccion}</Text>
+                                <Text style={styles.tableColDetalle}>{item.detalle}</Text>
+                            </View>
+                        ))}
+                    </View>
+                </View>
+            )}
+
+            {/* Evaluación de Habilidades */}
+            {habilidades.length > 0 && (
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Evaluación de Habilidades</Text>
+                    <View style={styles.table}>
+                        <View style={styles.tableRowHeader}>
+                            <Text style={styles.tableColHeaderHabilidad}>Habilidad</Text>
+                            <Text style={styles.tableColHeaderNivel}>Nivel</Text>
+                            <Text style={styles.tableColHeaderEvidencia}>Evidencia</Text>
+                        </View>
+                        {habilidades.map((item: any, index: number) => (
+                            <View style={styles.tableRow} key={index}>
+                                <Text style={styles.tableColHabilidad}>{item.habilidad}</Text>
+                                <Text style={styles.tableColNivel}>{item.evaluacion}</Text>
+                                <Text style={styles.tableColEvidencia}>{item.evidencia}</Text>
+                            </View>
+                        ))}
+                    </View>
+                </View>
+            )}
+            
+            {/* Respuestas Alternativas */}
+            {alternativas.length > 0 && (
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Respuestas Alternativas</Text>
+                    <View style={styles.table}>
+                        <View style={styles.tableRowHeader}>
+                            <Text style={styles.tableColHeaderPregunta}>Pregunta</Text>
+                            <Text style={styles.tableColHeaderRespuesta}>Respuesta Estudiante</Text>
+                            <Text style={styles.tableColHeaderRespuesta}>Respuesta Correcta</Text>
+                        </View>
+                        {alternativas.map((item: any, index: number) => (
+                            <View style={styles.tableRow} key={index}>
+                                <Text style={styles.tableColPregunta}>{item.pregunta}</Text>
+                                <Text style={styles.tableColRespuesta}>{item.respuesta_estudiante}</Text>
+                                <Text style={styles.tableColRespuesta}>{item.respuesta_correcta}</Text>
+                            </View>
+                        ))}
+                    </View>
+                </View>
+            )}
+        </Page>
+      )}
     </Document>
   );
 };
