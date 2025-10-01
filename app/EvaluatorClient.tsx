@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
   areasMejora: { backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A' },
   feedbackTitle: { fontSize: 9, fontWeight: 'bold', color: '#166534', marginBottom: 3 },
   feedbackImproveTitle: { fontSize: 9, fontWeight: 'bold', color: '#854D0E', marginBottom: 3 },
-  feedbackText: { fontSize: 8, lineHeight: 1.15, flexWrap: 'wrap' },
+  feedbackText: { fontSize: 8, lineHeight: 1.15, flexWrap: 'wrap' as 'wrap' },
 
   table: { display: 'table', width: '100%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 6 },
   tableRow: { margin: 'auto', flexDirection: 'row', borderBottomWidth: 1, borderColor: '#E5E7EB' },
@@ -1020,3 +1020,5 @@ export default function EvaluatorClient() {
     </div>
   );
 }
+
+<p className="mt-3 text-xl italic text-cyan-300">“Evaluación con Inteligencia Docente: Hecha por un Profe, para Profes”</p>
