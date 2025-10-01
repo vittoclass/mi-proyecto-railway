@@ -42,7 +42,7 @@ const generalPromptBase = (rubrica: string, pauta: string, puntajeTotal: number,
       "puntaje": "PUNTAJE OBTENIDO/PUNTAJE TOTAL",
       "nota": NOTA_NUMÉRICA,
       "retroalimentacion": {
-        "resumen_general": { "fortalezas": "DEBE INCLUIR CITAS TEXTUALES.", "areas_mejoras": "DEBE INCLUIR CITAS TEXTUALES." },
+        "resumen_general": { "fortalezas": "DEBE INCLUIR CITAS TEXTUALES.", "areas_mejora": "DEBE INCLUIR CITAS TEXTUALES." },
         "correccion_detallada": [ {"seccion": "...", "detalle": "..."} ],
         "evaluacion_habilidades": [ {"habilidad": "...", "evaluacion": "...", "evidencia": "CITA TEXTUAL EXACTA. OBLIGATORIO."} ],
         "retroalimentacion_alternativas": [ {"pregunta": "...", "respuesta_estudiante": "...", "respuesta_correcta": "..."} ]
@@ -51,7 +51,6 @@ const generalPromptBase = (rubrica: string, pauta: string, puntajeTotal: number,
     \`\`\`
     
     Considera un nivel de flexibilidad de ${flexibilidad} (1=estricto, 5=flexible) al asignar la nota.`;
-// --- FIN DE generalPromptBase MODIFICADO ---
 
 const promptsExpertos = {
     // General (Usa OCR y la base rigurosa)
@@ -83,11 +82,59 @@ const promptsExpertos = {
     ingles: (textoExtraido: string, rubrica: string, pauta: string, puntajeTotal: number, flexibilidad: number, itemsEsperados?: string, nombreEstudiante?: string, respuestasAlternativas?: { [key: string]: string }, pautaCorrectaAlternativas?: { [key: string]: string }) => promptsExpertos.general(textoExtraido, rubrica, pauta, puntajeTotal, flexibilidad, itemsEsperados, nombreEstudiante, respuestasAlternativas, pautaCorrectaAlternativas),
 };
 
-async function extractTextFromImages(imageBuffers: Buffer[]): Promise<string> { 
-    // ... (sin cambios)
+// --- IMPLEMENTACIÓN DE LAS FUNCIONES FALTANTES PARA PREVENIR ERRORES DE COMPILACIÓN ---
+async function extractTextFromImages(imageBuffers: Buffer[]): Promise<string> {
+    const textPromises = imageBuffers.map(async (buffer) => {
+        try {
+            // Utilizamos sharp para convertir a formato compatible (PNG o JPEG) para Azure
+            const processedBuffer = await sharp(buffer).jpeg().toBuffer();
+            
+            const poller = await docIntelClient.beginAnalyzeDocument("prebuilt-read", processedBuffer, {
+                contentType: 'image/jpeg'
+            });
+
+            const { content } = await poller.pollUntilDone();
+            return content || "";
+        } catch (e) {
+            console.error("Error during OCR extraction:", e);
+            return "";
+        }
+    });
+
+    const results = await Promise.all(textPromises);
+    // Combina el texto de todas las páginas en un solo string
+    return results.join('\n\n--- FIN DE PÁGINA ---\n\n');
 }
-interface EvaluationResponse { /* ... (sin cambios) ... */ }
-const validateEvaluationResponse = (obj: any): EvaluationResponse => { /* ... (sin cambios) ... */ };
+
+interface EvaluationResponse {
+    puntaje: string;
+    nota: number | string;
+    retroalimentacion: {
+        resumen_general: { fortalezas: string; areas_mejora: string };
+        correccion_detallada: { seccion: string; detalle: string }[];
+        evaluacion_habilidades: { habilidad: string; evaluacion: string; evidencia: string }[];
+        retroalimentacion_alternativas: { pregunta: string; respuesta_estudiante: string; respuesta_correcta: string }[];
+    };
+}
+
+const validateEvaluationResponse = (obj: any): EvaluationResponse => {
+    // Implementación simple de validación/tipado. En un entorno real se usaría Zod.
+    if (!obj || !obj.puntaje || !obj.nota || !obj.retroalimentacion) {
+        throw new Error("Invalid structure returned from AI model.");
+    }
+    return obj as EvaluationResponse;
+};
+
+const cleanJson = (str: string): string => {
+    // Función para limpiar el JSON si la IA devuelve código en bloques Markdown
+    const match = str.match(/```json\n([\s\S]*?)\n```/);
+    if (match) {
+        return match[1].trim();
+    }
+    return str.trim();
+};
+// --- FIN DE IMPLEMENTACIÓN DE FUNCIONES FALTANTES ---
+
 
 export async function POST(req: NextRequest) {
     try {
@@ -107,12 +154,12 @@ export async function POST(req: NextRequest) {
                 const response = await fetch(url);
                 const arrayBuffer = await response.arrayBuffer();
                 const buffer = Buffer.from(arrayBuffer);
+                // Reduce el tamaño de la imagen para Mistral
                 const resizedBuffer = await sharp(buffer).resize({ width: 1024, withoutEnlargement: true }).webp({ quality: 80 }).toBuffer();
                 return `data:image/webp;base64,${resizedBuffer.toString('base64')}`;
             }));
 
             const getPrompt = promptsExpertos.artes;
-            // Se pasa la pauta a la función de Artes
             prompt = getPrompt(rubrica, pauta, Number(puntajeTotal), flexibilidad, itemsEsperados, nombreEstudiante, respuestasAlternativas, pautaCorrectaAlternativas);
             
             messages = [{
@@ -132,10 +179,10 @@ export async function POST(req: NextRequest) {
                 return Buffer.from(arrayBuffer);
             }));
             
+            // Llama a la función extractTextFromImages implementada
             const textoExtraido = await extractTextFromImages(imageBuffers);
 
             const getPrompt = promptsExpertos[areaConocimiento as keyof typeof promptsExpertos] || promptsExpertos.general;
-            // Se pasa la pauta a la función de OCR
             prompt = getPrompt(textoExtraido, rubrica, pauta, Number(puntajeTotal), flexibilidad, itemsEsperados, nombreEstudiante, respuestasAlternativas, pautaCorrectaAlternativas);
 
             messages = [{
@@ -154,13 +201,18 @@ export async function POST(req: NextRequest) {
         
         const content = aiResponse.choices[0].message.content;
 
-        if (!content) { /* ... (sin cambios) ... */ }
-        const cleanJson = (str: string): string => { /* ... (sin cambios) ... */ };
+        if (!content) {
+             return NextResponse.json({ success: false, error: 'La IA no devolvió contenido de evaluación.' }, { status: 500 });
+        }
+
         const cleanedContent = cleanJson(content);
         let resultado;
         try {
             resultado = JSON.parse(cleanedContent);
-        } catch (error) { /* ... (sin cambios) ... */ }
+        } catch (error) {
+            console.error('Error al parsear JSON:', error);
+            return NextResponse.json({ success: false, error: 'La respuesta de la IA no es un JSON válido.' }, { status: 500 });
+        }
 
         const finalResult = validateEvaluationResponse(resultado);
         console.log("Respuesta final enviada al frontend:", finalResult);
