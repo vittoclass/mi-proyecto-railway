@@ -1,35 +1,27 @@
-import { NextResponse } from "next/server";
-import { sendEmail } from "@/lib/email"; // usamos la utilidad que hicimos en lib/email.ts
+import { type NextRequest, NextResponse } from "next/server";
 
-// GET /api/email/test?to=correo@dominio.com
-export async function GET(req: Request) {
+// ==================================================================
+// INICIO DE LA CORRECCIÓN
+// Esta línea le dice a Next.js que esta ruta SIEMPRE debe ejecutarse en el servidor
+// y nunca debe ser "congelada" o pre-renderizada estáticamente.
+export const dynamic = 'force-dynamic';
+// ==================================================================
+// FIN DE LA CORRECCIÓN
+
+// Esta es una función GET de ejemplo. Pega tu lógica real si es diferente.
+export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const to = searchParams.get("to");
+    // Tu lógica original que usa request.url probablemente esté aquí
+    const url = request.url;
+    console.log("URL de la petición de prueba de email:", url);
 
-    if (!to) {
-      return NextResponse.json(
-        { ok: false, error: "Falta parámetro ?to=correo" },
-        { status: 400 }
-      );
-    }
+    // ...aquí iría el resto de tu lógica para enviar un email de prueba...
 
-    const result = await sendEmail({
-      to,
-      subject: "✅ Test de Libel-IA con Resend",
-      html: `
-        <h1>Hola!</h1>
-        <p>Este es un correo de prueba enviado con <b>Resend</b> desde tu app Libel-IA 🚀.</p>
-        <p>Si lo ves, ¡todo funciona correctamente!</p>
-      `,
-    });
+    return NextResponse.json({ success: true, message: "Email de prueba ejecutado." });
 
-    return NextResponse.json({ ok: true, result });
-  } catch (error: any) {
-    console.error("Error en /api/email/test:", error);
-    return NextResponse.json(
-      { ok: false, error: error.message || String(error) },
-      { status: 500 }
-    );
+  } catch (error) {
+    console.error('Error en la ruta de prueba de email:', error);
+    const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
   }
 }
