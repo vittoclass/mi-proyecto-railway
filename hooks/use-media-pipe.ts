@@ -41,14 +41,29 @@ export const useMediaPipe = () => {
       if (!objectDetector || video.readyState < 2) return []
 
       const detections = objectDetector.detectForVideo(video, Date.now())
+      // ==================================================================
+      // INICIO DE LA CORRECCIÓN
+      // Se "traducen" las propiedades del boundingBox para que coincidan con la interfaz.
+      // ==================================================================
       return (
-        detections.detections.map((detection) => ({
-          label: detection.categories[0].categoryName,
-          boundingBox: detection.boundingBox!,
-        })) || []
-      )
+        detections.detections.map((detection) => {
+          const boundingBox = detection.boundingBox!;
+          return {
+            label: detection.categories[0].categoryName,
+            boundingBox: {
+              x: boundingBox.originX,
+              y: boundingBox.originY,
+              width: boundingBox.width,
+              height: boundingBox.height,
+            },
+          };
+        }) || []
+      );
+      // ==================================================================
+      // FIN DE LA CORRECCIÓN
+      // ==================================================================
     },
-    [objectDetector],
+    [objectDetector]
   )
 
   useEffect(() => {

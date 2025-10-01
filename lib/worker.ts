@@ -1,4 +1,3 @@
-// lib/worker.ts
 import { redis } from './redis'; // Importa la conexión a Redis.
 import OpenAI from "openai";
 
@@ -11,7 +10,20 @@ async function processJobs() {
     while (true) {
         try {
             // Espera un trabajo de la cola 'evaluation-jobs'
-            const [listName, jobId] = await redis.blpop('evaluation-jobs', 0);
+            const result = await redis.blpop('evaluation-jobs', 0);
+
+            // ==================================================================
+            // INICIO DE LA CORRECCIÓN
+            // Se verifica si el resultado no es null antes de desestructurarlo.
+            // ==================================================================
+            if (!result) {
+                // Si no hay resultado, simplemente continúa el bucle y espera el siguiente.
+                continue;
+            }
+            const [listName, jobId] = result;
+            // ==================================================================
+            // FIN DE LA CORRECCIÓN
+            // ==================================================================
             
             // Carga los detalles del trabajo desde Redis
             const jobData = await redis.get(jobId);
@@ -28,7 +40,7 @@ async function processJobs() {
             
             const prompt = `Evalúa el siguiente trabajo con la siguiente rúbrica:\n\nRubrica: ${rubrica}\n\nTrabajo del estudiante: ${files[0]}\n\nRespuesta correcta (opcional): ${pauta}\n\nNivel de flexibilidad: ${flexibilidad}`;
 
-            const completion = await openai.chat.completions.generate({
+            const completion = await openai.chat.completions.create({
                 model: "gpt-4o",
                 messages: [
                     { role: "system", content: "Eres un asistente de evaluación para profesores, tu misión es evaluar de manera precisa y constructiva el trabajo de un estudiante. Siempre incluye en tu respuesta un informe completo y conciso. Asegúrate de incluir el puntaje y la nota. En tu respuesta JSON, utiliza los campos 'informe_original', 'puntaje' y 'nota'." },
@@ -37,6 +49,9 @@ async function processJobs() {
                 response_format: { type: "json_object" }
             });
 
+            if (!completion.choices[0].message.content) {
+                throw new Error("La respuesta de la IA vino vacía.");
+            }
             const aiResult = JSON.parse(completion.choices[0].message.content);
 
             // === Actualiza el estado del trabajo en Redis ===
@@ -47,7 +62,8 @@ async function processJobs() {
             
         } catch (error) {
             console.error("Error en el worker:", error);
-            // Si algo falla, marca el trabajo como fallido
+            // Si algo falla, podrías querer marcar el trabajo como fallido.
+            // Por ejemplo, si tienes el 'jobId' disponible aquí.
             // await redis.set(`job:${jobId}:status`, 'failed');
         }
     }
@@ -55,3 +71,4 @@ async function processJobs() {
 
 // Inicia el worker
 processJobs();
+

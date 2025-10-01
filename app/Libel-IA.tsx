@@ -2,24 +2,26 @@
 'use client';
 
 import { useState } from 'react';
-// CORRECCIÓN: Se ajusta la ruta de importación para que apunte al archivo correcto en la misma carpeta.
 import { useEvaluator } from './useEvaluator';
 import SmartCameraModal from '@/components/smart-camera-modal'; // Asegúrate que esta ruta sea correcta
 
 export default function LibelIA() {
   // ==================================================================
   // INICIO DE LA ZONA DE HOOKS
-  // Todos los hooks deben estar aquí, al principio y sin condiciones.
   // ==================================================================
   const [fileUrl, setFileUrl] = useState<string>('');
   const [rubrica, setRubrica] = useState<string>('');
-  const { evaluate, isLoading, result } = useEvaluator();
+  const { evaluate, isLoading } = useEvaluator();
+  const [result, setResult] = useState<any>(null);
+  
+  // CORRECCIÓN: Se añade el estado para controlar la visibilidad del modal de la cámara.
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   // ==================================================================
   // FIN DE LA ZONA DE HOOKS
   // ==================================================================
 
 
-  const handleEvaluate = () => {
+  const handleEvaluate = async () => {
     if (!fileUrl) {
       alert('Primero debes tomar o subir una imagen.');
       return;
@@ -28,10 +30,22 @@ export default function LibelIA() {
       alert('Por favor, ingresa una rúbrica de evaluación.');
       return;
     }
-    // NOTA: La función 'evaluate' espera un objeto como payload.
-    // Esto se deberá ajustar según la definición real en 'useEvaluator.ts'
-    // Por ahora, lo dejamos conceptual.
-    // evaluate(fileUrl, rubrica); 
+    
+    const payload = {
+        fileUrls: [fileUrl],
+        rubrica: rubrica,
+        puntajeTotal: 100,
+        flexibilidad: 3,
+      };
+  
+    const evaluationResult = await evaluate(payload);
+    setResult(evaluationResult);
+  };
+
+  // Función para manejar la captura de la imagen desde el modal
+  const handleCapture = (dataUrl: string) => {
+    setFileUrl(dataUrl);
+    setIsCameraOpen(false); // Cierra el modal después de capturar
   };
 
   return (
@@ -52,10 +66,26 @@ export default function LibelIA() {
         />
       </div>
 
+      {/* CORRECCIÓN: Se añade un botón para abrir el modal de la cámara */}
+      <div className="mb-4">
+        <button onClick={() => setIsCameraOpen(true)} className="bg-gray-200 px-4 py-2 rounded-lg">
+          Abrir Cámara
+        </button>
+      </div>
+
       {/* Módulo de cámara y subida */}
-      {/* OJO: La ruta de importación de SmartCameraModal debe ser correcta.  
-           Aquí asumimos que está en la carpeta 'components' en la raíz. */}
-      <SmartCameraModal onCapture={setFileUrl} />
+      {/* CORRECCIÓN: El modal ahora se renderiza condicionalmente y se le pasa la propiedad 'onClose' obligatoria. */}
+      {isCameraOpen && (
+        <SmartCameraModal onCapture={handleCapture} onClose={() => setIsCameraOpen(false)} />
+      )}
+
+      {/* Previsualización de la imagen capturada */}
+      {fileUrl && (
+        <div className="mb-4">
+          <p className="font-medium">Imagen capturada:</p>
+          <img src={fileUrl} alt="Imagen capturada" className="border rounded-lg max-w-full h-auto" />
+        </div>
+      )}
 
       {/* Resultado de evaluación */}
       {isLoading && <p className="text-center mt-6">🔄 Evaluando con IA...</p>}
@@ -71,10 +101,9 @@ export default function LibelIA() {
           <h3 className="font-bold text-lg">{result.success ? '✅ Éxito' : '❌ Error'}</h3>
           {result.success ? (
             <div>
-              {/* Ajustar los campos según la respuesta real del hook */}
-              {/* <p className="mt-2"><strong>Retroalimentación:</strong> {result.retroalimentacion}</p>
+              <p className="mt-2"><strong>Retroalimentación:</strong> {result.retroalimentacion?.resumen_general?.fortalezas} {result.retroalimentacion?.resumen_general?.areas_mejora}</p>
               <p className="mt-1"><strong>Puntaje:</strong> {result.puntaje}</p>
-              <p className="mt-1"><strong>Nota:</strong> {result.nota}</p> */}
+              <p className="mt-1"><strong>Nota:</strong> {result.nota}</p>
             </div>
           ) : (
             <p className="mt-1">{result.error}</p>
@@ -99,3 +128,4 @@ export default function LibelIA() {
     </div>
   );
 }
+

@@ -1,16 +1,27 @@
-// Libel-IA.tsx
 'use client';
 
 import { useState } from 'react';
-import { useEvaluatorClient } from './EvaluatorClient';
-import SmartCameraModal from './smart-camera-modal';
+// CORRECCIÓN: La ruta debe apuntar al archivo correcto en la carpeta 'app'
+import { useEvaluator } from '../app/useEvaluator'; 
+import SmartCameraModal from '@/components/smart-camera-modal';
 
 export default function LibelIA() {
+  // ==================================================================
+  // INICIO DE LA ZONA DE HOOKS
+  // ==================================================================
   const [fileUrl, setFileUrl] = useState<string>('');
   const [rubrica, setRubrica] = useState<string>('');
-  const { evaluate, loading, result } = useEvaluatorClient();
+  // CORRECCIÓN: El hook devuelve 'isLoading', no 'loading'.
+  const { evaluate, isLoading } = useEvaluator();
+  const [result, setResult] = useState<any>(null);
+  
+  // CORRECCIÓN: Se añade el estado para controlar la visibilidad del modal de la cámara.
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  // ==================================================================
+  // FIN DE LA ZONA DE HOOKS
+  // ==================================================================
 
-  const handleEvaluate = () => {
+  const handleEvaluate = async () => {
     if (!fileUrl) {
       alert('Primero debes tomar o subir una imagen.');
       return;
@@ -19,7 +30,22 @@ export default function LibelIA() {
       alert('Por favor, ingresa una rúbrica de evaluación.');
       return;
     }
-    evaluate(fileUrl, rubrica);
+    
+    const payload = {
+        fileUrls: [fileUrl],
+        rubrica: rubrica,
+        puntajeTotal: 100, // Asumiendo un valor por defecto
+        flexibilidad: 3,  // Asumiendo un valor por defecto
+      };
+  
+    const evaluationResult = await evaluate(payload);
+    setResult(evaluationResult);
+  };
+
+  // Función para manejar la captura de la imagen desde el modal
+  const handleCapture = (dataUrl: string) => {
+    setFileUrl(dataUrl);
+    setIsCameraOpen(false); // Cierra el modal después de capturar
   };
 
   return (
@@ -40,10 +66,30 @@ export default function LibelIA() {
         />
       </div>
 
+      {/* CORRECCIÓN: Se añade un botón para abrir el modal de la cámara */}
+      <div className="mb-4">
+        <button onClick={() => setIsCameraOpen(true)} className="bg-gray-200 px-4 py-2 rounded-lg">
+          Abrir Cámara
+        </button>
+      </div>
+
       {/* Módulo de cámara y subida */}
-      <SmartCameraModal onCapture={setFileUrl} />
+      {/* CORRECCIÓN: El modal ahora se renderiza condicionalmente y se le pasa la propiedad 'onClose' obligatoria. */}
+      {isCameraOpen && (
+        <SmartCameraModal onCapture={handleCapture} onClose={() => setIsCameraOpen(false)} />
+      )}
+
+      {/* Previsualización de la imagen capturada */}
+      {fileUrl && (
+        <div className="mb-4">
+          <p className="font-medium">Imagen capturada:</p>
+          <img src={fileUrl} alt="Imagen capturada" className="border rounded-lg max-w-full h-auto" />
+        </div>
+      )}
 
       {/* Resultado de evaluación */}
+      {isLoading && <p className="text-center mt-6">🔄 Evaluando con IA...</p>}
+      
       {result && (
         <div
           className={`mt-6 p-4 rounded-lg border-l-4 ${
@@ -53,7 +99,15 @@ export default function LibelIA() {
           }`}
         >
           <h3 className="font-bold text-lg">{result.success ? '✅ Éxito' : '❌ Error'}</h3>
-          <p className="mt-1">{result.feedback || result.error}</p>
+          {result.success ? (
+            <div>
+              <p className="mt-2"><strong>Retroalimentación:</strong> {result.retroalimentacion?.resumen_general?.fortalezas} {result.retroalimentacion?.resumen_general?.areas_mejora}</p>
+              <p className="mt-1"><strong>Puntaje:</strong> {result.puntaje}</p>
+              <p className="mt-1"><strong>Nota:</strong> {result.nota}</p>
+            </div>
+          ) : (
+            <p className="mt-1">{result.error}</p>
+          )}
         </div>
       )}
 
@@ -61,14 +115,14 @@ export default function LibelIA() {
       <div className="mt-6">
         <button
           onClick={handleEvaluate}
-          disabled={loading || !fileUrl || !rubrica.trim()}
+          disabled={isLoading || !fileUrl || !rubrica.trim()}
           className={`w-full py-3 px-6 rounded-lg font-medium text-white transition
-            ${loading
+            ${isLoading
               ? 'bg-gray-400 cursor-not-allowed'
               : 'bg-blue-600 hover:bg-blue-700'
             }`}
         >
-          {loading ? '🔄 Evaluando con IA...' : '⚡ Evaluar con IA'}
+          {isLoading ? 'Evaluando...' : '⚡ Evaluar con IA'}
         </button>
       </div>
     </div>

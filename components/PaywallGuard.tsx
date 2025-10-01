@@ -12,25 +12,27 @@ type Props = {
 function SaveEmailFromQuery({ children }: { children: React.ReactNode }) {
   const search = useSearchParams();
   useEffect(() => {
-    const qEmail = search.get("email");
-    if (qEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(qEmail)) {
-      try { localStorage.setItem("userEmail", qEmail); } catch {}
+    // CORRECCIÓN: Se añade una comprobación para asegurar que 'search' no es null.
+    if (search) {
+      const qEmail = search.get("email");
+      if (qEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(qEmail)) {
+        try { localStorage.setItem("userEmail", qEmail); } catch {}
+      }
     }
   }, [search]);
   return <>{children}</>;
 }
 
 export default function PaywallGuard({ userEmail, children, redirect = false }: Props) {
-  // CORRECCIÓN: Todos los hooks se declaran al principio del componente.
   const pathname = usePathname();
   const search = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [saldo, setSaldo] = useState<number>(0);
   const [effectiveEmail, setEffectiveEmail] = useState<string | null>(null);
 
-  // Email efectivo: prop -> query -> localStorage
   useEffect(() => {
-    const qEmail = search.get("email");
+    // CORRECCIÓN: Se añade una comprobación aquí también por seguridad.
+    const qEmail = search ? search.get("email") : null;
     let chosen = (userEmail ?? "") || "";
 
     if (!chosen && qEmail) {
@@ -43,11 +45,9 @@ export default function PaywallGuard({ userEmail, children, redirect = false }: 
       } catch {}
     }
 
-    // normalizamos y validamos
     chosen = chosen.trim().toLowerCase();
     if (chosen && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(chosen)) {
       setEffectiveEmail(chosen);
-      // si vino por query, persiste
       if (qEmail && qEmail.toLowerCase() === chosen) {
         try { localStorage.setItem("userEmail", chosen); } catch {}
       }
@@ -56,7 +56,6 @@ export default function PaywallGuard({ userEmail, children, redirect = false }: 
     }
   }, [userEmail, search]);
 
-  // Consulta de saldo (igual que tu versión original, usando POST)
   useEffect(() => {
     const run = async () => {
       if (!effectiveEmail) {
@@ -81,8 +80,6 @@ export default function PaywallGuard({ userEmail, children, redirect = false }: 
     run();
   }, [effectiveEmail]);
 
-  // CORRECCIÓN: La lógica de retorno anticipado ahora se ejecuta DESPUÉS de llamar a todos los hooks.
-  // 🔓 Siempre permitir /pagos PERO guardando el email si viene por query
   if (pathname?.startsWith("/pagos")) {
     return <SaveEmailFromQuery>{children}</SaveEmailFromQuery>;
   }

@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
   table: {
-    display: "table",
+    // CORRECCIÓN: Se elimina 'display: "table"' que no es compatible.
     width: "100%",
     marginTop: 8,
     border: "1px solid #e5e7eb",

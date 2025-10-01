@@ -53,6 +53,11 @@ async function extractNameWithAI(combinedText: string): Promise<string[]> {
         });
 
         const content = aiResponse.choices[0].message.content;
+        // Se añade una comprobación para asegurar que 'content' no es null.
+        if (!content) {
+            console.error("❌ La respuesta de la IA para extraer nombres vino vacía (null).");
+            return [];
+        }
         const match = content.match(/({[\s\S]*})/);
         const cleanedContent = match ? match[1] : "{\"suggestions\":[]}";
         const result = JSON.parse(cleanedContent);
@@ -156,3 +161,4 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
     }
 }
+
