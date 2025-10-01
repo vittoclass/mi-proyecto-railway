@@ -56,7 +56,7 @@ const promptsExpertos = {
     // General (Usa OCR y la base rigurosa)
     general: (textoExtraido: string, rubrica: string, pauta: string, puntajeTotal: number, flexibilidad: number, itemsEsperados?: string, nombreEstudiante?: string, respuestasAlternativas?: { [key: string]: string }, pautaCorrectaAlternativas?: { [key: string]: string }) => `A continuación se presenta LA TRANSCRIPCIÓN COMPLETA del trabajo del estudiante. **TODA tu evaluación debe basarse EXCLUSIVAMENTE en este texto.** No asumas contenido visual.\n\n--- INICIO DE LA TRANSCRIPCIÓN ---\n${textoExtraido}\n--- FIN DE LA TRANSCRIPCIÓN ---\n\n${generalPromptBase(rubrica, pauta, puntajeTotal, flexibilidad, itemsEsperados, nombreEstudiante, respuestasAlternativas, pautaCorrectaAlternativas)}`,
     
-    // ARTES (Excepción, mantiene su foco visual sin la instrucción de OCR de texto extraído, pero usa la base rigurosa para alternativas y formato)
+    // ARTES (Excepción)
     artes: (rubrica: string, pauta: string, puntajeTotal: number, flexibilidad: number, itemsEsperados?: string, nombreEstudiante?: string, respuestasAlternativas?: { [key: string]: string }, pautaCorrectaAlternativas?: { [key: string]: string }) => {
         const visualFocusInstruction = `
         **INSTRUCCIÓN CRÍTICA DE ASIGNATURA: ARTES VISUALES - PROFESOR CONSTRUCTOR Y MENTOR** 🎨
@@ -70,11 +70,10 @@ const promptsExpertos = {
         CLÁUSULA DE CITACIÓN VISUAL: Las 'fortalezas', 'mejoras' y 'evidencia' deben ser descripciones formales y técnicas referidas al logro general, no a detalles aislados.
         ---
         `;
-        // Llama a la base general rigurosa, adaptando la citación a la descripción visual.
         return visualFocusInstruction + generalPromptBase(rubrica, pauta, Number(puntajeTotal), flexibilidad, itemsEsperados, nombreEstudiante, respuestasAlternativas, pautaCorrectaAlternativas);
     },
 
-    // Las demás asignaturas usan el flujo de texto OCR y la base rigurosa
+    // Las demás asignaturas usan el flujo de texto OCR
     matematicas: (textoExtraido: string, rubrica: string, pauta: string, puntajeTotal: number, flexibilidad: number, itemsEsperados?: string, nombreEstudiante?: string, respuestasAlternativas?: { [key: string]: string }, pautaCorrectaAlternativas?: { [key: string]: string }) => promptsExpertos.general(textoExtraido, rubrica, pauta, puntajeTotal, flexibilidad, itemsEsperados, nombreEstudiante, respuestasAlternativas, pautaCorrectaAlternativas),
     lenguaje: (textoExtraido: string, rubrica: string, pauta: string, puntajeTotal: number, flexibilidad: number, itemsEsperados?: string, nombreEstudiante?: string, respuestasAlternativas?: { [key: string]: string }, pautaCorrectaAlternativas?: { [key: string]: string }) => promptsExpertos.general(textoExtraido, rubrica, pauta, puntajeTotal, flexibilidad, itemsEsperados, nombreEstudiante, respuestasAlternativas, pautaCorrectaAlternativas),
     ciencias: (textoExtraido: string, rubrica: string, pauta: string, puntajeTotal: number, flexibilidad: number, itemsEsperados?: string, nombreEstudiante?: string, respuestasAlternativas?: { [key: string]: string }, pautaCorrectaAlternativas?: { [key: string]: string }) => promptsExpertos.general(textoExtraido, rubrica, pauta, puntajeTotal, flexibilidad, itemsEsperados, nombreEstudiante, respuestasAlternativas, pautaCorrectaAlternativas),
@@ -82,14 +81,13 @@ const promptsExpertos = {
     ingles: (textoExtraido: string, rubrica: string, pauta: string, puntajeTotal: number, flexibilidad: number, itemsEsperados?: string, nombreEstudiante?: string, respuestasAlternativas?: { [key: string]: string }, pautaCorrectaAlternativas?: { [key: string]: string }) => promptsExpertos.general(textoExtraido, rubrica, pauta, puntajeTotal, flexibilidad, itemsEsperados, nombreEstudiante, respuestasAlternativas, pautaCorrectaAlternativas),
 };
 
-// --- IMPLEMENTACIÓN DE LAS FUNCIONES FALTANTES Y CORRECCIÓN DE AZURE (FIX FINAL) ---
+// --- IMPLEMENTACIONES DE FUNCIONES FALTANTES/CORREGIDAS ---
 async function extractTextFromImages(imageBuffers: Buffer[]): Promise<string> {
     const textPromises = imageBuffers.map(async (buffer) => {
         try {
             const processedBuffer = await sharp(buffer).jpeg().toBuffer();
             
-            // CORRECCIÓN CRÍTICA: Se elimina el objeto de opciones { contentType: 'image/jpeg' } 
-            // para resolver el error de tipado con la firma de beginAnalyzeDocument.
+            // CORRECCIÓN CRÍTICA DE AZURE: Se elimina el objeto de opciones
             const poller = await docIntelClient.beginAnalyzeDocument("prebuilt-read", processedBuffer); 
 
             const { content } = await poller.pollUntilDone();
@@ -101,7 +99,6 @@ async function extractTextFromImages(imageBuffers: Buffer[]): Promise<string> {
     });
 
     const results = await Promise.all(textPromises);
-    // Combina el texto de todas las páginas
     return results.join('\n\n--- FIN DE PÁGINA ---\n\n');
 }
 
@@ -117,7 +114,6 @@ interface EvaluationResponse {
 }
 
 const validateEvaluationResponse = (obj: any): EvaluationResponse => {
-    // Implementación simple para asegurar el retorno de valor (solución al error de 'void')
     if (!obj || !obj.puntaje || !obj.nota || !obj.retroalimentacion) {
         throw new Error("Invalid structure returned from AI model.");
     }
@@ -125,14 +121,13 @@ const validateEvaluationResponse = (obj: any): EvaluationResponse => {
 };
 
 const cleanJson = (str: string): string => {
-    // Función para limpiar el JSON (solución al error de 'void')
     const match = str.match(/```json\n([\s\S]*?)\n```/);
     if (match) {
         return match[1].trim();
     }
     return str.trim();
 };
-// --- FIN DE IMPLEMENTACIÓN DE FUNCIONES FALTANTES Y CORRECCIÓN DE AZURE ---
+// --- FIN DE IMPLEMENTACIONES DE FUNCIONES FALTANTES/CORREGIDAS ---
 
 
 export async function POST(req: NextRequest) {
@@ -180,7 +175,10 @@ export async function POST(req: NextRequest) {
             const textoExtraido = await extractTextFromImages(imageBuffers);
 
             const getPrompt = promptsExpertos[areaConocimiento as keyof typeof promptsExpertos] || promptsExpertos.general;
-            prompt = getPrompt(textoExtraido, rubrica, pauta, Number(puntajeTotal), flexibilidad, itemsEsperados, nombreEstudiante, respuestasAlternativas, pautaCorrectaAlternativas);
+            
+            // --- CORRECCIÓN CRÍTICA FINAL DE TIPADO DE NEXT.JS/TYPESCRIPT ---
+            // Se usa type assertion para resolver el error de 'never' y permitir la compilación.
+            prompt = (getPrompt as typeof promptsExpertos.general)(textoExtraido, rubrica, pauta, Number(puntajeTotal), flexibilidad, itemsEsperados, nombreEstudiante, respuestasAlternativas, pautaCorrectaAlternativas);
 
             messages = [{
                 role: 'user' as const,
