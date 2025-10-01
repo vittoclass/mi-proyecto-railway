@@ -65,7 +65,7 @@ const GlobalStyles = () => (
     @import url('https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@700&display=swap');
     .font-logo { font-family: 'Josefin Sans', sans-serif; }
     :root, .theme-default {
-      --bg-main: #F9FAFB; --bg-card: #FFFFFF; --bg-muted: #F3F4F6; --bg-muted-subtle: #F9FAFB;
+      --bg-main: #F9FAFB; --bg-card: #FFFFFF; --bg-muted: #F3F46; --bg-muted-subtle: #F9FAFB;
       --bg-primary: #4338CA; --bg-primary-hover: #3730A3; --text-primary: #1F2937;
       --text-secondary: #6B7280; --text-on-primary: #FFFFFF; --text-accent: #4338CA;
       --border-color: #E5E7EB; --border-focus: #4F46E5; --ring-color: #4F46E5;
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
   feedbackText: { fontSize: 8, lineHeight: 1.15, flexWrap: 'wrap' as any },
 
   table: 
-{ display: 'table', width: '100%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 6 },
+{ width: '100%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 6 },
   tableRow: { margin: 'auto', flexDirection: 'row', borderBottomWidth: 1, borderColor: '#E5E7EB' },
   tableColHeader: { width: '35%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', padding: 2 },
   tableColHeaderDetail: { width: '65%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', padding: 2 },
