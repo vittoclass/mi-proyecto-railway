@@ -351,7 +351,8 @@ export default function EvaluatorClient() {
   const [theme, setTheme] = useState('theme-ocaso');
 
   const [previewGroupId, setPreviewGroupId] = useState<string | null>(null);
-  const isMobile = typeof window !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const { useIsMobile } = require('@/lib/isMobile'); // Importa el hook
+  const isMobile = useIsMobile(); // Usa el hook
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -609,7 +610,7 @@ export default function EvaluatorClient() {
                 {/* CORRECCIÓN: Se usa el componente Image de Next.js */}
                 <Image src={DRAGONFLY_DATA_URL} alt="Logo" width={144} height={144} className="mx-auto mb-4" />
                 <h1 className={`text-6xl font-bold ${wordmarkClass} font-logo`}>Libel-IA</h1>
-                <p className="mt-3 text-xl italic text-cyan-300">“Evaluación con Inteligencia Docente: Hecha por un Profe, para Profes”</p>
+                <p className="mt-3 text-xl italic text-cyan-300">&ldquo;Evaluación con Inteligencia Docente: Hecha por un Profe, para Profes&rdquo;</p>
                 <p className="mt-6 text-lg text-[var(--text-secondary)]">Asistente pedagógico inteligente que analiza las respuestas de tus estudiantes, genera retroalimentación detallada y crea informes al instante.</p>
                 <Button size="lg" className="mt-8 text-lg py-6 px-8" onClick={() => setActiveTab('evaluator')}>
                   Comenzar a Evaluar <Sparkles className="ml-2 h-5 w-5" />
