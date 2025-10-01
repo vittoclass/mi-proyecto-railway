@@ -1,14 +1,16 @@
 ﻿import type { NextApiRequest, NextApiResponse } from "next";
 
-function apiBase(): string {
-  const raw = (process.env.KHIPU_BASE || "https://payment-api.khipu.com/v3").trim();
-  return raw.replace(/\/+$/, ""); // sin slash final
+function normBase(raw: string) {
+  const trimmed = (raw || "").trim();
+  const normalized = trimmed.replace(/\/+$/, ""); // sin slash final
+  return { trimmed, normalized };
 }
 
-function apiKey(): string {
-  const key = process.env.KHIPU_API_KEY || "";
-  if (!key) throw new Error("Falta KHIPU_API_KEY");
-  return key;
+function authHeader(): string {
+  const token = Buffer.from(
+    `${process.env.KHIPU_COLLECTOR_ID}:${process.env.KHIPU_SECRET}`
+  ).toString("base64");
+  return `Basic ${token}`;
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -20,6 +22,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: "Monto invalido" });
     }
 
+    const rawBase = process.env.KHIPU_BASE || "https://khipu.com/api/3.0";
+    const { trimmed, normalized } = normBase(rawBase);
+    const used_url = `${normalized}/payments`;
+
     const body = {
       subject: glosa || "Pago LibelIA",
       amount: Number(monto),
@@ -30,30 +36,40 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       notify_url: process.env.PUBLIC_NOTIFY_URL
     };
 
-    const url = `${apiBase()}/payments`;
-    const r = await fetch(url, {
+    const r = await fetch(used_url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "x-api-key": apiKey()
+        "Authorization": authHeader()
       },
       body: JSON.stringify(body)
     });
 
-    const text = await r.text();
+    const preview = await r.text(); // leemos texto SIEMPRE para poder mostrar diagnostico
     if (!r.ok) {
       return res.status(r.status).json({
         error: "Khipu devolvio error",
         status: r.status,
-        used_url: url,
-        response_preview: text.slice(0, 400)
+        used_url,
+        khipu_base_env_raw: rawBase,
+        khipu_base_env_trimmed: trimmed,
+        response_preview: preview.slice(0, 500)
       });
     }
 
-    const data = JSON.parse(text);
-    return res.status(200).json({ payment_url: data?.payment_url, payment_id: data?.payment_id });
-  } catch (e: any) {
+    // si fue OK, intentamos parsear el JSON y devolver solo lo util
+    try {
+      const json = JSON.parse(preview);
+      return res.status(200).json({
+        payment_url: json?.payment_url,
+        payment_id: json?.payment_id,
+        used_url
+      });
+    } catch {
+      return res.status(200).json({ ok: true, used_url, raw: preview.slice(0, 500) });
+    }
+  } catch (e:any) {
     return res.status(500).json({ error: e?.message || "Error creando pago" });
   }
 }

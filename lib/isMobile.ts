@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 
-export const isMobile = () => {
-  const [isMobile, setIsMobile] = useState(false);
+// CORRECCIÓN: Se renombra a 'useIsMobile' para cumplir con la regla de React Hooks.
+export const useIsMobile = () => {
+  // Nota: Renombrada la variable interna a 'isMobileDevice' para mayor claridad.
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
 
   useEffect(() => {
     const userAgent = typeof window.navigator === 'undefined' ? '' : navigator.userAgent;
@@ -10,8 +12,8 @@ export const isMobile = () => {
         /Android|BlackBerry|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i
       )
     );
-    setIsMobile(mobile);
+    setIsMobileDevice(mobile);
   }, []);
 
-  return isMobile;
+  return isMobileDevice;
 };

@@ -1,4 +1,3 @@
-@'
 import type { NextApiRequest, NextApiResponse } from "next";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -25,4 +24,3 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     probe_status_get: probeStatus
   });
 }
-'@ | Out-File -Encoding utf8 -NoNewline "pages\api\khipu-debug.ts"

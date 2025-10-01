@@ -7,6 +7,8 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import dynamic from 'next/dynamic';
 import { format } from 'date-fns';
+// CORRECCIÓN: Se importa el componente Image de Next.js
+import Image from 'next/image';
 
 // UI (shadcn)
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -605,9 +607,11 @@ export default function EvaluatorClient() {
           <TabsContent value="inicio" className="mt-8 text-center">
             <Card className="max-w-3xl mx-auto border-2 shadow-lg bg-[var(--bg-card)] border-[var(--border-color)]" style={{ backgroundImage: 'radial-gradient(circle, rgba(124, 58, 237, 0.15) 0%, rgba(9, 9, 11, 0) 70%)' }}>
               <CardContent className="p-12">
-                <img src={DRAGONFLY_DATA_URL} alt="Logo" className="mx-auto h-36 w-36 mb-4" />
+                {/* CORRECCIÓN: Se usa el componente Image de Next.js */}
+                <Image src={DRAGONFLY_DATA_URL} alt="Logo" width={144} height={144} className="mx-auto mb-4" />
                 <h1 className={`text-6xl font-bold ${wordmarkClass} font-logo`}>Libel-IA</h1>
-                <p className="mt-3 text-xl italic text-cyan-300">“Evaluación con Inteligencia Docente: Hecha por un Profe, para Profes”</p>
+                {/* CORRECCIÓN: Se escapan las comillas con entidades HTML */}
+                <p className="mt-3 text-xl italic text-cyan-300">&ldquo;Evaluación con Inteligencia Docente: Hecha por un Profe, para Profes&rdquo;</p>
                 <p className="mt-6 text-lg text-[var(--text-secondary)]">Asistente pedagógico inteligente que analiza las respuestas de tus estudiantes, genera retroalimentación detallada y crea informes al instante.</p>
                 <Button size="lg" className="mt-8 text-lg py-6 px-8" onClick={() => setActiveTab('evaluator')}>
                   Comenzar a Evaluar <Sparkles className="ml-2 h-5 w-5" />
@@ -619,7 +623,8 @@ export default function EvaluatorClient() {
           {/* Evaluador */}
           <TabsContent value="evaluator" className="space-y-8 mt-4">
             <div className="flex items-center gap-3">
-              <img src={DRAGONFLY_DATA_URL} alt="Logo Libel-IA" className="h-8 w-8" />
+              {/* CORRECCIÓN: Se usa el componente Image de Next.js */}
+              <Image src={DRAGONFLY_DATA_URL} alt="Logo Libel-IA" width={32} height={32} />
               <span className={`font-semibold text-xl ${wordmarkClass} font-logo`}>Libel-IA</span>
             </div>
 
@@ -714,7 +719,8 @@ export default function EvaluatorClient() {
                               <ImageUp className="mr-2 h-4 w-4" />Subir Logo
                             </Button>
                             <input type="file" accept="image/*" ref={logoInputRef} onChange={handleLogoChange} className="hidden" />
-                            {logoPreview && <img src={logoPreview} alt="Vista previa del logo" className="h-12 w-auto object-contain border p-1 rounded-md" />}
+                            {/* CORRECCIÓN: Se usa el componente Image de Next.js */}
+                            {logoPreview && <Image src={logoPreview} alt="Vista previa del logo" width={120} height={48} className="object-contain border p-1 rounded-md" />}
                           </div>
                         </div>
                       </div>
@@ -777,7 +783,8 @@ export default function EvaluatorClient() {
                     <div className="flex flex-wrap gap-4 items-center">
                       {unassignedFiles.map(file => (
                         <div key={file.id} className="relative w-24 h-24">
-                          <img src={file.previewUrl} alt={file.file.name} className="w-full h-full object-cover rounded-md" />
+                          {/* CORRECCIÓN: Se usa el componente Image de Next.js con 'fill' */}
+                          <Image src={file.previewUrl} alt={file.file.name} fill={true} className="object-cover rounded-md" />
                           <button onClick={() => removeUnassignedFile(file.id)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 transition-colors" aria-label="Eliminar archivo">
                             <X className="h-3 w-3" />
                           </button>
@@ -807,7 +814,8 @@ export default function EvaluatorClient() {
                       <div className="flex flex-wrap gap-2 min-h-[50px] bg-[var(--bg-muted-subtle)] p-2 rounded-md">
                         {group.files.map(file => (
                           <div key={file.id} className="relative w-20 h-20">
-                            <img src={file.previewUrl} alt={file.file.name} className="w-full h-full object-cover rounded-md" />
+                            {/* CORRECCIÓN: Se usa el componente Image de Next.js con 'fill' */}
+                            <Image src={file.previewUrl} alt={file.file.name} fill={true} className="object-cover rounded-md" />
                             <button onClick={() => removeFileFromGroup(file.id, group.id)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5">
                               <X className="h-3 w-3" />
                             </button>
@@ -985,7 +993,8 @@ export default function EvaluatorClient() {
           {/* Presentación */}
           <TabsContent value="presentacion" className="mt-8">
             <Card className="max-w-4xl mx-auto border-2 shadow-xl bg-[var(--bg-card)] border-[var(--border-color)] p-10 text-center">
-              <img src={DRAGONFLY_DATA_URL} alt="Logo Libel-IA" className="mx-auto h-32 w-32 mb-6" />
+              {/* CORRECCIÓN: Se usa el componente Image de Next.js */}
+              <Image src={DRAGONFLY_DATA_URL} alt="Logo Libel-IA" width={128} height={128} className="mx-auto mb-6" />
               <h1 className={`text-5xl font-bold ${wordmarkClass} font-logo mb-4`}>Libel-IA</h1>
               <p className="text-lg text-[var(--text-secondary)] mb-6">
                 Plataforma chilena de evaluación educativa con inteligencia artificial.
