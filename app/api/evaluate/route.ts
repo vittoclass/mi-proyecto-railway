@@ -82,16 +82,15 @@ const promptsExpertos = {
     ingles: (textoExtraido: string, rubrica: string, pauta: string, puntajeTotal: number, flexibilidad: number, itemsEsperados?: string, nombreEstudiante?: string, respuestasAlternativas?: { [key: string]: string }, pautaCorrectaAlternativas?: { [key: string]: string }) => promptsExpertos.general(textoExtraido, rubrica, pauta, puntajeTotal, flexibilidad, itemsEsperados, nombreEstudiante, respuestasAlternativas, pautaCorrectaAlternativas),
 };
 
-// --- IMPLEMENTACIÓN DE LAS FUNCIONES FALTANTES PARA PREVENIR ERRORES DE COMPILACIÓN ---
+// --- IMPLEMENTACIÓN DE LAS FUNCIONES FALTANTES Y CORRECCIÓN DE AZURE (FIX FINAL) ---
 async function extractTextFromImages(imageBuffers: Buffer[]): Promise<string> {
     const textPromises = imageBuffers.map(async (buffer) => {
         try {
-            // Utilizamos sharp para convertir a formato compatible (PNG o JPEG) para Azure
             const processedBuffer = await sharp(buffer).jpeg().toBuffer();
             
-            const poller = await docIntelClient.beginAnalyzeDocument("prebuilt-read", processedBuffer, {
-                contentType: 'image/jpeg'
-            });
+            // CORRECCIÓN CRÍTICA: Se elimina el objeto de opciones { contentType: 'image/jpeg' } 
+            // para resolver el error de tipado con la firma de beginAnalyzeDocument.
+            const poller = await docIntelClient.beginAnalyzeDocument("prebuilt-read", processedBuffer); 
 
             const { content } = await poller.pollUntilDone();
             return content || "";
@@ -102,7 +101,7 @@ async function extractTextFromImages(imageBuffers: Buffer[]): Promise<string> {
     });
 
     const results = await Promise.all(textPromises);
-    // Combina el texto de todas las páginas en un solo string
+    // Combina el texto de todas las páginas
     return results.join('\n\n--- FIN DE PÁGINA ---\n\n');
 }
 
@@ -118,7 +117,7 @@ interface EvaluationResponse {
 }
 
 const validateEvaluationResponse = (obj: any): EvaluationResponse => {
-    // Implementación simple de validación/tipado. En un entorno real se usaría Zod.
+    // Implementación simple para asegurar el retorno de valor (solución al error de 'void')
     if (!obj || !obj.puntaje || !obj.nota || !obj.retroalimentacion) {
         throw new Error("Invalid structure returned from AI model.");
     }
@@ -126,14 +125,14 @@ const validateEvaluationResponse = (obj: any): EvaluationResponse => {
 };
 
 const cleanJson = (str: string): string => {
-    // Función para limpiar el JSON si la IA devuelve código en bloques Markdown
+    // Función para limpiar el JSON (solución al error de 'void')
     const match = str.match(/```json\n([\s\S]*?)\n```/);
     if (match) {
         return match[1].trim();
     }
     return str.trim();
 };
-// --- FIN DE IMPLEMENTACIÓN DE FUNCIONES FALTANTES ---
+// --- FIN DE IMPLEMENTACIÓN DE FUNCIONES FALTANTES Y CORRECCIÓN DE AZURE ---
 
 
 export async function POST(req: NextRequest) {
@@ -154,7 +153,6 @@ export async function POST(req: NextRequest) {
                 const response = await fetch(url);
                 const arrayBuffer = await response.arrayBuffer();
                 const buffer = Buffer.from(arrayBuffer);
-                // Reduce el tamaño de la imagen para Mistral
                 const resizedBuffer = await sharp(buffer).resize({ width: 1024, withoutEnlargement: true }).webp({ quality: 80 }).toBuffer();
                 return `data:image/webp;base64,${resizedBuffer.toString('base64')}`;
             }));
@@ -179,7 +177,6 @@ export async function POST(req: NextRequest) {
                 return Buffer.from(arrayBuffer);
             }));
             
-            // Llama a la función extractTextFromImages implementada
             const textoExtraido = await extractTextFromImages(imageBuffers);
 
             const getPrompt = promptsExpertos[areaConocimiento as keyof typeof promptsExpertos] || promptsExpertos.general;
