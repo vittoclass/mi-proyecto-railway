@@ -32,7 +32,7 @@ const Label = React.forwardRef<HTMLLabelElement, React.ComponentPropsWithoutRef<
 ));
 Label.displayName = 'Label';
 
-// --- Tus constantes (DRAGONFLY_SVG, DRAGONFLY_DATA_URL, wordmarkClass, GlobalStyles) se mantienen ---
+// --- Tus constantes y estilos (DRAGONFLY_SVG, DRAGONFLY_DATA_URL, wordmarkClass, GlobalStyles) se mantienen ---
 const DRAGONFLY_SVG = `...`;
 const DRAGONFLY_DATA_URL = `...`;
 const wordmarkClass = '...';
@@ -178,9 +178,11 @@ const styles = StyleSheet.create({
     tableColEvidencia: { width: '50%', padding: 3 },
     // Columnas de Respuestas Alternativas
     tableColHeaderPregunta: { width: '20%', borderRightWidth: 1, borderColor: '#DDDDDD', padding: 3, fontWeight: 'bold' },
-    tableColHeaderRespuesta: { width: '40%', padding: 3, fontWeight: 'bold' },
+    tableColHeaderRespuesta: { width: '40%', borderRightWidth: 1, borderColor: '#DDDDDD', padding: 3, fontWeight: 'bold' },
+    tableColHeaderRespuestaCorrecta: { width: '40%', padding: 3, fontWeight: 'bold' },
     tableColPregunta: { width: '20%', borderRightWidth: 1, borderColor: '#EEEEEE', padding: 3 },
-    tableColRespuesta: { width: '40%', padding: 3 },
+    tableColRespuesta: { width: '40%', borderRightWidth: 1, borderColor: '#EEEEEE', padding: 3 },
+    tableColRespuestaCorrecta: { width: '40%', padding: 3 },
 });
 // --- FIN DE LA CORRECCIÓN CRÍTICA DE ESTILOS ---
 
@@ -279,7 +281,7 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
       {/* Segunda Página */}
       {(correccionP2.length > 0 || habilidades.length > 0 || alternativas.length > 0) && (
         <Page size="A4" style={styles.page}>
-            {/* ... (Contenido de la segunda página sin cambios) ... */}
+            {/* Si hay corrección que no cupo en la P1, la mostramos aquí */}
             {correccionP2.length > 0 && (
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Corrección Detallada (Cont.)</Text>
@@ -327,13 +329,13 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
                         <View style={styles.tableRowHeader}>
                             <Text style={styles.tableColHeaderPregunta}>Pregunta</Text>
                             <Text style={styles.tableColHeaderRespuesta}>Respuesta Estudiante</Text>
-                            <Text style={styles.tableColHeaderRespuesta}>Respuesta Correcta</Text>
+                            <Text style={styles.tableColHeaderRespuestaCorrecta}>Respuesta Correcta</Text>
                         </View>
                         {alternativas.map((item: any, index: number) => (
                             <View style={styles.tableRow} key={index}>
                                 <Text style={styles.tableColPregunta}>{item.pregunta}</Text>
                                 <Text style={styles.tableColRespuesta}>{item.respuesta_estudiante}</Text>
-                                <Text style={styles.tableColRespuesta}>{item.respuesta_correcta}</Text>
+                                <Text style={styles.tableColRespuestaCorrecta}>{item.respuesta_correcta}</Text>
                             </View>
                         ))}
                     </View>
@@ -347,10 +349,168 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
 
 
 // ==== Tipos (sin cambios) ====
-// ... (resto del archivo EvaluatorClient.tsx sin cambios) ...
+const formSchema = z.object({
+  rubrica: z.string().min(10, 'La rúbrica es necesaria.'),
+  puntajeTotal: z.string().min(1, 'El puntaje total es obligatorio.').regex(/^[0-9]+$/, 'El puntaje debe ser un número entero.'),
+  pauta: z.string().optional(),
+  flexibilidad: z.array(z.number()).default([3]),
+  nombreProfesor: z.string().optional(),
+  nombrePrueba: z.string().optional(),
+  asignatura: z.string().optional(),
+  curso: z.string().optional(),
+  areaConocimiento: z.string().default('general'),
+});
+interface FilePreview { id: string; file: File; previewUrl: string; dataUrl: string; }
+interface StudentGroup {
+  id: string;
+  studentName: string;
+  files: FilePreview[];
+  studentAnswers: string;
+  puntajeDesarrollo: number;
+  retroalimentacion?: any;
+  puntaje?: string;
+  nota?: number | string;
+  isEvaluated: boolean;
+  isEvaluating: boolean;
+  error?: string;
+  debugPayload?: object; // Para el depurador visual
+}
 
-// [EL RESTO DE LAS FUNCIONES Y EL COMPONENTE PRINCIPAL SE MANTIENEN IGUAL]
+// --- Funciones de ayuda (sin cambios) ---
+const parseAnswers = (text: string | undefined): { [key: string]: string } => {
+  if (!text) return {};
+  const answers: { [key: string]: string } = {};
+  text.split(',').map(part => part.trim()).filter(Boolean).forEach(part => {
+    const match = part.match(/^(\d+)\s*([a-zA-ZfFvV])/);
+    if (match) answers[match[1]] = match[2].toLowerCase();
+  });
+  return answers;
+};
 
+// ==== Componente Principal ====
+// --- CORRECCIÓN FINAL: Se añade 'export default' para que sea un componente JSX válido ---
 export default function EvaluatorClient() {
-    // ...
+  const [activeTab, setActiveTab] = useState('evaluator');
+  const [studentGroups, setStudentGroups] = useState<StudentGroup[]>([]);
+  const [classSize, setClassSize] = useState(1);
+  const [debugGroupId, setDebugGroupId] = useState<string | null>(null);
+  const { evaluate, isLoading } = useEvaluator();
+  // ... (otros estados sin cambios)
+  const [unassignedFiles, setUnassignedFiles] = useState<FilePreview[]>([]);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      rubrica: '',
+      puntajeTotal: '100',
+      pauta: '',
+      flexibilidad: [3],
+      nombreProfesor: '',
+      nombrePrueba: '',
+      asignatura: '',
+      curso: '',
+      areaConocimiento: 'general',
+    },
+  });
+
+  useEffect(() => {
+    const count = Math.max(1, classSize);
+    setStudentGroups(Array.from({ length: count }, (_, i) => ({
+      id: `student-${Date.now()}-${i}`,
+      studentName: `Alumno ${i + 1}`,
+      files: [],
+      studentAnswers: '',
+      puntajeDesarrollo: 0,
+      isEvaluated: false,
+      isEvaluating: false,
+    })));
+  }, [classSize]);
+
+  // ... (otras funciones como processFiles, handleLogoChange, etc., se mantienen igual)
+  
+  const handleStudentAnswersChange = (groupId: string, value: string) => {
+    setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, studentAnswers: value } : g));
+  };
+  
+  const handlePuntajeDesarrolloChange = (groupId: string, value: string) => {
+    const puntaje = parseInt(value, 10) || 0;
+    setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, puntajeDesarrollo: puntaje } : g));
+  };
+
+  const onEvaluateAll = async () => {
+    const { rubrica, pauta, flexibilidad, areaConocimiento, puntajeTotal } = form.getValues();
+    if (!rubrica) { return; }
+
+    const pautaCorrecta = parseAnswers(pauta);
+
+    for (const group of studentGroups) {
+      if (group.files.length === 0) continue;
+      setStudentGroups(prev => prev.map(g => g.id === group.id ? { ...g, isEvaluating: true, error: undefined } : g));
+
+      const respuestasAlumno = parseAnswers(group.studentAnswers);
+      
+      const puntajeAlternativas = Object.keys(respuestasAlumno).reduce((acc, pregunta) => {
+          return (pautaCorrecta[pregunta] && pautaCorrecta[pregunta] === respuestasAlumno[pregunta]) ? acc + 1 : acc;
+      }, 0);
+
+      const payload = {
+        fileUrls: group.files.map(f => f.dataUrl),
+        rubrica, pauta, flexibilidad: flexibilidad[0], areaConocimiento,
+        puntajeTotal: Number(puntajeTotal),
+        respuestasAlternativas: respuestasAlumno,
+        // --- MODIFICACIÓN: ENVÍO DE PAUTA CORRECTA ---
+        pautaCorrectaAlternativas: pautaCorrecta, // Nuevo campo con el objeto de respuestas correctas
+      };
+
+      setStudentGroups(prev => prev.map(g => g.id === group.id ? { ...g, debugPayload: payload } : g));
+      
+      const result = await evaluate(payload);
+
+      setStudentGroups(prev => prev.map(g => {
+        if (g.id === group.id) {
+          if (result.success) {
+            const puntajeFinalCalculado = puntajeAlternativas + g.puntajeDesarrollo;
+            return {
+              ...g, isEvaluating: false, isEvaluated: true,
+              retroalimentacion: result.retroalimentacion,
+              puntaje: `${puntajeFinalCalculado}/${puntajeTotal}`,
+              nota: result.nota,
+            };
+          }
+          return { ...g, isEvaluating: false, isEvaluated: true, error: result.error };
+        }
+        return g;
+      }));
+    }
+  };
+
+  const debugGroup = debugGroupId ? studentGroups.find(g => g.id === debugGroupId) : null;
+
+  return (
+    <div>
+      {/* Modal de depuración */}
+      {debugGroup && (
+        <div className="pdf-modal-backdrop">
+          <div className="pdf-modal" style={{width: '600px', height: 'auto', maxHeight: '80vh'}}>
+            <div className="pdf-modal-header">
+              <div className="font-semibold">Depuración de Datos - {debugGroup.studentName}</div>
+              <Button variant="outline" size="sm" onClick={() => setDebugGroupId(null)}>Cerrar</Button>
+            </div>
+            <div className="pdf-modal-body" style={{padding: '16px', overflow: 'auto'}}>
+              <p className="text-sm text-gray-600 mb-2">Este es el objeto exacto que se envió a la API. Verifica que `respuestasAlternativas` contenga lo que ingresaste.</p>
+              <pre className="bg-gray-100 p-4 rounded-md text-xs whitespace-pre-wrap">
+                {JSON.stringify(debugGroup.debugPayload, null, 2)}
+              </pre>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* ... (El resto de tu JSX se mantiene igual) ... */}
+    </div>
+  );
 }
