@@ -351,7 +351,7 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
                     <Text style={styles.sectionTitle}>Evaluación de Habilidades</Text>
                     <View style={styles.table}>
                         <View style={styles.tableRowHeader}>
-                            <Text style={styles.tableColHeaderHabilidad}>Habilidad</Habilidad>
+                            <Text style={styles.tableColHeaderHabilidad}>Habilidad</Text>
                             <Text style={styles.tableColHeaderNivel}>Nivel</Text>
                             <Text style={styles.tableColHeaderEvidencia}>Evidencia</Text>
                         </View>
@@ -932,7 +932,7 @@ export default function EvaluatorClient() {
                   <CardTitle className="flex items-center text-yellow-700">
                       <Bug className="h-5 w-5 mr-2" /> Archivos Sin Asignar
                   </CardTitle>
-                  <CardDescription>Arrastra estos archivos a la tarjeta del alumno que corresponda. Los archivos se procesan al ser asignados.</Cardripción>
+                  <CardDescription>Arrastra estos archivos a la tarjeta del alumno que corresponda. Los archivos se procesan al ser asignados.</CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-wrap gap-4">
                   {unassignedFiles.map(file => (
