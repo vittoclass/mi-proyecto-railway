@@ -26,6 +26,9 @@ import { Loader2, Sparkles, FileUp, Camera, Users, X, Printer, CalendarIcon, Ima
 import { toast } from '@/components/ui/use-toast'; 
 import { Progress } from '@/components/ui/progress';
 
+// 🚨 ARREGLO CRÍTICO: Reintroducimos la importación de 'cn'
+import { cn } from '@/lib/utils';
+
 // ✅ usa alias @ como en shadcn
 import { NotesDashboard } from '@/components/NotesDashboard';
 
@@ -978,6 +981,18 @@ export default function EvaluatorClient() {
                                           <TableRow key={index}>
                                             <TableCell className="font-medium">{renderForWeb(item.seccion)}</TableCell>
                                             <TableCell>{renderForWeb(item.detalle)}</TableCell>
+                                          </TableRow>
+                                        ))}
+                                        {/* Detalle de Desarrollo: Muestra la cita y justificación aquí */}
+                                        {Object.keys(group.detalle_desarrollo || {}).map(key => (
+                                          <TableRow key={key}>
+                                            <TableCell className="font-medium text-purple-600">{key.replace(/_/g, ' ')}</TableCell>
+                                            <TableCell>
+                                              {/* Formato de visualización del nuevo objeto */}
+                                              <p className='font-semibold text-sm mb-1'>Puntaje: {group.detalle_desarrollo[key].puntaje}</p>
+                                              <p className='text-xs italic text-[var(--text-secondary)] mb-1'>Cita Estudiante: "{group.detalle_desarrollo[key].cita_estudiante}"</p>
+                                              <p className='text-sm'>{group.detalle_desarrollo[key].justificacion}</p>
+                                            </TableCell>
                                           </TableRow>
                                         ))}
                                       </TableBody>
