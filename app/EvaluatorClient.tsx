@@ -17,7 +17,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
-import { Popover, PopoverContent, PopPopoverTrigger } from '@/components/ui/popover';
+// 🚨 CORRECCIÓN CRÍTICA: Aseguramos la importación de PopoverTrigger
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'; 
 import { Calendar } from '@/components/ui/calendar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -400,7 +401,6 @@ interface StudentGroup {
 }
 
 // ==== Componente Principal ====
-// (He conservado tu lógica original, solo reemplacé renders por renderForWeb/pdfSafe donde correspondía)
 export default function EvaluatorClient() {
   const [activeTab, setActiveTab] = useState('presentacion');
 
