@@ -17,7 +17,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Popover, PopoverContent, PopPopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -670,7 +670,7 @@ export default function EvaluatorClient() {
               <CardContent className="p-12">
                 <img src={DRAGONFLY_DATA_URL} alt="Logo" className="mx-auto h-36 w-36 mb-4" />
                 <h1 className={`text-6xl font-bold ${wordmarkClass} font-logo`}>Libel-IA</h1>
-                {/* 🚨 CORRECCIÓN CRÍTICA: Se usa &quot; en lugar de " para solucionar el error de compilación */}
+                {/* 🚨 CORRECCIÓN CRÍTICA APLICADA: Se usa &quot; para evitar el error de compilación */}
                 <p className="mt-3 text-xl italic text-cyan-300">&quot;Evaluación con Inteligencia Docente: Hecha por un Profe, para Profes&quot;</p>
                 <p className="mt-6 text-lg text-[var(--text-secondary)]">Asistente pedagógico inteligente que analiza las respuestas de tus estudiantes, genera retroalimentación detallada y crea informes al instante.</p>
                 <Button size="lg" className="mt-8 text-lg py-6 px-8" onClick={() => setActiveTab('evaluator')}>
@@ -1089,7 +1089,7 @@ export default function EvaluatorClient() {
         </Tabs>
       </main>
 
-      <SmartCameraModal isOpen={isCameraOpen} onClose={() => setIsCameraOpen(false)} onCapture={handleImageCapture} />
+      <SmartCameraModal isOpen={isCameraOpen} onClose={() => setIsCameraModalOpen(false)} onCapture={handleImageCapture} />
     </div>
   );
 }
