@@ -72,3 +72,4 @@ export const useMediaPipe = () => {
 
   return { isLoading, error, detectObjects }
 }
+
