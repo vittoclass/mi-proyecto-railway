@@ -1001,7 +1001,7 @@ export default function EvaluatorClient() {
                                           <TableRow key={index}>
                                             <TableCell className="font-medium">{renderForWeb(item.habilidad)}</TableCell>
                                             <TableCell>{renderForWeb(item.evaluacion)}</TableCell>
-                                            <TableCell className="italic">"{renderForWeb(item.evidencia)}"</TableCell>
+                                           <TableCell className="italic">{`"${renderForWeb(item.evidencia)}"`}</TableCell>
                                           </TableRow>
                                         ))}
                                       </TableBody>
