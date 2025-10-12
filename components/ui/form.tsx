@@ -44,13 +44,33 @@ const FormField = <
 const useFormField = () => {
   const fieldContext = React.useContext(FormFieldContext)
   const itemContext = React.useContext(FormItemContext)
-  const { getFieldState, formState } = useFormContext()
-
-  const fieldState = getFieldState(fieldContext.name, formState)
+  
+  // *** CORRECCIÓN CRÍTICA: Asignación segura del contexto para evitar el error de runtime ***
+  const formMethods = useFormContext()
 
   if (!fieldContext) {
     throw new Error("useFormField should be used within <FormField>")
   }
+  
+  // Manejo de error si el contexto de RHF es nulo (cuando se renderiza fuera de <Form>).
+  // Esto previene el error "Cannot destructure property 'getFieldState' of null".
+  if (!formMethods) {
+     return {
+        id: itemContext.id,
+        name: fieldContext.name,
+        formItemId: `${itemContext.id}-form-item`,
+        formDescriptionId: `${itemContext.id}-form-item-description`,
+        formMessageId: `${itemContext.id}-form-item-message`,
+        error: undefined,
+        isDirty: false,
+        isTouched: false,
+     }
+  }
+  
+  // Si el contexto existe, desestructuramos y procedemos normalmente
+  const { getFieldState, formState } = formMethods 
+
+  const fieldState = getFieldState(fieldContext.name, formState)
 
   const { id } = itemContext
 
