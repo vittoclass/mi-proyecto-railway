@@ -175,6 +175,10 @@ function pdfSafe(value: any): string {
   if (value === null || value === undefined) return '';
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
   try {
+    // Si es un objeto de detalle de desarrollo (el nuevo formato), lo formateamos para el PDF
+    if (typeof value === 'object' && value !== null && value.cita_estudiante && value.justificacion) {
+      return `Puntaje: ${value.puntaje}\nRespuesta Estudiante: "${value.cita_estudiante}"\nJustificación: ${value.justificacion}`;
+    }
     return JSON.stringify(value);
   } catch {
     return String(value);
@@ -195,7 +199,13 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
   const notaNum = Number(group.nota) || 0;
   const notaFinal = (notaNum + (group.decimasAdicionales || 0)).toFixed(1);
 
-  const correccion = group.retroalimentacion?.correccion_detallada || [];
+  // Combina detalle de desarrollo con correccion detallada (si no está ya incluido)
+  const correccionDesarrolloArray = Object.keys(group.detalle_desarrollo || {}).map(key => ({
+      seccion: `Pregunta Desarrollo: ${key.replace(/_/g, ' ')}`,
+      detalle: group.detalle_desarrollo[key],
+  }));
+
+  const correccion = [...(group.retroalimentacion?.correccion_detallada || []), ...correccionDesarrolloArray];
   const { first: correccionP1, rest: correccionP2 } = splitCorreccionForTwoPages(correccion);
 
   return (
@@ -373,10 +383,11 @@ interface StudentGroup {
   isEvaluated: boolean;
   isEvaluating: boolean;
   error?: string;
+  // Agregar detalle_desarrollo a la interfaz para que aparezca en el grupo
+  detalle_desarrollo?: { [key: string]: any }; 
 }
 
 // ==== Componente Principal ====
-// (He conservado tu lógica original, solo reemplacé renders por renderForWeb/pdfSafe donde correspondía)
 export default function EvaluatorClient() {
   const [activeTab, setActiveTab] = useState('presentacion');
 
@@ -954,6 +965,18 @@ export default function EvaluatorClient() {
                                           <TableRow key={index}>
                                             <TableCell className="font-medium">{renderForWeb(item.seccion)}</TableCell>
                                             <TableCell>{renderForWeb(item.detalle)}</TableCell>
+                                          </TableRow>
+                                        ))}
+                                        {/* Detalle de Desarrollo: Muestra la cita y justificación aquí */}
+                                        {Object.keys(group.detalle_desarrollo || {}).map(key => (
+                                          <TableRow key={key}>
+                                            <TableCell className="font-medium text-purple-600">{key.replace(/_/g, ' ')}</TableCell>
+                                            <TableCell>
+                                              {/* Formato de visualización del nuevo objeto */}
+                                              <p className='font-semibold text-sm mb-1'>Puntaje: {group.detalle_desarrollo[key].puntaje}</p>
+                                              <p className='text-xs italic text-[var(--text-secondary)] mb-1'>Cita Estudiante: "{group.detalle_desarrollo[key].cita_estudiante}"</p>
+                                              <p className='text-sm'>{group.detalle_desarrollo[key].justificacion}</p>
+                                            </TableCell>
                                           </TableRow>
                                         ))}
                                       </TableBody>
