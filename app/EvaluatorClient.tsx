@@ -22,7 +22,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-// 🚨 CORRECCIÓN DE ERROR: Aseguramos que 'Eye' esté definido aquí
+// Aseguramos que todos los íconos estén importados
 import { Loader2, Sparkles, FileUp, Camera, Users, X, Printer, CalendarIcon, ImageUp, ClipboardList, Home, Palette, Eye } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast'; 
 import { Progress } from '@/components/ui/progress';
@@ -65,7 +65,7 @@ const DRAGONFLY_SVG = `
 const DRAGONFLY_DATA_URL = `data:image/svg+xml;utf8,${encodeURIComponent(DRAGONFLY_SVG)}`;
 const wordmarkClass = 'text-transparent bg-clip-text bg-gradient-to-r from-violet-500 via-indigo-500 to-cyan-400';
 
-// ==== Estilos Globales ====
+// ==== Estilos Globales (Se mantiene) ====
 const GlobalStyles = () => (
   <style jsx global>{`
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
@@ -101,7 +101,7 @@ const GlobalStyles = () => (
   `}</style>
 );
 
-// ==== Estilos PDF ====
+// ==== Estilos PDF (Se mantiene) ====
 const styles = StyleSheet.create({
   page: { padding: 20, fontSize: 10, lineHeight: 1.25 },
   header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, paddingBottom: 5, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
@@ -164,6 +164,16 @@ function renderForWeb(value: any): React.ReactNode {
   }
   // objeto -> mostrar JSON formateado de forma legible
   try {
+    // 🚨 Arreglo: Formato de visualización del nuevo objeto de detalle de desarrollo en web
+    if (typeof value === 'object' && value !== null && value.cita_estudiante && value.justificacion) {
+      return (
+        <div className="space-y-1">
+          <p className='font-semibold text-sm'>Puntaje: {value.puntaje}</p>
+          <p className='text-xs italic text-[var(--text-secondary)]'>Cita Estudiante: &quot;{value.cita_estudiante}&quot;</p>
+          <p className='text-sm'>{value.justificacion}</p>
+        </div>
+      );
+    }
     return <pre className="text-sm whitespace-pre-wrap bg-[var(--bg-muted-subtle)] p-2 rounded">{JSON.stringify(value, null, 2)}</pre>;
   } catch {
     return String(value);
@@ -178,6 +188,10 @@ function pdfSafe(value: any): string {
   if (value === null || value === undefined) return '';
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
   try {
+    // 🚨 Arreglo: Formato de visualización del nuevo objeto de detalle de desarrollo en PDF
+    if (typeof value === 'object' && value !== null && value.cita_estudiante && value.justificacion) {
+        return `Puntaje: ${value.puntaje}\nRespuesta Estudiante: "${value.cita_estudiante}"\nJustificación: ${value.justificacion}`;
+    }
     return JSON.stringify(value);
   } catch {
     return String(value);
@@ -199,7 +213,14 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
   const notaFinal = (notaNum + (group.decimasAdicionales || 0)).toFixed(1);
 
   const correccion = group.retroalimentacion?.correccion_detallada || [];
-  const { first: correccionP1, rest: correccionP2 } = splitCorreccionForTwoPages(correccion);
+  const correccionDesarrolloArray = Object.keys(group.detalle_desarrollo || {}).map(key => ({
+      seccion: `Pregunta Desarrollo: ${key.replace(/_/g, ' ')}`,
+      detalle: group.detalle_desarrollo[key],
+  }));
+  const correccionConDesarrollo = [...correccion, ...correccionDesarrolloArray];
+
+
+  const { first: correccionP1, rest: correccionP2 } = splitCorreccionForTwoPages(correccionConDesarrollo);
 
   return (
     <Document>
@@ -380,6 +401,7 @@ interface StudentGroup {
 }
 
 // ==== Componente Principal ====
+// (He conservado tu lógica original, solo reemplacé renders por renderForWeb/pdfSafe donde correspondía)
 export default function EvaluatorClient() {
   const [activeTab, setActiveTab] = useState('presentacion');
 
@@ -958,18 +980,6 @@ export default function EvaluatorClient() {
                                           <TableRow key={index}>
                                             <TableCell className="font-medium">{renderForWeb(item.seccion)}</TableCell>
                                             <TableCell>{renderForWeb(item.detalle)}</TableCell>
-                                          </TableRow>
-                                        ))}
-                                        {/* Detalle de Desarrollo: Muestra la cita y justificación aquí */}
-                                        {Object.keys(group.detalle_desarrollo || {}).map(key => (
-                                          <TableRow key={key}>
-                                            <TableCell className="font-medium text-purple-600">{key.replace(/_/g, ' ')}</TableCell>
-                                            <TableCell>
-                                              {/* Formato de visualización del nuevo objeto */}
-                                              <p className='font-semibold text-sm mb-1'>Puntaje: {group.detalle_desarrollo[key].puntaje}</p>
-                                              <p className='text-xs italic text-[var(--text-secondary)] mb-1'>Cita Estudiante: "{group.detalle_desarrollo[key].cita_estudiante}"</p>
-                                              <p className='text-sm'>{group.detalle_desarrollo[key].justificacion}</p>
-                                            </TableCell>
                                           </TableRow>
                                         ))}
                                       </TableBody>
