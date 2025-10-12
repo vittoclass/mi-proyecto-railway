@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import dynamic from 'next/dynamic';
 import { format } from 'date-fns';
-import { es } from 'date-fns/locale'; // Asegúrate de que esta importación exista en tu proyecto
+import { es } from 'date-fns/locale';
 
 // UI (shadcn)
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -22,8 +22,9 @@ import { Calendar } from '@/components/ui/calendar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Sparkles, FileUp, Camera, Users, X, Printer, CalendarIcon, ImageUp, ClipboardList, Home, Palette } from 'lucide-react';
-import { toast } from '@/components/ui/use-toast'; // Asumo que usas el componente toast
+// 🚨 CORRECCIÓN DE ERROR: Aseguramos que 'Eye' esté definido aquí
+import { Loader2, Sparkles, FileUp, Camera, Users, X, Printer, CalendarIcon, ImageUp, ClipboardList, Home, Palette, Eye } from 'lucide-react';
+import { toast } from '@/components/ui/use-toast'; 
 import { Progress } from '@/components/ui/progress';
 
 // ✅ usa alias @ como en shadcn
@@ -379,7 +380,6 @@ interface StudentGroup {
 }
 
 // ==== Componente Principal ====
-// (He conservado tu lógica original, solo reemplacé renders por renderForWeb/pdfSafe donde correspondía)
 export default function EvaluatorClient() {
   const [activeTab, setActiveTab] = useState('presentacion');
 
@@ -958,6 +958,18 @@ export default function EvaluatorClient() {
                                           <TableRow key={index}>
                                             <TableCell className="font-medium">{renderForWeb(item.seccion)}</TableCell>
                                             <TableCell>{renderForWeb(item.detalle)}</TableCell>
+                                          </TableRow>
+                                        ))}
+                                        {/* Detalle de Desarrollo: Muestra la cita y justificación aquí */}
+                                        {Object.keys(group.detalle_desarrollo || {}).map(key => (
+                                          <TableRow key={key}>
+                                            <TableCell className="font-medium text-purple-600">{key.replace(/_/g, ' ')}</TableCell>
+                                            <TableCell>
+                                              {/* Formato de visualización del nuevo objeto */}
+                                              <p className='font-semibold text-sm mb-1'>Puntaje: {group.detalle_desarrollo[key].puntaje}</p>
+                                              <p className='text-xs italic text-[var(--text-secondary)] mb-1'>Cita Estudiante: "{group.detalle_desarrollo[key].cita_estudiante}"</p>
+                                              <p className='text-sm'>{group.detalle_desarrollo[key].justificacion}</p>
+                                            </TableCell>
                                           </TableRow>
                                         ))}
                                       </TableBody>
