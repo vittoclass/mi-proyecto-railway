@@ -21,18 +21,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2, Sparkles, FileUp, Camera, Users, X, Printer, CalendarIcon, ImageUp, ClipboardList, Home, Palette, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
-// ✅ usa alias @ como en shadcn
 import { NotesDashboard } from '@/components/NotesDashboard';
 // PDF
 import { Document, Page, Text, View, StyleSheet, PDFDownloadLink, Image as PDFImage, PDFViewer, pdf } from '@react-pdf/renderer';
-// ❗️si tu hook está en `app/useEvaluator.ts` usa './useEvaluator'
 import { useEvaluator } from './useEvaluator';
-// ✅ también con alias @ (si vive fuera de app/)
+
 const SmartCameraModal = dynamic(() => import('@/components/smart-camera-modal'), { ssr: false, loading: () => <p>Cargando...</p> });
+
 const Label = React.forwardRef<HTMLLabelElement, React.ComponentPropsWithoutRef<'label'>>(({ className, ...props }, ref) => (
   <label ref={ref} className={cn('text-sm font-medium', className)} {...props} />
 ));
 Label.displayName = 'Label';
+
 // ==== Logo SVG ====
 const DRAGONFLY_SVG = `
 <svg viewBox="0 0 300 220" xmlns="http://www.w3.org/2000/svg" aria-label="Libel-IA logo">
@@ -53,6 +53,7 @@ const DRAGONFLY_SVG = `
 `;
 const DRAGONFLY_DATA_URL = `data:image/svg+xml;utf8,${encodeURIComponent(DRAGONFLY_SVG)}`;
 const wordmarkClass = 'text-transparent bg-clip-text bg-gradient-to-r from-violet-500 via-indigo-500 to-cyan-400';
+
 // ==== Estilos Globales ====
 const GlobalStyles = () => (
   <style jsx global>{`
@@ -88,6 +89,7 @@ const GlobalStyles = () => (
     @media (max-width: 600px) { body { font-size: 12px; line-height: 1.4; } }
   `}</style>
 );
+
 // ==== Estilos PDF ====
 const styles = StyleSheet.create({
   page: { padding: 20, fontSize: 10, lineHeight: 1.25 },
@@ -108,7 +110,7 @@ const styles = StyleSheet.create({
   feedbackTitle: { fontSize: 9, fontWeight: 'bold', color: '#166534', marginBottom: 3 },
   feedbackImproveTitle: { fontSize: 9, fontWeight: 'bold', color: '#854D0E', marginBottom: 3 },
   feedbackText: { fontSize: 8, lineHeight: 1.15, flexWrap: 'wrap' as any },
-  // ✅ CORREGIDO: Eliminada la línea display: 'table' (no válida en react-pdf)
+  // ✅ CORREGIDO: Eliminado 'display: "table"' (no válido en react-pdf)
   table: { width: '100%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 6 },
   tableRow: { margin: 'auto', flexDirection: 'row', borderBottomWidth: 1, borderColor: '#E5E7EB' },
   tableColHeader: { width: '35%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', padding: 2 },
@@ -123,13 +125,8 @@ const styles = StyleSheet.create({
   tableCellHeader: { margin: 1, fontSize: 8, fontWeight: 'bold' },
   tableCell: { margin: 1, fontSize: 8, textAlign: 'left' as any },
 });
+
 // ----------------- Helpers safe render -----------------
-/**
- * renderForWeb: convierte cualquier valor en JSX seguro para web UI.
- * - strings/numbers/booleans => mostrados directamente
- * - arrays => lista <ul>
- * - objects => <pre> JSON
- */
 function renderForWeb(value: any): React.ReactNode {
   if (value === null || value === undefined) return '';
   const t = typeof value;
@@ -141,43 +138,58 @@ function renderForWeb(value: any): React.ReactNode {
       </ul>
     );
   }
-  // objeto -> mostrar JSON formateado de forma legible
   try {
+    if (typeof value === 'object' && value !== null && value.cita_estudiante && value.justificacion) {
+      return (
+        <div className="space-y-1">
+          <p className='font-semibold text-sm'>Puntaje: {value.puntaje}</p>
+          {/* ✅ CORREGIDO: comillas escapadas */}
+          <p className='text-xs italic text-[var(--text-secondary)]'>Cita Estudiante: &quot;{value.cita_estudiante}&quot;</p>
+          <p className='text-sm'>{value.justificacion}</p>
+        </div>
+      );
+    }
     return <pre className="text-sm whitespace-pre-wrap bg-[var(--bg-muted-subtle)] p-2 rounded">{JSON.stringify(value, null, 2)}</pre>;
   } catch {
     return String(value);
   }
 }
-/**
- * pdfSafe: convierte cualquier valor a cadena para usar en react-pdf <Text>.
- * react-pdf requiere strings / números, no objects.
- */
+
 function pdfSafe(value: any): string {
   if (value === null || value === undefined) return '';
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
   try {
+    if (typeof value === 'object' && value !== null && value.cita_estudiante && value.justificacion) {
+        return `Puntaje: ${value.puntaje}
+Respuesta Estudiante: "${value.cita_estudiante}"
+Justificación: ${value.justificacion}`;
+    }
     return JSON.stringify(value);
   } catch {
     return String(value);
   }
 }
-// ==== Utils usados originalmente en parser/otros (dejados por compatibilidad) ====
+
 const splitCorreccionForTwoPages = (lista: any[] | undefined) => {
   if (!lista || lista.length === 0) return { first: [], rest: [] };
   const MAX_P1 = Math.min(5, lista.length);
   return { first: lista.slice(0, MAX_P1), rest: lista.slice(MAX_P1) };
 };
-// ==== Documento PDF (usa pdfSafe donde fuera necesario) ====
+
 const ReportDocument = ({ group, formData, logoPreview }: any) => {
   const resumen = (group.retroalimentacion && group.retroalimentacion.resumen_general) || { fortalezas: 'N/A', areas_mejora: 'N/A' };
   const puntaje = group.puntaje || 'N/A';
   const notaNum = Number(group.nota) || 0;
   const notaFinal = (notaNum + (group.decimasAdicionales || 0)).toFixed(1);
   const correccion = group.retroalimentacion?.correccion_detallada || [];
-  const { first: correccionP1, rest: correccionP2 } = splitCorreccionForTwoPages(correccion);
+  const correccionDesarrolloArray = Object.keys(group.detalle_desarrollo || {}).map(key => ({
+      seccion: `Pregunta Desarrollo: ${key.replace(/_/g, ' ')}`,
+      detalle: group.detalle_desarrollo[key],
+  }));
+  const correccionConDesarrollo = [...correccion, ...correccionDesarrolloArray];
+  const { first: correccionP1, rest: correccionP2 } = splitCorreccionForTwoPages(correccionConDesarrollo);
   return (
     <Document>
-      {/* Página 1 */}
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>
@@ -196,7 +208,6 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
           </View>
         </View>
         <Text style={styles.studentLine}>Alumno: {pdfSafe(group.studentName)} · Curso: {pdfSafe(formData.curso || 'N/A')}</Text>
-        {/* KPIs */}
         <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
           <View style={{ flex: 1, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', padding: 5, borderRadius: 6, textAlign: 'center' as any }}>
             <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#4B5563', marginBottom: 2 }}>Puntaje</Text>
@@ -211,7 +222,6 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
             <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#4F46E5' }}>{pdfSafe(format(new Date(), 'dd/MM/yyyy'))}</Text>
           </View>
         </View>
-        {/* Fortalezas / Áreas */}
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
           <View style={{ padding: 6, borderRadius: 6, flex: 1, backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#BBF7D0' }}>
             <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#166534', marginBottom: 3 }}>✅ Fortalezas</Text>
@@ -222,7 +232,6 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
             <Text style={styles.feedbackText}>{pdfSafe(resumen.areas_mejora)}</Text>
           </View>
         </View>
-        {/* Corrección Detallada (solo primeras filas) */}
         {correccionP1.length > 0 && (
           <View style={{ marginBottom: 6 }}>
             <Text style={{ fontSize: 10, fontWeight: 'bold', paddingBottom: 2, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', marginBottom: 5, marginTop: 8 }}>Corrección Detallada</Text>
@@ -241,9 +250,7 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
           </View>
         )}
       </Page>
-      {/* Página 2 */}
       <Page size="A4" style={styles.page}>
-        {/* Resto de Corrección */}
         {correccionP2.length > 0 && (
           <View style={{ marginBottom: 6 }}>
             <Text style={{ fontSize: 10, fontWeight: 'bold', paddingBottom: 2, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', marginBottom: 5, marginTop: 8 }}>Corrección Detallada (cont.)</Text>
@@ -261,7 +268,6 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
             </View>
           </View>
         )}
-        {/* Habilidades */}
         {group.retroalimentacion?.evaluacion_habilidades?.length > 0 && (
           <View style={{ marginBottom: 6 }}>
             <Text style={{ fontSize: 10, fontWeight: 'bold', paddingBottom: 2, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', marginBottom: 5, marginTop: 8 }}>Evaluación de Habilidades</Text>
@@ -281,7 +287,6 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
             </View>
           </View>
         )}
-        {/* Alternativas */}
         {group.retroalimentacion?.retroalimentacion_alternativas?.length > 0 && (
           <View style={{ marginBottom: 6 }}>
             <Text style={{ fontSize: 10, fontWeight: 'bold', paddingBottom: 2, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', marginBottom: 5, marginTop: 8 }}>Respuestas Alternativas</Text>
@@ -305,7 +310,7 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
     </Document>
   );
 };
-// ==== Tipos y form schema (idénticos a tu version) ====
+
 interface CorreccionDetallada { seccion: string; detalle: string; }
 interface EvaluacionHabilidad { habilidad: string; evaluacion: string; evidencia: string; }
 interface RetroalimentacionEstructurada {
@@ -316,6 +321,7 @@ interface RetroalimentacionEstructurada {
   nota?: number;
   retroalimentacion_alternativas?: { pregunta: string; respuesta_estudiante: string; respuesta_correcta: string }[];
 }
+
 const formSchema = z.object({
   tipoEvaluacion: z.string().default('prueba'),
   rubrica: z.string().min(10, 'La rúbrica es necesaria.'),
@@ -330,6 +336,7 @@ const formSchema = z.object({
   fechaEvaluacion: z.date().optional(),
   areaConocimiento: z.string().default('general'),
 });
+
 interface FilePreview { id: string; file: File; previewUrl: string; dataUrl: string; }
 interface StudentGroup {
   id: string;
@@ -342,9 +349,9 @@ interface StudentGroup {
   isEvaluated: boolean;
   isEvaluating: boolean;
   error?: string;
+  detalle_desarrollo?: { [key: string]: any };
 }
-// ==== Componente Principal ====
-// (He conservado tu lógica original, solo reemplacé renders por renderForWeb/pdfSafe donde correspondía)
+
 export default function EvaluatorClient() {
   const [activeTab, setActiveTab] = useState('presentacion');
   const [userEmail, setUserEmail] = useState<string>('');
@@ -377,10 +384,12 @@ export default function EvaluatorClient() {
       areaConocimiento: 'general',
     },
   });
+
   useEffect(() => {
     const saved = (localStorage.getItem('userEmail') || '').toLowerCase();
     if (saved && /\S+@\S+\.\S+/.test(saved)) setUserEmail(saved);
   }, []);
+
   useEffect(() => {
     const count = Math.max(1, classSize);
     setStudentGroups(Array.from({ length: count }, (_, i) => ({
@@ -392,8 +401,8 @@ export default function EvaluatorClient() {
       decimasAdicionales: 0,
     })));
     setUnassignedFiles([]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classSize]);
+
   const processFiles = (files: File[]) => {
     const validFiles = Array.from(files).filter(file => {
       if (['image/jpeg', 'image/png', 'image/bmp', 'application/pdf', 'image/tiff'].includes(file.type)) return true;
@@ -410,6 +419,7 @@ export default function EvaluatorClient() {
       reader.readAsDataURL(file);
     });
   };
+
   const handleFilesSelected = (files: FileList | null) => { if (files) processFiles(Array.from(files)); };
   const handleCapture = (dataUrl: string) => {
     fetch(dataUrl).then(res => res.blob()).then(blob => {
@@ -515,7 +525,6 @@ export default function EvaluatorClient() {
       alert('No hay evaluaciones para exportar.');
       return;
     }
-    // tu export original…
   };
   const isCurrentlyEvaluatingAny = studentGroups.some(g => g.isEvaluating);
   const previewGroup = previewGroupId ? studentGroups.find(g => g.id === previewGroupId) : null;
@@ -530,11 +539,11 @@ export default function EvaluatorClient() {
       setPreviewGroupId(groupId);
     }
   };
+
   return (
     <div className={activeTab === 'inicio' ? 'theme-ocaso' : theme}>
       <GlobalStyles />
       {isCameraOpen && <SmartCameraModal onCapture={handleCapture} onClose={() => setIsCameraOpen(false)} />}
-      {/* MODAL de Vista Previa PDF (desktop) */}
       {!isMobile && previewGroup && previewGroup.retroalimentacion && (
         <div className="pdf-modal-backdrop" role="dialog" aria-modal="true">
           <div className="pdf-modal">
@@ -581,13 +590,12 @@ export default function EvaluatorClient() {
             <TabsTrigger value="dashboard"><ClipboardList className="mr-2 h-4 w-4" />Resumen</TabsTrigger>
             <TabsTrigger value="presentacion"><Eye className="mr-2 h-4 w-4" />Presentación</TabsTrigger>
           </TabsList>
-          {/* Inicio */}
           <TabsContent value="inicio" className="mt-8 text-center">
             <Card className="max-w-3xl mx-auto border-2 shadow-lg bg-[var(--bg-card)] border-[var(--border-color)]" style={{ backgroundImage: 'radial-gradient(circle, rgba(124, 58, 237, 0.15) 0%, rgba(9, 9, 11, 0) 70%)' }}>
               <CardContent className="p-12">
                 <img src={DRAGONFLY_DATA_URL} alt="Logo" className="mx-auto h-36 w-36 mb-4" />
                 <h1 className={`text-6xl font-bold ${wordmarkClass} font-logo`}>Libel-IA</h1>
-                <p className="mt-3 text-xl italic text-cyan-300">“Evaluación con Inteligencia Docente: Hecha por un Profe, para Profes”</p>
+                <p className="mt-3 text-xl italic text-cyan-300">&quot;Evaluación con Inteligencia Docente: Hecha por un Profe, para Profes&quot;</p>
                 <p className="mt-6 text-lg text-[var(--text-secondary)]">Asistente pedagógico inteligente que analiza las respuestas de tus estudiantes, genera retroalimentación detallada y crea informes al instante.</p>
                 <Button size="lg" className="mt-8 text-lg py-6 px-8" onClick={() => setActiveTab('evaluator')}>
                   Comenzar a Evaluar <Sparkles className="ml-2 h-5 w-5" />
@@ -595,7 +603,6 @@ export default function EvaluatorClient() {
               </CardContent>
             </Card>
           </TabsContent>
-          {/* Evaluador */}
           <TabsContent value="evaluator" className="space-y-8 mt-4">
             <div className="flex items-center gap-3">
               <img src={DRAGONFLY_DATA_URL} alt="Logo Libel-IA" className="h-8 w-8" />
@@ -606,8 +613,6 @@ export default function EvaluatorClient() {
               <CardContent>
                 <Form {...form}>
                   <form onSubmit={(e) => { e.preventDefault(); onEvaluateAll(); }} className="space-y-8">
-                    {/* ... tu formulario (sin cambios importantes) ... */}
-                    {/* Conservé todo el formulario original para mantener la UX */}
                     <div className="flex flex-wrap items-center gap-x-8 gap-y-4 p-4 border rounded-lg border-[var(--border-color)]">
                       <div className="flex items-center space-x-3">
                         <Label htmlFor="class-size" className="text-base font-bold text-[var(--text-accent)]">Nº de Estudiantes:</Label>
@@ -723,7 +728,6 @@ export default function EvaluatorClient() {
                 </Form>
               </CardContent>
             </Card>
-            {/* Paso 2: Cargar y agrupar (idem original) */}
             <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
               <CardHeader>
                 <CardTitle className="text-[var(--text-accent)]">Paso 2: Cargar y Agrupar Trabajos</CardTitle>
@@ -738,7 +742,7 @@ export default function EvaluatorClient() {
                     <Button type="button" variant="secondary" onClick={() => setIsCameraOpen(true)}>
                       <Camera className="mr-2 h-4 w-4" /> Usar Cámara
                     </Button>
-                    <input type="file" multiple ref={fileInputRef} onChange={(e) => handleFilesSelected(e.target.files)} className="hidden" />
+                    <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFilesSelected} className="hidden" />
                     <p className="text-sm text-[var(--text-secondary)]">Consejo: Sube primero la página con el nombre.</p>
                   </div>
                 </div>
@@ -764,7 +768,6 @@ export default function EvaluatorClient() {
                 )}
               </CardContent>
             </Card>
-            {/* Grupos */}
             {studentGroups.length > 0 && (
               <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
                 <CardHeader>
@@ -804,7 +807,6 @@ export default function EvaluatorClient() {
                 </CardFooter>
               </Card>
             )}
-            {/* Resultados */}
             {studentGroups.some(g => g.isEvaluated || g.isEvaluating) && (
               <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
                 <CardHeader><CardTitle className="text-[var(--text-accent)]">Paso 3: Resultados</CardTitle></CardHeader>
@@ -885,6 +887,17 @@ export default function EvaluatorClient() {
                                             <TableCell>{renderForWeb(item.detalle)}</TableCell>
                                           </TableRow>
                                         ))}
+                                        {Object.keys(group.detalle_desarrollo || {}).map(key => (
+                                          <TableRow key={key}>
+                                            <TableCell className="font-medium text-purple-600">{key.replace(/_/g, ' ')}</TableCell>
+                                            <TableCell>
+                                              <p className='font-semibold text-sm mb-1'>Puntaje: {group.detalle_desarrollo[key].puntaje}</p>
+                                              {/* ✅ CORREGIDO: comillas escapadas */}
+                                              <p className='text-xs italic text-[var(--text-secondary)] mb-1'>Cita Estudiante: &quot;{group.detalle_desarrollo[key].cita_estudiante}&quot;</p>
+                                              <p className='text-sm'>{group.detalle_desarrollo[key].justificacion}</p>
+                                            </TableCell>
+                                          </TableRow>
+                                        ))}
                                       </TableBody>
                                     </Table>
                                   </div>
@@ -905,7 +918,7 @@ export default function EvaluatorClient() {
                                           <TableRow key={index}>
                                             <TableCell className="font-medium">{renderForWeb(item.habilidad)}</TableCell>
                                             <TableCell>{renderForWeb(item.evaluacion)}</TableCell>
-                                            <TableCell className="italic">"{renderForWeb(item.evidencia)}"</TableCell>
+                                            <TableCell className="italic">&quot;{renderForWeb(item.evidencia)}&quot;</TableCell>
                                           </TableRow>
                                         ))}
                                       </TableBody>
@@ -937,7 +950,6 @@ export default function EvaluatorClient() {
               </Card>
             )}
           </TabsContent>
-          {/* Dashboard */}
           <TabsContent value="dashboard" className="mt-4 space-y-4">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-xl font-semibold text-[var(--text-accent)]">Resumen de Notas</h2>
@@ -948,7 +960,6 @@ export default function EvaluatorClient() {
             </div>
             <NotesDashboard studentGroups={studentGroups} curso={form.getValues('curso')} fecha={form.getValues('fechaEvaluacion')} />
           </TabsContent>
-          {/* Presentación */}
           <TabsContent value="presentacion" className="mt-8">
             <Card className="max-w-4xl mx-auto border-2 shadow-xl bg-[var(--bg-card)] border-[var(--border-color)] p-10 text-center">
               <img src={DRAGONFLY_DATA_URL} alt="Logo Libel-IA" className="mx-auto h-32 w-32 mb-6" />
