@@ -673,7 +673,7 @@ export default function EvaluatorClient() {
                 <img src={DRAGONFLY_DATA_URL} alt="Logo" className="mx-auto h-36 w-36 mb-4" />
                 <h1 className={`text-6xl font-bold ${wordmarkClass} font-logo`}>Libel-IA</h1>
                 {/* 🚨 CORRECCIÓN CRÍTICA APLICADA: Se usa &quot; para evitar el error de compilación */}
-                <p className="mt-3 text-xl italic text-cyan-300">&quot;Evaluación con Inteligencia Docente: Hecha por un Profe, para Profes&quot;</p>
+               <p className="mt-3 text-xl italic text-cyan-300">'Evaluación con Inteligencia Docente: Hecha por un Profe, para Profes'</p>
                 <p className="mt-6 text-lg text-[var(--text-secondary)]">Asistente pedagógico inteligente que analiza las respuestas de tus estudiantes, genera retroalimentación detallada y crea informes al instante.</p>
                 <Button size="lg" className="mt-8 text-lg py-6 px-8" onClick={() => setActiveTab('evaluator')}>
                   Comenzar a Evaluar <Sparkles className="ml-2 h-5 w-5" />
@@ -990,7 +990,7 @@ export default function EvaluatorClient() {
                                             <TableCell>
                                               {/* Formato de visualización del nuevo objeto */}
                                               <p className='font-semibold text-sm mb-1'>Puntaje: {group.detalle_desarrollo[key].puntaje}</p>
-                                              <p className='text-xs italic text-[var(--text-secondary)] mb-1'>Cita Estudiante: "{group.detalle_desarrollo[key].cita_estudiante}"</p>
+                                             <p className='text-xs italic text-[var(--text-secondary)] mb-1'>Cita Estudiante: &quot;{group.detalle_desarrollo[key].cita_estudiante}&quot;</p>
                                               <p className='text-sm'>{group.detalle_desarrollo[key].justificacion}</p>
                                             </TableCell>
                                           </TableRow>
