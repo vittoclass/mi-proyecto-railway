@@ -51,7 +51,7 @@ const DRAGONFLY_SVG = `
   <rect x="149" y="182" width="2" height="10" rx="1" fill="#22D3EE"/>
 </svg>
 `;
-const DRAGONFLY_DATA_URL = `data:image/svg+xml;utf8,${encodeURIComponent(DRAGONFLY_SVG)}`;
+const DRAGONFLY_DATA_URL = `image/svg+xml;utf8,${encodeURIComponent(DRAGONFLY_SVG)}`;
 const wordmarkClass = 'text-transparent bg-clip-text bg-gradient-to-r from-violet-500 via-indigo-500 to-cyan-400';
 
 // ==== Estilos Globales ====
@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
   feedbackTitle: { fontSize: 9, fontWeight: 'bold', color: '#166534', marginBottom: 3 },
   feedbackImproveTitle: { fontSize: 9, fontWeight: 'bold', color: '#854D0E', marginBottom: 3 },
   feedbackText: { fontSize: 8, lineHeight: 1.15, flexWrap: 'wrap' as any },
-  // ✅ CORREGIDO: Eliminado 'display: "table"' (no válido en react-pdf)
+  // ✅ CORREGIDO: display: 'table' eliminado
   table: { width: '100%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 6 },
   tableRow: { margin: 'auto', flexDirection: 'row', borderBottomWidth: 1, borderColor: '#E5E7EB' },
   tableColHeader: { width: '35%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', padding: 2 },
@@ -143,7 +143,6 @@ function renderForWeb(value: any): React.ReactNode {
       return (
         <div className="space-y-1">
           <p className='font-semibold text-sm'>Puntaje: {value.puntaje}</p>
-          {/* ✅ CORREGIDO: comillas escapadas */}
           <p className='text-xs italic text-[var(--text-secondary)]'>Cita Estudiante: &quot;{value.cita_estudiante}&quot;</p>
           <p className='text-sm'>{value.justificacion}</p>
         </div>
@@ -420,13 +419,18 @@ export default function EvaluatorClient() {
     });
   };
 
-  const handleFilesSelected = (files: FileList | null) => { if (files) processFiles(Array.from(files)); };
+  // ✅ CORREGIDO: recibe ChangeEvent<HTMLInputElement>
+  const handleFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) processFiles(Array.from(e.target.files));
+  };
+
   const handleCapture = (dataUrl: string) => {
     fetch(dataUrl).then(res => res.blob()).then(blob => {
       processFiles([new File([blob], `captura-${Date.now()}.png`, { type: 'image/png' })]);
     });
     setIsCameraOpen(false);
   };
+
   const handleLogoChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -435,14 +439,17 @@ export default function EvaluatorClient() {
       reader.readAsDataURL(file);
     }
   };
+
   const updateStudentName = (groupId: string, newName: string) =>
     setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, studentName: newName } : g));
+
   const assignFileToGroup = (fileId: string, groupId: string) => {
     const fileToMove = unassignedFiles.find(f => f.id === fileId);
     if (!fileToMove) return;
     setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, files: [...g.files, fileToMove] } : g));
     setUnassignedFiles(files => files.filter(f => f.id !== fileId));
   };
+
   const removeFileFromGroup = (fileId: string, groupId: string) => {
     let fileToMoveBack: FilePreview | undefined;
     setStudentGroups(groups => groups.map(g => {
@@ -454,17 +461,22 @@ export default function EvaluatorClient() {
     }));
     if (fileToMoveBack) setUnassignedFiles(prev => [...prev, fileToMoveBack!]);
   };
+
   const handleDecimasChange = (groupId: string, value: string) => {
     const decimas = parseFloat(value) || 0;
     setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, decimasAdicionales: decimas } : g));
   };
+
   const handlePuntajeChange = (groupId: string, value: string) => {
     setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, puntaje: value } : g));
   };
+
   const handleNotaChange = (groupId: string, value: string) => {
     setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, nota: parseFloat(value) || 0 } : g));
   };
+
   const removeUnassignedFile = (fileId: string) => { setUnassignedFiles(prev => prev.filter(f => f.id !== fileId)); };
+
   const handleNameExtraction = async () => {
     if (unassignedFiles.length === 0) {
       alert('Sube primero la página que contiene el nombre.');
@@ -489,6 +501,7 @@ export default function EvaluatorClient() {
       setIsExtractingNames(false);
     }
   };
+
   const onEvaluateAll = async () => {
     if (!userEmail) {
       alert('Falta confirmar tu correo. Ve a "Planes", activa o confirma tu correo y vuelve a evaluar.');
@@ -519,6 +532,7 @@ export default function EvaluatorClient() {
       ));
     }
   };
+
   const exportToDocOrCsv = (formatType: 'csv' | 'doc') => {
     const evaluatedGroups = studentGroups.filter(g => g.isEvaluated);
     if (evaluatedGroups.length === 0) {
@@ -526,8 +540,10 @@ export default function EvaluatorClient() {
       return;
     }
   };
+
   const isCurrentlyEvaluatingAny = studentGroups.some(g => g.isEvaluating);
   const previewGroup = previewGroupId ? studentGroups.find(g => g.id === previewGroupId) : null;
+
   const handlePreview = async (groupId: string) => {
     const group = studentGroups.find(g => g.id === groupId);
     if (!group || !group.retroalimentacion) return;
@@ -887,17 +903,21 @@ export default function EvaluatorClient() {
                                             <TableCell>{renderForWeb(item.detalle)}</TableCell>
                                           </TableRow>
                                         ))}
-                                        {Object.keys(group.detalle_desarrollo || {}).map(key => (
-                                          <TableRow key={key}>
-                                            <TableCell className="font-medium text-purple-600">{key.replace(/_/g, ' ')}</TableCell>
-                                            <TableCell>
-                                              <p className='font-semibold text-sm mb-1'>Puntaje: {group.detalle_desarrollo[key].puntaje}</p>
-                                              {/* ✅ CORREGIDO: comillas escapadas */}
-                                              <p className='text-xs italic text-[var(--text-secondary)] mb-1'>Cita Estudiante: &quot;{group.detalle_desarrollo[key].cita_estudiante}&quot;</p>
-                                              <p className='text-sm'>{group.detalle_desarrollo[key].justificacion}</p>
-                                            </TableCell>
-                                          </TableRow>
-                                        ))}
+                                        {/* ✅ CORREGIDO: acceso seguro a detalle_desarrollo */}
+                                        {Object.keys(group.detalle_desarrollo || {}).map(key => {
+                                          const item = group.detalle_desarrollo?.[key];
+                                          if (!item) return null;
+                                          return (
+                                            <TableRow key={key}>
+                                              <TableCell className="font-medium text-purple-600">{key.replace(/_/g, ' ')}</TableCell>
+                                              <TableCell>
+                                                <p className='font-semibold text-sm mb-1'>Puntaje: {item.puntaje}</p>
+                                                <p className='text-xs italic text-[var(--text-secondary)] mb-1'>Cita Estudiante: &quot;{item.cita_estudiante}&quot;</p>
+                                                <p className='text-sm'>{item.justificacion}</p>
+                                              </TableCell>
+                                            </TableRow>
+                                          );
+                                        })}
                                       </TableBody>
                                     </Table>
                                   </div>
