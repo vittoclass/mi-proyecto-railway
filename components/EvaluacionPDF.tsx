@@ -1,7 +1,7 @@
 import React from "react";
 import { Page, Text, View, Document, StyleSheet, Image, Font } from "@react-pdf/renderer";
 
-// ✅ CORRECCIÓN CLAVE: Registro completo de todas las variantes de Roboto
+// ✅ Registro de fuentes Roboto
 Font.register({
   family: "Roboto",
   fonts: [
@@ -27,6 +27,12 @@ Font.register({
     },
   ],
 });
+
+// ✅ FUNCIÓN DE LIMPIEZA (clave para evitar símbolos extraños en Relay)
+const limpiarTexto = (str: string | undefined): string => {
+  if (!str) return "";
+  return str.replace(/[\x00-\x1F\x7F]/g, "");
+};
 
 const styles = StyleSheet.create({
   page: {
@@ -69,7 +75,6 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
   table: {
-    // CORRECCIÓN: Se elimina 'display: "table"' que no es compatible.
     width: "100%",
     marginTop: 8,
     border: "1px solid #e5e7eb",
@@ -147,13 +152,13 @@ const EvaluacionPDF = ({ group, formData, logoPreview }: Props) => {
                 {retro.resumen_general?.fortalezas && (
                   <>
                     <Text style={styles.label}>Fortalezas:</Text>
-                    <Text style={styles.value}>{retro.resumen_general.fortalezas}</Text>
+                    <Text style={styles.value}>{limpiarTexto(retro.resumen_general.fortalezas)}</Text>
                   </>
                 )}
                 {retro.resumen_general?.areas_mejora && (
                   <>
                     <Text style={styles.label}>Áreas de Mejora:</Text>
-                    <Text style={styles.value}>{retro.resumen_general.areas_mejora}</Text>
+                    <Text style={styles.value}>{limpiarTexto(retro.resumen_general.areas_mejora)}</Text>
                   </>
                 )}
               </View>
@@ -172,8 +177,8 @@ const EvaluacionPDF = ({ group, formData, logoPreview }: Props) => {
                   {retro.correccion_detallada.map((item: any, index: number) => (
                     <View key={index} style={styles.tableRow}>
                       <Text style={styles.tableCol}>{item.seccion || "N/A"}</Text>
-                      <Text style={styles.tableCol}>{item.detalle || "Sin detalle"}</Text>
-                      <Text style={styles.tableCol}>{item.recomendacion || "Sin recomendación"}</Text>
+                      <Text style={styles.tableCol}>{limpiarTexto(item.detalle)}</Text>
+                      <Text style={styles.tableCol}>{limpiarTexto(item.recomendacion)}</Text>
                     </View>
                   ))}
                 </View>
@@ -198,8 +203,8 @@ const EvaluacionPDF = ({ group, formData, logoPreview }: Props) => {
                   {retro.evaluacion_habilidades.map((item: any, index: number) => (
                     <View key={index} style={styles.tableRow}>
                       <Text style={styles.tableCol}>{item.habilidad || "N/A"}</Text>
-                      <Text style={styles.tableCol}>{item.evaluacion || "N/A"}</Text>
-                      <Text style={styles.tableCol}>{item.evidencia || "Sin evidencia"}</Text>
+                      <Text style={styles.tableCol}>{limpiarTexto(item.evaluacion)}</Text>
+                      <Text style={styles.tableCol}>{limpiarTexto(item.evidencia)}</Text>
                     </View>
                   ))}
                 </View>
@@ -218,11 +223,11 @@ const EvaluacionPDF = ({ group, formData, logoPreview }: Props) => {
                 {retro.retroalimentacion_alternativas.map((item: any, index: number) => (
                   <View key={index} style={{ marginBottom: 6 }}>
                     <Text style={styles.label}>Pregunta {index + 1}:</Text>
-                    <Text style={styles.value}>{item.pregunta || "Sin pregunta"}</Text>
+                    <Text style={styles.value}>{limpiarTexto(item.pregunta)}</Text>
                     <Text style={styles.label}>Tu respuesta:</Text>
-                    <Text style={{ ...styles.value, color: "#DC2626" }}>{item.respuesta_estudiante || "N/A"}</Text>
+                    <Text style={{ ...styles.value, color: "#DC2626" }}>{limpiarTexto(item.respuesta_estudiante)}</Text>
                     <Text style={styles.label}>Respuesta correcta:</Text>
-                    <Text style={{ ...styles.value, color: "#059669" }}>{item.respuesta_correcta || "N/A"}</Text>
+                    <Text style={{ ...styles.value, color: "#059669" }}>{limpiarTexto(item.respuesta_correcta)}</Text>
                   </View>
                 ))}
               </View>

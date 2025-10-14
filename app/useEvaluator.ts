@@ -3,47 +3,41 @@
 
 import { useState, useCallback } from 'react';
 
-// Extrae respuestas de alternativas y V/F del OCR (simulado aquí)
-// En tu app real, esto viene del resultado del OCR en /api/evaluate
-function extractRespuestasObjetivasFromOCR(ocrResult: any) {
-  // Supón que tu OCR devuelve algo como:
-  // { sm: ['a','b','c',...], vf: ['V','F','F',...] }
-  return {
-    sm: ocrResult.respuestasSM || [],
-    vf: ocrResult.respuestasVF || [],
-  };
-}
-
-// Corrige automáticamente usando la pauta
-function corregirObjetivas(pautaStr: string, respuestasEstudiante: { sm: string[]; vf: string[] }) {
-  // Parsear pauta: "SM: b,c,b,a,...\nVF: F,F,F,V,F"
+// 1. Parsea la pauta del profesor
+function parsePauta(pautaStr: string) {
   const lines = pautaStr.split('\n').map(l => l.trim()).filter(Boolean);
-  let pautaSM: string[] = [];
-  let pautaVF: string[] = [];
+  let sm: string[] = [];
+  let vf: string[] = [];
 
   for (const line of lines) {
     if (line.startsWith('SM:')) {
-      pautaSM = line.replace('SM:', '').split(',').map(s => s.trim().toUpperCase());
+      sm = line.replace('SM:', '').split(',').map(s => s.trim().toUpperCase());
     } else if (line.startsWith('VF:')) {
-      pautaVF = line.replace('VF:', '').split(',').map(s => s.trim().toUpperCase());
+      vf = line.replace('VF:', '').split(',').map(s => s.trim().toUpperCase());
     }
   }
+  return { sm, vf };
+}
 
-  // Corregir SM
-  const smCorrectas = respuestasEstudiante.sm
-    .map((resp, i) => resp.trim().toUpperCase() === pautaSM[i])
-    .filter(Boolean).length;
+// 2. Corrige comparando con la pauta
+function corregirObjetivas(pauta: { sm: string[]; vf: string[] }, respuestas: { sm: string[]; vf: string[] }) {
+  const smCorregido = pauta.sm.map((correcta, i) => ({
+    respuesta: respuestas.sm[i] || '',
+    correcta,
+    esCorrecta: (respuestas.sm[i] || '').trim().toUpperCase() === correcta
+  }));
 
-  // Corregir VF
-  const vfCorrectas = respuestasEstudiante.vf
-    .map((resp, i) => resp.trim().toUpperCase() === pautaVF[i])
-    .filter(Boolean).length;
+  const vfCorregido = pauta.vf.map((correcta, i) => ({
+    respuesta: respuestas.vf[i] || '',
+    correcta,
+    esCorrecta: (respuestas.vf[i] || '').trim().toUpperCase() === correcta
+  }));
 
   return {
-    smCorrectas,
-    smTotal: pautaSM.length,
-    vfCorrectas,
-    vfTotal: pautaVF.length,
+    sm: smCorregido,
+    vf: vfCorregido,
+    smCorrectas: smCorregido.filter(r => r.esCorrecta).length,
+    vfCorrectas: vfCorregido.filter(r => r.esCorrecta).length
   };
 }
 
@@ -53,7 +47,7 @@ export const useEvaluator = () => {
   const evaluate = useCallback(async (payload: any): Promise<any> => {
     setIsLoading(true);
     try {
-      // Paso 1: Llamar a la API para procesar imágenes y extraer texto (OCR + IA para desarrollo)
+      // Llama a tu API para procesar imágenes y extraer texto
       const response = await fetch('/api/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -62,38 +56,19 @@ export const useEvaluator = () => {
 
       const data = await response.json();
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Ocurrió un error durante la evaluación.');
+        throw new Error(data.error || 'Error en la evaluación.');
       }
 
-      // Paso 2: Si hay pauta y hay respuestas objetivas, corregir automáticamente
-      if (payload.pauta && data.ocrResult) {
-        const respuestasEstudiante = extractRespuestasObjetivasFromOCR(data.ocrResult);
-        const correccionObjetiva = corregirObjetivas(payload.pauta, respuestasEstudiante);
+      // Si hay pauta y respuestas extraídas, corrige automáticamente
+      if (payload.pauta && data.respuestasExtraidas) {
+        const pauta = parsePauta(payload.pauta);
+        const correccion = corregirObjetivas(pauta, data.respuestasExtraidas);
 
-        // Inyectar corrección exacta en el resultado
+        // Inyecta la corrección exacta en el resultado
         data.retroalimentacion = {
           ...data.retroalimentacion,
-          correccion_objetiva: {
-            sm: {
-              correctas: correccionObjetiva.smCorrectas,
-              total: correccionObjetiva.smTotal,
-            },
-            vf: {
-              correctas: correccionObjetiva.vfCorrectas,
-              total: correccionObjetiva.vfTotal,
-            },
-          },
-          // Mantén la evaluación de desarrollo intacta (viene de la IA)
-          correccion_detallada: data.retroalimentacion?.correccion_detallada || [],
-          evaluacion_habilidades: data.retroalimentacion?.evaluacion_habilidades || [],
-          resumen_general: data.retroalimentacion?.resumen_general || {},
+          correccion_objetiva: correccion
         };
-
-        // Calcular puntaje total exacto
-        const puntajeSM = correccionObjetiva.smCorrectas;
-        const puntajeVF = correccionObjetiva.vfCorrectas * 2; // 2 pts c/u
-        const puntajeDesarrollo = data.retroalimentacion?.puntajeDesarrollo || 0; // asume que la IA ya lo calculó
-        data.puntajeTotal = puntajeSM + puntajeVF + puntajeDesarrollo;
       }
 
       return data;
