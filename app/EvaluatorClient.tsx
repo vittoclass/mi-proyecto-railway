@@ -33,25 +33,9 @@ const Label = React.forwardRef<HTMLLabelElement, React.ComponentPropsWithoutRef<
 ));
 Label.displayName = 'Label';
 
-// ==== Logo SVG ====
-const DRAGONFLY_SVG = `
-<svg viewBox="0 0 300 220" xmlns="http://www.w3.org/2000/svg" aria-label="Libel-IA logo">
-  <defs>
-    <linearGradient id="lg-a" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#7C3AED"/>
-      <stop offset="50%" stop-color="#4F46E5"/>
-      <stop offset="100%" stop-color="#06B6D4"/>
-    </linearGradient>
-  </defs>
-  <rect x="147" y="72" width="6" height="92" rx="3" fill="url(#lg-a)"/>
-  <circle cx="150" cy="66" r="11" fill="url(#lg-a)"/>
-  <path d="M30,80 C90,40 210,40 270,80 C210,92 90,92 30,80Z" fill="url(#lg-a)" opacity="0.25"/>
-  <path d="M40,110 C100,90 200,90 260,110 C200,122 100,122 40,110Z" fill="url(#lg-a)" opacity="0.2"/>
-  <rect x="149" y="166" width="2" height="14" rx="1" fill="#6366F1"/>
-  <rect x="149" y="182" width="2" height="10" rx="1" fill="#22D3EE"/>
-</svg>
-`;
-const DRAGONFLY_DATA_URL = `image/svg+xml;utf8,${encodeURIComponent(DRAGONFLY_SVG)}`;
+// ==== Logo PNG en base64 (reemplaza con tu logo real) ====
+const LIBELIA_LOGO_PNG_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAeCAYAAAA7MK6iAAAACXBIWXMAAAsTAAALEwEAmpwYAAAB+0lEQVR4nO2Wz0sCURTHv29m1GVTW0G0aNGiRRARRdAiWkREtGgRtIiIaNEiIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQ......'; // TU LOGO AQUÍ
+
 const wordmarkClass = 'text-transparent bg-clip-text bg-gradient-to-r from-violet-500 via-indigo-500 to-cyan-400';
 
 // ==== Estilos Globales ====
@@ -110,7 +94,7 @@ const styles = StyleSheet.create({
   feedbackTitle: { fontSize: 9, fontWeight: 'bold', color: '#166534', marginBottom: 3 },
   feedbackImproveTitle: { fontSize: 9, fontWeight: 'bold', color: '#854D0E', marginBottom: 3 },
   feedbackText: { fontSize: 8, lineHeight: 1.15, flexWrap: 'wrap' as any },
-  // ✅ CORREGIDO: Eliminado 'display: "table"' (no válido en react-pdf)
+  // ✅ CORREGIDO: display: 'table' eliminado
   table: { width: '100%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 6 },
   tableRow: { margin: 'auto', flexDirection: 'row', borderBottomWidth: 1, borderColor: '#E5E7EB' },
   tableColHeader: { width: '35%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', padding: 2 },
@@ -143,7 +127,6 @@ function renderForWeb(value: any): React.ReactNode {
       return (
         <div className="space-y-1">
           <p className='font-semibold text-sm'>Puntaje: {value.puntaje}</p>
-          {/* ✅ CORREGIDO: comillas escapadas */}
           <p className='text-xs italic text-[var(--text-secondary)]'>Cita Estudiante: &quot;{value.cita_estudiante}&quot;</p>
           <p className='text-sm'>{value.justificacion}</p>
         </div>
@@ -193,7 +176,7 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <PDFImage src={DRAGONFLY_DATA_URL} style={styles.logoLibelia} />
+            <PDFImage src={LIBELIA_LOGO_PNG_BASE64} style={styles.logoLibelia} />
             <View>
               <Text style={styles.title}>Libel-IA</Text>
               <Text style={styles.subtitle}>Informe de Evaluación Pedagógica</Text>
@@ -420,7 +403,7 @@ export default function EvaluatorClient() {
     });
   };
 
-  // ✅ CORREGIDO: ahora recibe ChangeEvent<HTMLInputElement>
+  // ✅ CORREGIDO: recibe ChangeEvent<HTMLInputElement>
   const handleFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) processFiles(Array.from(e.target.files));
   };
@@ -610,7 +593,7 @@ export default function EvaluatorClient() {
           <TabsContent value="inicio" className="mt-8 text-center">
             <Card className="max-w-3xl mx-auto border-2 shadow-lg bg-[var(--bg-card)] border-[var(--border-color)]" style={{ backgroundImage: 'radial-gradient(circle, rgba(124, 58, 237, 0.15) 0%, rgba(9, 9, 11, 0) 70%)' }}>
               <CardContent className="p-12">
-                <img src={DRAGONFLY_DATA_URL} alt="Logo" className="mx-auto h-36 w-36 mb-4" />
+                <img src={LIBELIA_LOGO_PNG_BASE64} alt="Logo" className="mx-auto h-36 w-36 mb-4" />
                 <h1 className={`text-6xl font-bold ${wordmarkClass} font-logo`}>Libel-IA</h1>
                 <p className="mt-3 text-xl italic text-cyan-300">&quot;Evaluación con Inteligencia Docente: Hecha por un Profe, para Profes&quot;</p>
                 <p className="mt-6 text-lg text-[var(--text-secondary)]">Asistente pedagógico inteligente que analiza las respuestas de tus estudiantes, genera retroalimentación detallada y crea informes al instante.</p>
@@ -622,7 +605,7 @@ export default function EvaluatorClient() {
           </TabsContent>
           <TabsContent value="evaluator" className="space-y-8 mt-4">
             <div className="flex items-center gap-3">
-              <img src={DRAGONFLY_DATA_URL} alt="Logo Libel-IA" className="h-8 w-8" />
+              <img src={LIBELIA_LOGO_PNG_BASE64} alt="Logo Libel-IA" className="h-8 w-8" />
               <span className={`font-semibold text-xl ${wordmarkClass} font-logo`}>Libel-IA</span>
             </div>
             <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
@@ -760,7 +743,7 @@ export default function EvaluatorClient() {
                       <Camera className="mr-2 h-4 w-4" /> Usar Cámara
                     </Button>
                     {/* ✅ CORREGIDO: Ahora permite múltiples archivos */}
-                    <input type="file" multiple ref={fileInputRef} onChange={handleFilesSelected} className="hidden" />
+                    <input type="file" multiple accept="image/*,application/pdf" ref={fileInputRef} onChange={handleFilesSelected} className="hidden" />
                     <p className="text-sm text-[var(--text-secondary)]">Consejo: Sube primero la página con el nombre.</p>
                   </div>
                 </div>
@@ -983,7 +966,7 @@ export default function EvaluatorClient() {
           </TabsContent>
           <TabsContent value="presentacion" className="mt-8">
             <Card className="max-w-4xl mx-auto border-2 shadow-xl bg-[var(--bg-card)] border-[var(--border-color)] p-10 text-center">
-              <img src={DRAGONFLY_DATA_URL} alt="Logo Libel-IA" className="mx-auto h-32 w-32 mb-6" />
+              <img src={LIBELIA_LOGO_PNG_BASE64} alt="Logo Libel-IA" className="mx-auto h-32 w-32 mb-6" />
               <h1 className={`text-5xl font-bold ${wordmarkClass} font-logo mb-4`}>Libel-IA</h1>
               <p className="text-lg text-[var(--text-secondary)] mb-6">
                 Plataforma chilena de evaluación educativa con inteligencia artificial.
