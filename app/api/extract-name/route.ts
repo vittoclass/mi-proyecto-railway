@@ -38,9 +38,22 @@ async function ocrAzure(imageBuffer: Buffer): Promise<string> {
 }
 
 // --- FUNCIÓN ORIGINAL: FALLBACK DE IA (Modo 2) ---
+// 🚀 MEJORA: Prompt más estricto para excluir nombres de profesores y asegurar formato array de Nombres de ALUMNOS.
 async function extractNameWithAI(combinedText: string): Promise<string[]> {
-    const prompt = `Actúa como un extractor de datos. A partir del siguiente texto extraído con OCR de un examen, identifica y extrae el nombre completo del estudiante. SOLO devuelve el nombre del estudiante. Devuelve la sugerencia en formato JSON en un array de strings bajo la clave 'suggestions'.
-    Texto OCR: ${combinedText}
+    const prompt = `Actúa como un extractor de datos de un examen o trabajo. Tu ÚNICO OBJETIVO es identificar y extraer los nombres completos de los estudiantes que realizaron el examen. 
+    
+    INSTRUCCIONES CLAVE:
+    1. EXCLUYE de la extracción cualquier nombre que esté asociado o etiquetado como "Profesor", "Docente", "Asignatura", "Curso", "Prueba", "Evaluación" o "Fecha". Concéntrate SÓLO en los nombres de los ALUMNOS.
+    2. Devuelve un array de strings llamado 'suggestions' con TODOS los nombres de ALUMNOS que encuentres (individuales o grupales), en el orden en que aparecen.
+    
+    Si solo encuentras un nombre de alumno, devuélvelo como el único elemento en el array. Si encuentras varios nombres, devuelve todos los nombres identificados (máximo 7).
+    
+    Tu única respuesta debe ser un objeto JSON.
+    
+    Texto OCR para análisis: ${combinedText}
+    
+    Ejemplo de respuesta (trabajo grupal): 
+    {"suggestions": ["Juan Pérez", "Ana Gómez", "Carlos Rojas"]}
     `;
 
     try {
@@ -62,6 +75,7 @@ async function extractNameWithAI(combinedText: string): Promise<string[]> {
         const cleanedContent = match ? match[1] : "{\"suggestions\":[]}";
         const result = JSON.parse(cleanedContent);
 
+        // Se asegura de que 'suggestions' sea un array antes de devolverlo.
         return Array.isArray(result.suggestions) ? result.suggestions : [];
     } catch (error) {
         console.error("❌ Fallback de IA falló:", error);
@@ -161,4 +175,3 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
     }
 }
-

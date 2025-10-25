@@ -1,4 +1,4 @@
-// EvaluatorClient.tsx
+// EvaluatorClient.tsx (versión corregida para despliegue)
 'use client';
 import * as React from 'react';
 import { useState, useRef, ChangeEvent, useEffect } from 'react';
@@ -25,19 +25,16 @@ import { NotesDashboard } from '@/components/NotesDashboard';
 // PDF
 import { Document, Page, Text, View, StyleSheet, PDFDownloadLink, Image as PDFImage, PDFViewer, pdf } from '@react-pdf/renderer';
 import { useEvaluator } from './useEvaluator';
-
 const SmartCameraModal = dynamic(() => import('@/components/smart-camera-modal'), { ssr: false, loading: () => <p>Cargando...</p> });
-
 const Label = React.forwardRef<HTMLLabelElement, React.ComponentPropsWithoutRef<'label'>>(({ className, ...props }, ref) => (
   <label ref={ref} className={cn('text-sm font-medium', className)} {...props} />
 ));
 Label.displayName = 'Label';
-
-// ==== Logo PNG en base64 (reemplaza con tu logo real) ====
-const LIBELIA_LOGO_PNG_BASE64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAeCAYAAAA7MK6iAAAACXBIWXMAAAsTAAALEwEAmpwYAAAB+0lEQVR4nO2Wz0sCURTHv29m1GVTW0G0aNGiRRARRdAiWkREtGgRtIiIaNEiIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQmIqJFREQQRdQ......'; // TU LOGO AQUÍ
-
+// ==== DEFINICIONES DE CONSTANTES GLOBALES ====
+// 1. Clase de degradado para el texto (REORDENADA PARA EVITAR EL ERROR DE ÁMBITO)
 const wordmarkClass = 'text-transparent bg-clip-text bg-gradient-to-r from-violet-500 via-indigo-500 to-cyan-400';
-
+// 2. Logo PNG en base64 (CÓDIGO ESTABLE - UTILIZADO VÍA CSS BACKGROUND)
+const LIBELIA_LOGO_PNG_BASE64 = '/LOGO-LIBEL.png';
 // ==== Estilos Globales ====
 const GlobalStyles = () => (
   <style jsx global>{`
@@ -73,14 +70,19 @@ const GlobalStyles = () => (
     @media (max-width: 600px) { body { font-size: 12px; line-height: 1.4; } }
   `}</style>
 );
-
 // ==== Estilos PDF ====
 const styles = StyleSheet.create({
   page: { padding: 20, fontSize: 10, lineHeight: 1.25 },
   header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, paddingBottom: 5, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
   headerLeft: { flexDirection: 'row', alignItems: 'center' },
   headerRight: { textAlign: 'right' },
-  logoLibelia: { height: 28, width: 28 },
+  // ✅ LOGO AJUSTADO PARA SER VISIBLE (30x30)
+  logoLibelia: { 
+    height: 30, 
+    width: 30, 
+    marginRight: 8,
+    objectFit: 'contain', 
+  },
   logoColegio: { maxHeight: 30, maxWidth: 110, objectFit: 'contain' },
   title: { fontSize: 13, fontWeight: 'bold', color: '#4F46E5' },
   subtitle: { fontSize: 9, color: '#6B7280' },
@@ -109,7 +111,6 @@ const styles = StyleSheet.create({
   tableCellHeader: { margin: 1, fontSize: 8, fontWeight: 'bold' },
   tableCell: { margin: 1, fontSize: 8, textAlign: 'left' as any },
 });
-
 // ----------------- Helpers safe render -----------------
 function renderForWeb(value: any): React.ReactNode {
   if (value === null || value === undefined) return '';
@@ -137,7 +138,6 @@ function renderForWeb(value: any): React.ReactNode {
     return String(value);
   }
 }
-
 function pdfSafe(value: any): string {
   if (value === null || value === undefined) return '';
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
@@ -152,13 +152,11 @@ Justificación: ${value.justificacion}`;
     return String(value);
   }
 }
-
 const splitCorreccionForTwoPages = (lista: any[] | undefined) => {
   if (!lista || lista.length === 0) return { first: [], rest: [] };
   const MAX_P1 = Math.min(5, lista.length);
   return { first: lista.slice(0, MAX_P1), rest: lista.slice(MAX_P1) };
 };
-
 const ReportDocument = ({ group, formData, logoPreview }: any) => {
   const resumen = (group.retroalimentacion && group.retroalimentacion.resumen_general) || { fortalezas: 'N/A', areas_mejora: 'N/A' };
   const puntaje = group.puntaje || 'N/A';
@@ -171,6 +169,10 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
   }));
   const correccionConDesarrollo = [...correccion, ...correccionDesarrolloArray];
   const { first: correccionP1, rest: correccionP2 } = splitCorreccionForTwoPages(correccionConDesarrollo);
+  // Lógica para adaptar etiquetas del PDF según el nivel educativo (NECESARIO PARA EL REPORTE)
+  const isSuperior = ['Técnico Superior', 'Universitario', 'Postgrado'].includes(formData.nivelEducativo);
+  const cursoLabel = isSuperior ? 'Sección' : 'Curso';
+  const departamentoLabel = isSuperior ? 'Escuela/Carrera' : 'Departamento';
   return (
     <Document>
       <Page size="A4" style={styles.page}>
@@ -186,11 +188,14 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
             {logoPreview && <PDFImage src={logoPreview} style={styles.logoColegio} />}
             <Text style={styles.infoText}>Profesor: {pdfSafe(formData.nombreProfesor || 'N/A')}</Text>
             <Text style={styles.infoText}>Asignatura: {pdfSafe(formData.asignatura || 'N/A')}</Text>
+            {/* 👇 Aplicación de etiqueta condicional en PDF */}
+            <Text style={styles.infoText}>{departamentoLabel}: {pdfSafe(formData.departamento || 'N/A')}</Text>
             <Text style={styles.infoText}>Evaluación: {pdfSafe(formData.nombrePrueba || 'N/A')}</Text>
             <Text style={styles.infoText}>Fecha: {pdfSafe(format(new Date(), 'dd/MM/yyyy'))}</Text>
           </View>
         </View>
-        <Text style={styles.studentLine}>Alumno: {pdfSafe(group.studentName)} · Curso: {pdfSafe(formData.curso || 'N/A')}</Text>
+        {/* 👇 Aplicación de etiqueta condicional en PDF */}
+        <Text style={styles.studentLine}>Alumno: {pdfSafe(group.studentName)} · {cursoLabel}: {pdfSafe(formData.curso || 'N/A')}</Text>
         <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
           <View style={{ flex: 1, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', padding: 5, borderRadius: 6, textAlign: 'center' as any }}>
             <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#4B5563', marginBottom: 2 }}>Puntaje</Text>
@@ -207,11 +212,13 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
         </View>
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
           <View style={{ padding: 6, borderRadius: 6, flex: 1, backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#BBF7D0' }}>
-            <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#166534', marginBottom: 3 }}>✅ Fortalezas</Text>
+            {/* CORRECCIÓN DE SOLAPAMIENTO DE TEXTO EN PDF */}
+            <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#166534', marginBottom: 3 }}>✅ <Text>Fortalezas</Text></Text> 
             <Text style={styles.feedbackText}>{pdfSafe(resumen.fortalezas)}</Text>
           </View>
           <View style={{ padding: 6, borderRadius: 6, flex: 1, backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A' }}>
-            <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#854D0E', marginBottom: 3 }}>✏️ Áreas de Mejora</Text>
+            {/* CORRECCIÓN DE SOLAPAMIENTO DE TEXTO EN PDF */}
+            <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#854D0E', marginBottom: 3 }}>✏️ <Text>Áreas de Mejora</Text></Text>
             <Text style={styles.feedbackText}>{pdfSafe(resumen.areas_mejora)}</Text>
           </View>
         </View>
@@ -232,8 +239,6 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
             </View>
           </View>
         )}
-      </Page>
-      <Page size="A4" style={styles.page}>
         {correccionP2.length > 0 && (
           <View style={{ marginBottom: 6 }}>
             <Text style={{ fontSize: 10, fontWeight: 'bold', paddingBottom: 2, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', marginBottom: 5, marginTop: 8 }}>Corrección Detallada (cont.)</Text>
@@ -293,7 +298,6 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
     </Document>
   );
 };
-
 interface CorreccionDetallada { seccion: string; detalle: string; }
 interface EvaluacionHabilidad { habilidad: string; evaluacion: string; evidencia: string; }
 interface RetroalimentacionEstructurada {
@@ -304,7 +308,6 @@ interface RetroalimentacionEstructurada {
   nota?: number;
   retroalimentacion_alternativas?: { pregunta: string; respuesta_estudiante: string; respuesta_correcta: string }[];
 }
-
 const formSchema = z.object({
   tipoEvaluacion: z.string().default('prueba'),
   rubrica: z.string().min(10, 'La rúbrica es necesaria.'),
@@ -318,8 +321,11 @@ const formSchema = z.object({
   curso: z.string().optional(),
   fechaEvaluacion: z.date().optional(),
   areaConocimiento: z.string().default('general'),
+  // CAMPO AÑADIDO PARA EL NIVEL EDUCATIVO
+  nivelEducativo: z.string().default('Educación Media'), 
+  // 🚀 NUEVO CAMPO: Para almacenar nombres grupales completos (separados por ; )
+  nombresGrupales: z.string().optional(),
 });
-
 interface FilePreview { id: string; file: File; previewUrl: string; dataUrl: string; }
 interface StudentGroup {
   id: string;
@@ -334,7 +340,6 @@ interface StudentGroup {
   error?: string;
   detalle_desarrollo?: { [key: string]: any };
 }
-
 export default function EvaluatorClient() {
   const [activeTab, setActiveTab] = useState('presentacion');
   const [userEmail, setUserEmail] = useState<string>('');
@@ -365,14 +370,16 @@ export default function EvaluatorClient() {
       curso: '',
       fechaEvaluacion: new Date(),
       areaConocimiento: 'general',
+      // VALOR POR DEFECTO AÑADIDO
+      nivelEducativo: 'Educación Media', 
+      // VALOR POR DEFECTO DEL NUEVO CAMPO
+      nombresGrupales: '',
     },
   });
-
   useEffect(() => {
     const saved = (localStorage.getItem('userEmail') || '').toLowerCase();
     if (saved && /\S+@\S+\.\S+/.test(saved)) setUserEmail(saved);
   }, []);
-
   useEffect(() => {
     const count = Math.max(1, classSize);
     setStudentGroups(Array.from({ length: count }, (_, i) => ({
@@ -385,7 +392,6 @@ export default function EvaluatorClient() {
     })));
     setUnassignedFiles([]);
   }, [classSize]);
-
   const processFiles = (files: File[]) => {
     const validFiles = Array.from(files).filter(file => {
       if (['image/jpeg', 'image/png', 'image/bmp', 'application/pdf', 'image/tiff'].includes(file.type)) return true;
@@ -402,19 +408,16 @@ export default function EvaluatorClient() {
       reader.readAsDataURL(file);
     });
   };
-
   // ✅ CORREGIDO: recibe ChangeEvent<HTMLInputElement>
   const handleFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) processFiles(Array.from(e.target.files));
   };
-
   const handleCapture = (dataUrl: string) => {
     fetch(dataUrl).then(res => res.blob()).then(blob => {
       processFiles([new File([blob], `captura-${Date.now()}.png`, { type: 'image/png' })]);
     });
     setIsCameraOpen(false);
   };
-
   const handleLogoChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -423,17 +426,14 @@ export default function EvaluatorClient() {
       reader.readAsDataURL(file);
     }
   };
-
   const updateStudentName = (groupId: string, newName: string) =>
     setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, studentName: newName } : g));
-
   const assignFileToGroup = (fileId: string, groupId: string) => {
     const fileToMove = unassignedFiles.find(f => f.id === fileId);
     if (!fileToMove) return;
     setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, files: [...g.files, fileToMove] } : g));
     setUnassignedFiles(files => files.filter(f => f.id !== fileId));
   };
-
   const removeFileFromGroup = (fileId: string, groupId: string) => {
     let fileToMoveBack: FilePreview | undefined;
     setStudentGroups(groups => groups.map(g => {
@@ -445,22 +445,18 @@ export default function EvaluatorClient() {
     }));
     if (fileToMoveBack) setUnassignedFiles(prev => [...prev, fileToMoveBack!]);
   };
-
   const handleDecimasChange = (groupId: string, value: string) => {
     const decimas = parseFloat(value) || 0;
     setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, decimasAdicionales: decimas } : g));
   };
-
   const handlePuntajeChange = (groupId: string, value: string) => {
     setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, puntaje: value } : g));
   };
-
   const handleNotaChange = (groupId: string, value: string) => {
     setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, nota: parseFloat(value) || 0 } : g));
   };
-
   const removeUnassignedFile = (fileId: string) => { setUnassignedFiles(prev => prev.filter(f => f.id !== fileId)); };
-
+  // 🚀 MEJORA DE EXTRACCIÓN INTELIGENTE DE MÚLTIPLES NOMBRES - CORREGIDA Y OPTIMIZADA PARA GRUPOS
   const handleNameExtraction = async () => {
     if (unassignedFiles.length === 0) {
       alert('Sube primero la página que contiene el nombre.');
@@ -468,30 +464,59 @@ export default function EvaluatorClient() {
     }
     setIsExtractingNames(true);
     const formDataFD = new FormData();
-    formDataFD.append('files', unassignedFiles[0].file);
+    // Siempre enviamos el primer archivo pendiente para la extracción
+    formDataFD.append('files', unassignedFiles[0].file); 
+    // Asumiendo que 'nameList' no está disponible globalmente, se envía una lista vacía para que use el MODO 2 del backend
+    formDataFD.append('nameList', '[]');
     try {
       const response = await fetch('/api/extract-name', { method: 'POST', body: formDataFD });
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.error || 'Error desconocido.');
-      if (data.suggestions && data.suggestions.length > 0) {
-        const bestSuggestion = data.suggestions[0];
-        const firstDefaultStudentIndex = studentGroups.findIndex(g => g.studentName.startsWith('Alumno'));
-        if (firstDefaultStudentIndex !== -1) updateStudentName(studentGroups[firstDefaultStudentIndex].id, bestSuggestion);
-      } else alert('No se detectaron nombres en la imagen.');
+      // Aseguramos que sea un array
+      const detectedNames = Array.isArray(data.suggestions) ? data.suggestions as string[] : [];
+      const numDetected = detectedNames.length;
+      if (numDetected > 0) {
+        // 1. Unir todos los nombres en una cadena para guardarlos en el campo oculto del formulario (separados por ; ).
+        const allNamesList = detectedNames.map(n => n.trim());
+        const allNamesString = allNamesList.join('; ');
+        // 2. Crear la etiqueta visible para el grupo, uniendo todos los nombres con comas.
+        const visibleGroupName = allNamesList.join(', ');
+        // 🚀 CORRECCIÓN CLAVE: Asigna la etiqueta grupal COMPLETA al PRIMER grupo
+        setStudentGroups(groups => {
+            if (groups.length === 0) return groups;
+            // Crea una copia de la lista de grupos, solo actualizando el primero (índice 0)
+            return groups.map((g, index) => {
+                if (index === 0) {
+                    // Actualiza el nombre del estudiante con la cadena de nombres completa
+                    return { ...g, studentName: visibleGroupName };
+                }
+                // Si el grupo no es el primero, lo mantiene sin cambios
+                return g;
+            });
+        });
+        // 3. Asignar la lista COMPLETA al nuevo campo oculto del formulario
+        form.setValue('nombresGrupales', allNamesString);
+        // El mensaje de éxito usa el número de detectados para confirmar la asignación.
+        alert(`✅ Éxito: Se detectaron ${numDetected} nombres. El grupo fue renombrado a "${visibleGroupName}". La lista completa se adjuntará a la evaluación.`);
+      } else {
+          alert('⚠️ Advertencia: No se detectaron nombres en la imagen.');
+      }
+      // ------------------------------------------------------------------
     } catch (error) {
       console.error('Error en extracción:', error);
-      alert(`Error al extraer nombres: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      alert(`❌ Error al extraer nombres: ${error instanceof Error ? error.message : 'Error desconocido'}`);
     } finally {
       setIsExtractingNames(false);
     }
   };
-
   const onEvaluateAll = async () => {
-    if (!userEmail) {
-      alert('Falta confirmar tu correo. Ve a "Planes", activa o confirma tu correo y vuelve a evaluar.');
-      return;
-    }
-    const { rubrica, pauta, flexibilidad, tipoEvaluacion, areaConocimiento, puntajeTotal } = form.getValues();
+    // ❌ LÍNEA COMENTADA PARA ELIMINAR LA RESTRICCIÓN DE CRÉDITOS/EMAIL:
+    // if (!userEmail) {
+    //   alert('Falta confirmar tu correo. Ve a "Planes", activa o confirma tu correo y vuelve a evaluar.');
+    //   return;
+    // }
+    // Desestructurar todos los valores, incluyendo nivelEducativo y nombresGrupales
+    const { rubrica, pauta, flexibilidad, tipoEvaluacion, areaConocimiento, puntajeTotal, nivelEducativo, nombresGrupales } = form.getValues();
     if (!rubrica) {
       form.setError('rubrica', { type: 'manual', message: 'La rúbrica es requerida.' });
       return;
@@ -506,8 +531,12 @@ export default function EvaluatorClient() {
         flexibilidad: flexibilidad[0],
         tipoEvaluacion,
         areaConocimiento,
-        userEmail,
+        userEmail, // Se mantiene el userEmail en el payload aunque esté vacío
         puntajeTotal: Number(puntajeTotal),
+        // Envío del nuevo campo
+        nivelEducativo,
+        // 🚀 NUEVO CAMPO ENVIADO AL BACKEND
+        nombresGrupales, 
       };
       const result = await evaluate(payload);
       setStudentGroups(prev => prev.map(g => g.id === group.id
@@ -516,7 +545,6 @@ export default function EvaluatorClient() {
       ));
     }
   };
-
   const exportToDocOrCsv = (formatType: 'csv' | 'doc') => {
     const evaluatedGroups = studentGroups.filter(g => g.isEvaluated);
     if (evaluatedGroups.length === 0) {
@@ -524,10 +552,8 @@ export default function EvaluatorClient() {
       return;
     }
   };
-
   const isCurrentlyEvaluatingAny = studentGroups.some(g => g.isEvaluating);
   const previewGroup = previewGroupId ? studentGroups.find(g => g.id === previewGroupId) : null;
-
   const handlePreview = async (groupId: string) => {
     const group = studentGroups.find(g => g.id === groupId);
     if (!group || !group.retroalimentacion) return;
@@ -539,7 +565,9 @@ export default function EvaluatorClient() {
       setPreviewGroupId(groupId);
     }
   };
-
+  // Variable para lógica condicional de etiquetas en la UI (mantener aunque no se use en esta nueva estructura de pestañas, puede ser útil)
+  const selectedNivel = form.watch('nivelEducativo');
+  const isSuperior = ['Técnico Superior', 'Universitario', 'Postgrado'].includes(selectedNivel);
   return (
     <div className={activeTab === 'inicio' ? 'theme-ocaso' : theme}>
       <GlobalStyles />
@@ -584,16 +612,21 @@ export default function EvaluatorClient() {
           </div>
         </div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4 bg-[var(--bg-muted)]">
+          <TabsList className="grid w-full grid-cols-5 bg-[var(--bg-muted)]">
             <TabsTrigger value="inicio"><Home className="mr-2 h-4 w-4" />Inicio</TabsTrigger>
-            <TabsTrigger value="evaluator"><Sparkles className="mr-2 h-4 w-4" />Evaluador</TabsTrigger>
+            {/* 1. PESTAÑA: EVALUADOR ESCOLAR */}
+            <TabsTrigger value="evaluator"><Sparkles className="mr-2 h-4 w-4" />Evaluador Escolar</TabsTrigger>
+            {/* 2. PESTAÑA: EVALUADOR SUPERIOR */}
+            <TabsTrigger value="evaluator-superior"><Sparkles className="mr-2 h-4 w-4" />Evaluador Superior 🎓</TabsTrigger> 
             <TabsTrigger value="dashboard"><ClipboardList className="mr-2 h-4 w-4" />Resumen</TabsTrigger>
             <TabsTrigger value="presentacion"><Eye className="mr-2 h-4 w-4" />Presentación</TabsTrigger>
           </TabsList>
           <TabsContent value="inicio" className="mt-8 text-center">
             <Card className="max-w-3xl mx-auto border-2 shadow-lg bg-[var(--bg-card)] border-[var(--border-color)]" style={{ backgroundImage: 'radial-gradient(circle, rgba(124, 58, 237, 0.15) 0%, rgba(9, 9, 11, 0) 70%)' }}>
               <CardContent className="p-12">
-                <img src={LIBELIA_LOGO_PNG_BASE64} alt="Logo" className="mx-auto h-36 w-36 mb-4" />
+                {/* LOGO AJUSTADO: h-20 w-20 */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={LIBELIA_LOGO_PNG_BASE64} alt="Logo de Libel-IA" className="mx-auto h-20 w-20 mb-4" />
                 <h1 className={`text-6xl font-bold ${wordmarkClass} font-logo`}>Libel-IA</h1>
                 <p className="mt-3 text-xl italic text-cyan-300">&quot;Evaluación con Inteligencia Docente: Hecha por un Profe, para Profes&quot;</p>
                 <p className="mt-6 text-lg text-[var(--text-secondary)]">Asistente pedagógico inteligente que analiza las respuestas de tus estudiantes, genera retroalimentación detallada y crea informes al instante.</p>
@@ -603,13 +636,18 @@ export default function EvaluatorClient() {
               </CardContent>
             </Card>
           </TabsContent>
+          {/* ======================================================================================================================================================================= */}
+          {/* PESTAÑA 1: EVALUADOR ESCOLAR (Media y Básica) */}
+          {/* ======================================================================================================================================================================= */}
           <TabsContent value="evaluator" className="space-y-8 mt-4">
             <div className="flex items-center gap-3">
-              <img src={LIBELIA_LOGO_PNG_BASE64} alt="Logo Libel-IA" className="h-8 w-8" />
-              <span className={`font-semibold text-xl ${wordmarkClass} font-logo`}>Libel-IA</span>
+              {/* LOGO AJUSTADO: h-8 w-8 */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={LIBELIA_LOGO_PNG_BASE64} alt="Logo de Libel-IA" className="h-8 w-8" />
+              <span className={`font-semibold text-xl ${wordmarkClass} font-logo`}>Evaluador Escolar</span>
             </div>
             <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
-              <CardHeader><CardTitle className="text-[var(--text-accent)]">Paso 1: Configuración de la Evaluación</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-[var(--text-accent)]">Paso 1: Configuración de la Evaluación (Escolar)</CardTitle></CardHeader>
               <CardContent>
                 <Form {...form}>
                   <form onSubmit={(e) => { e.preventDefault(); onEvaluateAll(); }} className="space-y-8">
@@ -627,6 +665,7 @@ export default function EvaluatorClient() {
                         )} />
                       </div>
                     </div>
+                    {/* SELECTOR DE ÁREA DE CONOCIMIENTO (Se mantiene) */}
                     <FormField control={form.control} name="areaConocimiento" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="font-bold text-[var(--text-accent)]">Área de Conocimiento</FormLabel>
@@ -642,6 +681,26 @@ export default function EvaluatorClient() {
                             <SelectItem value="artes">Artes</SelectItem>
                           </SelectContent>
                         </Select>
+                      </FormItem>
+                    )} />
+                    {/* SELECTOR DE NIVEL EDUCATIVO (LIMITADO a opciones escolares) */}
+                    <FormField control={form.control} name="nivelEducativo" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="font-bold text-[var(--text-accent)]">Nivel Educativo</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecciona el nivel de la evaluación" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {/* Opciones LIMITADAS A ESCOLAR */}
+                            <SelectItem value="Educación Básica">Educación Básica (1° a 8°)</SelectItem>
+                            <SelectItem value="Educación Media">Educación Media (1° a 4°)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>Esto ajusta el rigor y la terminología de la IA.</FormDescription>
+                        <FormMessage />
                       </FormItem>
                     )} />
                     <FormField control={form.control} name="flexibilidad" render={({ field }) => (
@@ -728,232 +787,411 @@ export default function EvaluatorClient() {
                 </Form>
               </CardContent>
             </Card>
+            {/* 🛑 AQUÍ TERMINA LA PESTAÑA ESCOLAR. LOS PASOS 2 Y 3 SE RENDERIZAN UNA SOLA VEZ AL FINAL. */}
+          </TabsContent>
+          {/* ======================================================================================================================================================================= */}
+          {/* PESTAÑA 2: EVALUADOR SUPERIOR (Universidad, Técnico, Postgrado) - ETIQUETAS ADAPTADAS */}
+          {/* ======================================================================================================================================================================= */}
+          <TabsContent value="evaluator-superior" className="space-y-8 mt-4">
+            <div className="flex items-center gap-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={LIBELIA_LOGO_PNG_BASE64} alt="Logo de Libel-IA" className="h-8 w-8" />
+              <span className={`font-semibold text-xl ${wordmarkClass} font-logo`}>Evaluador Superior 🎓</span>
+            </div>
             <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
-              <CardHeader>
-                <CardTitle className="text-[var(--text-accent)]">Paso 2: Cargar y Agrupar Trabajos</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div>
-                  <h3 className="font-bold text-[var(--text-accent)]">Cargar Archivos</h3>
-                  <div className="flex flex-wrap gap-4 mt-2 items-center">
-                    <Button type="button" onClick={() => { fileInputRef.current?.click(); }}>
-                      <FileUp className="mr-2 h-4 w-4" /> Subir Archivos
-                    </Button>
-                    <Button type="button" variant="secondary" onClick={() => setIsCameraOpen(true)}>
-                      <Camera className="mr-2 h-4 w-4" /> Usar Cámara
-                    </Button>
-                    {/* ✅ CORREGIDO: Ahora permite múltiples archivos */}
-                    <input type="file" multiple accept="image/*,application/pdf" ref={fileInputRef} onChange={handleFilesSelected} className="hidden" />
-                    <p className="text-sm text-[var(--text-secondary)]">Consejo: Sube primero la página con el nombre.</p>
-                  </div>
-                </div>
-                {unassignedFiles.length > 0 && (
-                  <div className="p-4 border rounded-lg bg-[var(--bg-muted-subtle)] border-[var(--border-color)]">
-                    <h3 className="font-semibold mb-3 flex items-center text-[var(--text-accent)]">
-                      <ClipboardList className="mr-2 h-5 w-5" /> Archivos Pendientes
-                    </h3>
-                    <div className="flex flex-wrap gap-4 items-center">
-                      {unassignedFiles.map(file => (
-                        <div key={file.id} className="relative w-24 h-24">
-                          <img src={file.previewUrl} alt={file.file.name} className="w-full h-full object-cover rounded-md" />
-                          <button onClick={() => removeUnassignedFile(file.id)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 transition-colors" aria-label="Eliminar archivo">
-                            <X className="h-3 w-3" />
-                          </button>
-                        </div>
-                      ))}
-                      <Button type="button" variant="outline" onClick={handleNameExtraction} disabled={isExtractingNames} className="self-center">
-                        {isExtractingNames ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4 text-purple-500" />} Detectar Nombre
-                      </Button>
+              <CardHeader><CardTitle className="text-[var(--text-accent)]">Paso 1: Configuración de la Evaluación (Superior)</CardTitle></CardHeader>
+              <CardContent>
+                <Form {...form}>
+                  <form onSubmit={(e) => { e.preventDefault(); onEvaluateAll(); }} className="space-y-8">
+                    <div className="flex flex-wrap items-center gap-x-8 gap-y-4 p-4 border rounded-lg border-[var(--border-color)]">
+                      <div className="flex items-center space-x-3">
+                        <Label htmlFor="class-size" className="text-base font-bold text-[var(--text-accent)]">Nº de Estudiantes:</Label>
+                        <Input id="class-size" type="number" value={classSize} onChange={(e) => setClassSize(Number(e.target.value) || 1)} className="w-24 text-base" min={1} />
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <FormField control={form.control} name="curso" render={({ field }) => (
+                          <FormItem className="flex items-center space-x-3">
+                            {/* CAMBIO DE ETIQUETA: Curso -> Sección/Paralelo */}
+                            <FormLabel className="text-base font-bold mt-2 text-[var(--text-accent)]">Sección/Paralelo:</FormLabel>
+                            {/* CAMBIO DE PLACEHOLDER: Ej: N-101, Diurno */}
+                            <FormControl><Input placeholder="Ej: N-101, Diurno" {...field} className="w-40 text-base" /></FormControl>
+                          </FormItem>
+                        )} />
+                      </div>
                     </div>
-                  </div>
-                )}
+                    {/* SELECTOR DE ÁREA DE CONOCIMIENTO (Se mantiene) */}
+                    <FormField control={form.control} name="areaConocimiento" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="font-bold text-[var(--text-accent)]">Área de Conocimiento</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Selecciona la materia..." /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="general">General / Interdisciplinario</SelectItem>
+                            <SelectItem value="lenguaje">Lenguaje e Historia</SelectItem>
+                            <SelectItem value="humanidades">Filosofía y Humanidades</SelectItem>
+                            <SelectItem value="matematicas">Matemáticas</SelectItem>
+                            <SelectItem value="ciencias">Ciencias</SelectItem>
+                            <SelectItem value="ingles">Inglés</SelectItem>
+                            <SelectItem value="artes">Artes</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    )} />
+                    {/* SELECTOR DE NIVEL EDUCATIVO (LIMITADO a opciones SUPERIORES) */}
+                    <FormField control={form.control} name="nivelEducativo" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="font-bold text-[var(--text-accent)]">Nivel Educativo</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecciona el nivel de la evaluación" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {/* Opciones LIMITADAS A SUPERIOR */}
+                            <SelectItem value="Técnico Superior">Educación Técnico Profesional (IP/CFT)</SelectItem>
+                            <SelectItem value="Universitario">Educación Universitaria (Pregrado)</SelectItem>
+                            <SelectItem value="Postgrado">Postgrado (Magíster/Doctorado)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>Asegúrate de seleccionar una opción Superior para el rigor de la IA.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="flexibilidad" render={({ field }) => (
+                      <FormItem className="compact-field space-y-1">
+                        <FormLabel className="text-[var(--text-accent)]">Nivel (flexibilidad)</FormLabel>
+                        <FormControl>
+                          <Slider min={1} max={5} step={1} defaultValue={field.value} onValueChange={field.onChange} />
+                        </FormControl>
+                        <div className="flex justify-between text-[10px] text-[var(--text-secondary)] range-hints">
+                          <span>Estricto</span><span>Flexible</span>
+                        </div>
+                      </FormItem>
+                    )} />
+                    <div className="p-4 border rounded-lg border-[var(--border-color)]">
+                      <h3 className="text-lg font-semibold mb-4 text-[var(--text-accent)]">Personalización del Informe</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <FormField control={form.control} name="nombreProfesor" render={({ field }) => (
+                          <FormItem>
+                            {/* CAMBIO DE ETIQUETA: Profesor -> Docente */}
+                            <FormLabel className="text-[var(--text-accent)]">Nombre del Docente</FormLabel>
+                            <FormControl><Input placeholder="Ej: Juan Pérez" {...field} /></FormControl>
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="departamento" render={({ field }) => (
+                          <FormItem>
+                            {/* CAMBIO DE ETIQUETA: Departamento -> Escuela/Carrera */}
+                            <FormLabel className="text-[var(--text-accent)]">Escuela/Carrera</FormLabel>
+                            {/* CAMBIO DE PLACEHOLDER: Ej: Ingeniería, Trabajo Social */}
+                            <FormControl><Input placeholder="Ej: Ingeniería, Trabajo Social" {...field} /></FormControl>
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="asignatura" render={({ field }) => (
+                          <FormItem><FormLabel className="text-[var(--text-accent)]">Asignatura</FormLabel><FormControl><Input placeholder="Ej: Lenguaje y Comunicación" {...field} /></FormControl></FormItem>
+                        )} />
+                        <FormField control={form.control} name="nombrePrueba" render={({ field }) => (
+                          <FormItem>
+                            {/* CAMBIO DE ETIQUETA: Prueba -> Certamen/Evaluación */}
+                            <FormLabel className="text-[var(--text-accent)]">Nombre de la Evaluación/Certamen</FormLabel>
+                            {/* CAMBIO DE PLACEHOLDER: Ej: Certamen N°2 */}
+                            <FormControl><Input placeholder="Ej: Certamen N°2" {...field} /></FormControl>
+                          </FormItem>
+                        )} />
+                        <FormField control={form.control} name="fechaEvaluacion" render={({ field }) => (
+                          <FormItem className="flex flex-col">
+                            <FormLabel className="text-[var(--text-accent)]">Fecha</FormLabel>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <FormControl>
+                                  <Button variant={'outline'} className={cn('pl-3 text-left font-normal', !field.value && 'text-[var(--text-secondary)]')}>
+                                    {field.value ? format(field.value, 'PPP') : <span>Elige una fecha</span>}
+                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                  </Button>
+                                </FormControl>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus />
+                              </PopoverContent>
+                            </Popover>
+                          </FormItem>
+                        )} />
+                        <div className="space-y-2 col-span-full">
+                          <Label className="text-[var(--text-accent)]">Logo del Colegio (Opcional)</Label>
+                          <div className="flex items-center gap-4">
+                            <Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}>
+                              <ImageUp className="mr-2 h-4 w-4" />Subir Logo
+                            </Button>
+                            <input type="file" accept="image/*" ref={logoInputRef} onChange={handleLogoChange} className="hidden" />
+                            {logoPreview && <img src={logoPreview} alt="Vista previa del logo" className="h-12 w-auto object-contain border p-1 rounded-md" />}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <FormField control={form.control} name="puntajeTotal" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="font-bold text-[var(--text-accent)]">Puntaje Total</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ej: 60" type="number" {...field} />
+                        </FormControl>
+                        <FormDescription>Ingresa el puntaje máximo de la evaluación. Esto es obligatorio.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="rubrica" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="font-bold text-[var(--text-accent)]">Rúbrica (Criterios)</FormLabel>
+                        <FormControl><Textarea placeholder="Ej: Evalúa claridad, estructura, ortografía..." className="min-h-[100px]" {...field} /></FormControl>
+                        <FormDescription>Describe los criterios de evaluación. Ya no es necesario incluir el puntaje total aquí.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="pauta" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="font-bold text-[var(--text-accent)]">Pauta (Respuestas)</FormLabel>
+                        <FormControl><Textarea placeholder="Opcional. Pega aquí las respuestas correctas..." className="min-h-[100px]" {...field} /></FormControl>
+                      </FormItem>
+                    )} />
+                  </form>
+                </Form>
               </CardContent>
             </Card>
-            {studentGroups.length > 0 && (
+            {/* 🛑 AQUÍ TERMINA LA PESTAÑA SUPERIOR. LOS PASOS 2 Y 3 SE RENDERIZAN UNA SOLA VEZ AL FINAL. */}
+          </TabsContent>
+          {/* ======================================================================================================================================================================= */}
+          {/* LOS PASOS 2, 3 y RESULTADOS (QUE ANTES ESTABAN DUPLICADOS) SE RENDERIZAN UNA SOLA VEZ AQUÍ ABAJO */}
+          {/* Renderizar Pasos 2 y 3 solo si estamos en alguna de las pestañas de evaluación */}
+          {(activeTab === 'evaluator' || activeTab === 'evaluator-superior') && (
+            <>
+              {/* Paso 2: Cargar y Agrupar Trabajos */}
               <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-[var(--text-accent)]">
-                    <Users className="text-green-500" />Grupos de Estudiantes
-                  </CardTitle>
+                  <CardTitle className="text-[var(--text-accent)]">Paso 2: Cargar y Agrupar Trabajos</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  {studentGroups.map(group => (
-                    <div key={group.id} className="border p-4 rounded-lg border-[var(--border-color)]">
-                      <Input className="text-lg font-bold border-0 shadow-none focus-visible:ring-0 p-1 mb-2 bg-transparent" value={group.studentName} onChange={(e) => updateStudentName(group.id, e.target.value)} />
-                      <div className="flex flex-wrap gap-2 min-h-[50px] bg-[var(--bg-muted-subtle)] p-2 rounded-md">
-                        {group.files.map(file => (
-                          <div key={file.id} className="relative w-20 h-20">
+                <CardContent className="space-y-6">
+                  <div>
+                    <h3 className="font-bold text-[var(--text-accent)]">Cargar Archivos</h3>
+                    <div className="flex flex-wrap gap-4 mt-2 items-center">
+                      <Button type="button" onClick={() => { fileInputRef.current?.click(); }}>
+                        <FileUp className="mr-2 h-4 w-4" /> Subir Archivos
+                      </Button>
+                      <Button type="button" variant="secondary" onClick={() => setIsCameraOpen(true)}>
+                        <Camera className="mr-2 h-4 w-4" /> Usar Cámara
+                      </Button>
+                      <input type="file" multiple accept="image/*,application/pdf" ref={fileInputRef} onChange={handleFilesSelected} className="hidden" />
+                      <p className="text-sm text-[var(--text-secondary)]">Consejo: Sube primero la página con el nombre.</p>
+                    </div>
+                  </div>
+                  {unassignedFiles.length > 0 && (
+                    <div className="p-4 border rounded-lg bg-[var(--bg-muted-subtle)] border-[var(--border-color)]">
+                      <h3 className="font-semibold mb-3 flex items-center text-[var(--text-accent)]">
+                        <ClipboardList className="mr-2 h-5 w-5" /> Archivos Pendientes
+                      </h3>
+                      <div className="flex flex-wrap gap-4 items-center">
+                        {unassignedFiles.map(file => (
+                          <div key={file.id} className="relative w-24 h-24">
                             <img src={file.previewUrl} alt={file.file.name} className="w-full h-full object-cover rounded-md" />
-                            <button onClick={() => removeFileFromGroup(file.id, group.id)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5">
+                            <button onClick={() => removeUnassignedFile(file.id)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 transition-colors" aria-label="Eliminar archivo">
                               <X className="h-3 w-3" />
                             </button>
                           </div>
                         ))}
-                        {unassignedFiles.length > 0 && (
-                          <div className="flex items-center justify-center w-20 h-20 border-2 border-dashed rounded-md border-[var(--border-color)]">
-                            <select onChange={(e) => { if (e.target.value) assignFileToGroup(e.target.value, group.id); e.target.value = ''; }} className="text-sm bg-transparent">
-                              <option value="">Asignar</option>
-                              {unassignedFiles.map(f => <option key={f.id} value={f.id}>{f.file.name}</option>)}
-                            </select>
-                          </div>
-                        )}
+                        <Button type="button" variant="outline" onClick={handleNameExtraction} disabled={isExtractingNames} className="self-center">
+                          {isExtractingNames ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4 text-purple-500" />} Detectar Nombre
+                        </Button>
                       </div>
                     </div>
-                  ))}
+                  )}
                 </CardContent>
-                <CardFooter>
-                  <Button size="lg" onClick={onEvaluateAll} disabled={isCurrentlyEvaluatingAny || studentGroups.every(g => g.files.length === 0)}>
-                    {isLoading || isCurrentlyEvaluatingAny ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Evaluando...</> : <><Sparkles className="mr-2 h-4 w-4" /> Evaluar Todo</>}
-                  </Button>
-                </CardFooter>
               </Card>
-            )}
-            {studentGroups.some(g => g.isEvaluated || g.isEvaluating) && (
-              <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
-                <CardHeader><CardTitle className="text-[var(--text-accent)]">Paso 3: Resultados</CardTitle></CardHeader>
-                <CardContent className="space-y-4">
-                  {studentGroups.filter(g => g.isEvaluated || g.isEvaluating).map(group => {
-                    const notaNumber = Number(group.nota) || 0;
-                    const finalNota = notaNumber + (group.decimasAdicionales || 0);
-                    return (
-                      <div key={group.id} className={`p-6 rounded-lg border-l-4 ${group.error ? 'border-red-500' : 'border-green-500'} bg-[var(--bg-card)] shadow`}>
-                        <div className="flex justify-between items-center flex-wrap gap-2">
-                          <h3 className="font-bold text-xl text-[var(--text-accent)]">{group.studentName}</h3>
-                          {group.isEvaluating && <div className="flex items-center text-sm text-[var(--text-secondary)]"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Procesando...</div>}
-                          {group.isEvaluated && !group.error && (
-                            <div className="flex items-center gap-2">
-                              <Button variant="outline" size="sm" onClick={() => handlePreview(group.id)}>
-                                <Eye className="mr-2 h-4 w-4" /> Ver informe
-                              </Button>
-                              <PDFDownloadLink
-                                document={<ReportDocument group={group} formData={form.getValues()} logoPreview={logoPreview} />}
-                                fileName={`informe_${group.studentName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`}
-                              >
-                                {({ loading }) => (
-                                  <Button variant="ghost" size="sm" disabled={loading}>
-                                    {loading ? 'Preparando PDF...' : <><Printer className="mr-2 h-4 w-4" /> Descargar PDF</>}
-                                  </Button>
-                                )}
-                              </PDFDownloadLink>
+              {/* Paso 3: Grupos y Evaluación */}
+              {studentGroups.length > 0 && (
+                <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-[var(--text-accent)]">
+                      <Users className="text-green-500" />Grupos de Estudiantes
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {studentGroups.map(group => (
+                      <div key={group.id} className="border p-4 rounded-lg border-[var(--border-color)]">
+                        <Input className="text-lg font-bold border-0 shadow-none focus-visible:ring-0 p-1 mb-2 bg-transparent" value={group.studentName} onChange={(e) => updateStudentName(group.id, e.target.value)} />
+                        <div className="flex flex-wrap gap-2 min-h-[50px] bg-[var(--bg-muted-subtle)] p-2 rounded-md">
+                          {group.files.map(file => (
+                            <div key={file.id} className="relative w-20 h-20">
+                              <img src={file.previewUrl} alt={file.file.name} className="w-full h-full object-cover rounded-md" />
+                              <button onClick={() => removeFileFromGroup(file.id, group.id)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5">
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                          {unassignedFiles.length > 0 && (
+                            <div className="flex items-center justify-center w-20 h-20 border-2 border-dashed rounded-md border-[var(--border-color)]">
+                              <select onChange={(e) => { if (e.target.value) assignFileToGroup(e.target.value, group.id); e.target.value = ''; }} className="text-sm bg-transparent">
+                                <option value="">Asignar</option>
+                                {unassignedFiles.map(f => <option key={f.id} value={f.id}>{f.file.name}</option>)}
+                              </select>
                             </div>
                           )}
                         </div>
-                        {group.error ? (
-                          <p className="text-red-600">Error: {group.error}</p>
-                        ) : (
-                          <div className="mt-4 space-y-6">
-                            {group.isEvaluated && group.retroalimentacion && (
-                              <>
-                                <div className="flex justify-between items-start bg-[var(--bg-muted-subtle)] p-4 rounded-lg">
-                                  <div>
-                                    <p className="text-sm font-bold">PUNTAJE</p>
-                                    <Input
-                                      className="text-xl font-semibold w-24 h-12 text-center"
-                                      type="text"
-                                      value={typeof group.puntaje === 'object' ? JSON.stringify(group.puntaje) : (group.puntaje || '')}
-                                      onChange={e => handlePuntajeChange(group.id, e.target.value)}
-                                      placeholder="N/A"
-                                    />
-                                  </div>
-                                  <div className="text-right">
-                                    <div className="flex items-center gap-2">
-                                      <label htmlFor={`decimas-${group.id}`} className="text-sm font-medium">Décimas:</label>
-                                      <Input id={`decimas-${group.id}`} type="number" step={0.1} defaultValue={group.decimasAdicionales} onChange={e => handleDecimasChange(group.id, e.target.value)} className="h-8 w-20" />
-                                    </div>
-                                    <p className="text-sm font-bold mt-2">NOTA FINAL</p>
-                                    <Input
-                                      className="text-3xl font-bold w-24 h-12 text-center text-blue-600 border-none bg-transparent"
-                                      type="number"
-                                      step={0.1}
-                                      value={String(Number(group.nota || 0) + (group.decimasAdicionales || 0))}
-                                      onChange={e => handleNotaChange(group.id, e.target.value)}
-                                      placeholder="N/A"
-                                    />
-                                  </div>
-                                </div>
-                                <div>
-                                  <h4 className="font-bold mb-2 text-[var(--text-accent)]">Corrección Detallada</h4>
-                                  <div className="overflow-x-auto">
-                                    <Table>
-                                      <TableHeader>
-                                        <TableRow>
-                                          <TableHead>Sección</TableHead>
-                                          <TableHead>Detalle</TableHead>
-                                        </TableRow>
-                                      </TableHeader>
-                                      <TableBody>
-                                        {group.retroalimentacion.correccion_detallada?.map((item, index) => (
-                                          <TableRow key={index}>
-                                            <TableCell className="font-medium">{renderForWeb(item.seccion)}</TableCell>
-                                            <TableCell>{renderForWeb(item.detalle)}</TableCell>
-                                          </TableRow>
-                                        ))}
-                                        {Object.keys(group.detalle_desarrollo || {}).map(key => {
-                                          const item = group.detalle_desarrollo?.[key];
-                                          if (!item) return null;
-                                          return (
-                                            <TableRow key={key}>
-                                              <TableCell className="font-medium text-purple-600">{key.replace(/_/g, ' ')}</TableCell>
-                                              <TableCell>
-                                                <p className='font-semibold text-sm mb-1'>Puntaje: {item.puntaje}</p>
-                                                <p className='text-xs italic text-[var(--text-secondary)] mb-1'>Cita Estudiante: &quot;{item.cita_estudiante}&quot;</p>
-                                                <p className='text-sm'>{item.justificacion}</p>
-                                              </TableCell>
-                                            </TableRow>
-                                          );
-                                        })}
-                                      </TableBody>
-                                    </Table>
-                                  </div>
-                                </div>
-                                <div>
-                                  <h4 className="font-bold mb-2 text-[var(--text-accent)]">Evaluación de Habilidades</h4>
-                                  <div className="overflow-x-auto">
-                                    <Table>
-                                      <TableHeader>
-                                        <TableRow>
-                                          <TableHead>Habilidad</TableHead>
-                                          <TableHead>Nivel</TableHead>
-                                          <TableHead>Evidencia</TableHead>
-                                        </TableRow>
-                                      </TableHeader>
-                                      <TableBody>
-                                        {group.retroalimentacion.evaluacion_habilidades?.map((item, index) => (
-                                          <TableRow key={index}>
-                                            <TableCell className="font-medium">{renderForWeb(item.habilidad)}</TableCell>
-                                            <TableCell>{renderForWeb(item.evaluacion)}</TableCell>
-                                            <TableCell className="italic">&quot;{renderForWeb(item.evidencia)}&quot;</TableCell>
-                                          </TableRow>
-                                        ))}
-                                      </TableBody>
-                                    </Table>
-                                  </div>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-                                  <div>
-                                    <h4 className="font-bold text-[var(--text-accent)]">Fortalezas</h4>
-                                    <div className="text-sm mt-2 p-3 bg-[var(--bg-muted-subtle)] border border-[var(--border-color)] rounded-lg">
-                                      {renderForWeb(group.retroalimentacion.resumen_general?.fortalezas)}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <h4 className="font-bold text-[var(--text-accent)]">Áreas de Mejora</h4>
-                                    <div className="text-sm mt-2 p-3 bg-[var(--bg-muted-subtle)] border border-[var(--border-color)] rounded-lg">
-                                      {renderForWeb(group.retroalimentacion.resumen_general?.areas_mejora)}
-                                    </div>
-                                  </div>
-                                </div>
-                              </>
+                      </div>
+                    ))}
+                  </CardContent>
+                  <CardFooter>
+                    <Button size="lg" onClick={onEvaluateAll} disabled={isCurrentlyEvaluatingAny || studentGroups.every(g => g.files.length === 0)}>
+                      {isLoading || isCurrentlyEvaluatingAny ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Evaluando...</> : <><Sparkles className="mr-2 h-4 w-4" /> Evaluar Todo</>}
+                    </Button>
+                  </CardFooter>
+                </Card>
+              )}
+              {/* Paso 4: Resultados */}
+              {studentGroups.some(g => g.isEvaluated || g.isEvaluating) && (
+                <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
+                  <CardHeader><CardTitle className="text-[var(--text-accent)]">Paso 3: Resultados</CardTitle></CardHeader>
+                  <CardContent className="space-y-4">
+                    {studentGroups.filter(g => g.isEvaluated || g.isEvaluating).map(group => {
+                      const notaNumber = Number(group.nota) || 0;
+                      const finalNota = notaNumber + (group.decimasAdicionales || 0);
+                      return (
+                        <div key={group.id} className={`p-6 rounded-lg border-l-4 ${group.error ? 'border-red-500' : 'border-green-500'} bg-[var(--bg-card)] shadow`}>
+                          <div className="flex justify-between items-center flex-wrap gap-2">
+                            <h3 className="font-bold text-xl text-[var(--text-accent)]">{group.studentName}</h3>
+                            {group.isEvaluating && <div className="flex items-center text-sm text-[var(--text-secondary)]"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Procesando...</div>}
+                            {group.isEvaluated && !group.error && (
+                              <div className="flex items-center gap-2">
+                                <Button variant="outline" size="sm" onClick={() => handlePreview(group.id)}>
+                                  <Eye className="mr-2 h-4 w-4" /> Ver informe
+                                </Button>
+                                <PDFDownloadLink
+                                  document={<ReportDocument group={group} formData={form.getValues()} logoPreview={logoPreview} />}
+                                  fileName={`informe_${group.studentName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`}
+                                >
+                                  {({ loading }) => (
+                                    <Button variant="ghost" size="sm" disabled={loading}>
+                                      {loading ? 'Preparando PDF...' : <><Printer className="mr-2 h-4 w-4" /> Descargar PDF</>}
+                                    </Button>
+                                  )}
+                                </PDFDownloadLink>
+                              </div>
                             )}
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
+                          {group.error ? (
+                            <p className="text-red-600">Error: {group.error}</p>
+                          ) : (
+                            <div className="mt-4 space-y-6">
+                              {group.isEvaluated && group.retroalimentacion && (
+                                <>
+                                  <div className="flex justify-between items-start bg-[var(--bg-muted-subtle)] p-4 rounded-lg">
+                                    <div>
+                                      <p className="text-sm font-bold">PUNTAJE</p>
+                                      <Input
+                                        className="text-xl font-semibold w-24 h-12 text-center"
+                                        type="text"
+                                        value={typeof group.puntaje === 'object' ? JSON.stringify(group.puntaje) : (group.puntaje || '')}
+                                        onChange={e => handlePuntajeChange(group.id, e.target.value)}
+                                        placeholder="N/A"
+                                      />
+                                    </div>
+                                    <div className="text-right">
+                                      <div className="flex items-center gap-2">
+                                        <label htmlFor={`decimas-${group.id}`} className="text-sm font-medium">Décimas:</label>
+                                        <Input id={`decimas-${group.id}`} type="number" step={0.1} defaultValue={group.decimasAdicionales} onChange={e => handleDecimasChange(group.id, e.target.value)} className="h-8 w-20" />
+                                      </div>
+                                      <p className="text-sm font-bold mt-2">NOTA FINAL</p>
+                                      <Input
+                                        className="text-3xl font-bold w-24 h-12 text-center text-blue-600 border-none bg-transparent"
+                                        type="number"
+                                        step={0.1}
+                                        value={String(Number(group.nota || 0) + (group.decimasAdicionales || 0))}
+                                        onChange={e => handleNotaChange(group.id, e.target.value)}
+                                        placeholder="N/A"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <h4 className="font-bold mb-2 text-[var(--text-accent)]">Corrección Detallada</h4>
+                                    <div className="overflow-x-auto">
+                                      <Table>
+                                        <TableHeader>
+                                          <TableRow>
+                                            <TableHead>Sección</TableHead>
+                                            <TableHead>Detalle</TableHead>
+                                          </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                          {group.retroalimentacion.correccion_detallada?.map((item, index) => (
+                                            <TableRow key={index}>
+                                              <TableCell className="font-medium">{renderForWeb(item.seccion)}</TableCell>
+                                              <TableCell>{renderForWeb(item.detalle)}</TableCell>
+                                            </TableRow>
+                                          ))}
+                                          {Object.keys(group.detalle_desarrollo || {}).map(key => {
+                                            const item = group.detalle_desarrollo?.[key];
+                                            if (!item) return null;
+                                            return (
+                                              <TableRow key={key}>
+                                                <TableCell className="font-medium text-purple-600">{key.replace(/_/g, ' ')}</TableCell>
+                                                <TableCell>
+                                                  <p className='font-semibold text-sm mb-1'>Puntaje: {item.puntaje}</p>
+                                                  <p className='text-xs italic text-[var(--text-secondary)] mb-1'>Cita Estudiante: &quot;{item.cita_estudiante}&quot;</p>
+                                                  <p className='text-sm'>{item.justificacion}</p>
+                                                </TableCell>
+                                              </TableRow>
+                                            );
+                                          })}
+                                        </TableBody>
+                                      </Table>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <h4 className="font-bold mb-2 text-[var(--text-accent)]">Evaluación de Habilidades</h4>
+                                    <div className="overflow-x-auto">
+                                      <Table>
+                                        <TableHeader>
+                                          <TableRow>
+                                            <TableHead>Habilidad</TableHead>
+                                            <TableHead>Nivel</TableHead>
+                                            <TableHead>Evidencia</TableHead>
+                                          </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                          {group.retroalimentacion.evaluacion_habilidades?.map((item, index) => (
+                                            <TableRow key={index}>
+                                              <TableCell className="font-medium">{renderForWeb(item.habilidad)}</TableCell>
+                                              <TableCell>{renderForWeb(item.evaluacion)}</TableCell>
+                                              <TableCell className="italic">&quot;{renderForWeb(item.evidencia)}&quot;</TableCell>
+                                            </TableRow>
+                                          ))}
+                                        </TableBody>
+                                      </Table>
+                                    </div>
+                                  </div>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                                    <div>
+                                      <h4 className="font-bold text-[var(--text-accent)]">Fortalezas</h4>
+                                      <div className="text-sm mt-2 p-3 bg-[var(--bg-muted-subtle)] border border-[var(--border-color)] rounded-lg">
+                                        {renderForWeb(group.retroalimentacion.resumen_general?.fortalezas)}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <h4 className="font-bold text-[var(--text-accent)]">Áreas de Mejora</h4>
+                                      <div className="text-sm mt-2 p-3 bg-[var(--bg-muted-subtle)] border border-[var(--border-color)] rounded-lg">
+                                        {renderForWeb(group.retroalimentacion.resumen_general?.areas_mejora)}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
           <TabsContent value="dashboard" className="mt-4 space-y-4">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-xl font-semibold text-[var(--text-accent)]">Resumen de Notas</h2>
@@ -966,7 +1204,9 @@ export default function EvaluatorClient() {
           </TabsContent>
           <TabsContent value="presentacion" className="mt-8">
             <Card className="max-w-4xl mx-auto border-2 shadow-xl bg-[var(--bg-card)] border-[var(--border-color)] p-10 text-center">
-              <img src={LIBELIA_LOGO_PNG_BASE64} alt="Logo Libel-IA" className="mx-auto h-32 w-32 mb-6" />
+              {/* LOGO AJUSTADO: h-20 w-20 */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={LIBELIA_LOGO_PNG_BASE64} alt="Logo de Libel-IA" className="mx-auto h-20 w-20 mb-6" />
               <h1 className={`text-5xl font-bold ${wordmarkClass} font-logo mb-4`}>Libel-IA</h1>
               <p className="text-lg text-[var(--text-secondary)] mb-6">
                 Plataforma chilena de evaluación educativa con inteligencia artificial.
