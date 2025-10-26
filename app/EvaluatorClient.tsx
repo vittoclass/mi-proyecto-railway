@@ -1,4 +1,4 @@
-// EvaluatorClient.tsx (versión corregida para despliegue)
+// EvaluatorClient.tsx
 'use client';
 import * as React from 'react';
 import { useState, useRef, ChangeEvent, useEffect } from 'react';
@@ -68,6 +68,15 @@ const GlobalStyles = () => (
     .compact-field label { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
     .compact-field .range-hints { font-size: 10px; margin-top: 2px; }
     @media (max-width: 600px) { body { font-size: 12px; line-height: 1.4; } }
+
+    /* Estilos para ocultar scrollbar en pestañas móviles */
+    .hide-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .hide-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
   `}</style>
 );
 // ==== Estilos PDF ====
@@ -212,12 +221,14 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
         </View>
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
           <View style={{ padding: 6, borderRadius: 6, flex: 1, backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#BBF7D0' }}>
-            {/* CORRECCIÓN DE SOLAPAMIENTO DE TEXTO EN PDF */}
+            {/* CORRECCIÓN DE SOLAPAMIENTO DE TEXTO EN PDF */
+            }
             <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#166534', marginBottom: 3 }}>✅ <Text>Fortalezas</Text></Text> 
             <Text style={styles.feedbackText}>{pdfSafe(resumen.fortalezas)}</Text>
           </View>
           <View style={{ padding: 6, borderRadius: 6, flex: 1, backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A' }}>
-            {/* CORRECCIÓN DE SOLAPAMIENTO DE TEXTO EN PDF */}
+            {/* CORRECCIÓN DE SOLAPAMIENTO DE TEXTO EN PDF */
+            }
             <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#854D0E', marginBottom: 3 }}>✏️ <Text>Áreas de Mejora</Text></Text>
             <Text style={styles.feedbackText}>{pdfSafe(resumen.areas_mejora)}</Text>
           </View>
@@ -473,7 +484,7 @@ export default function EvaluatorClient() {
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.error || 'Error desconocido.');
       // Aseguramos que sea un array
-      const detectedNames = Array.isArray(data.suggestions) ? data.suggestions as string[] : [];
+      const detectedNames = Array.isArray(data.suggestions) ? data.suggestions as string[] : []; // ✅ CORREGIDO: tipado como string[]
       const numDetected = detectedNames.length;
       if (numDetected > 0) {
         // 1. Unir todos los nombres en una cadena para guardarlos en el campo oculto del formulario (separados por ; ).
@@ -612,21 +623,19 @@ export default function EvaluatorClient() {
           </div>
         </div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5 bg-[var(--bg-muted)]">
-            <TabsTrigger value="inicio"><Home className="mr-2 h-4 w-4" />Inicio</TabsTrigger>
-            {/* 1. PESTAÑA: EVALUADOR ESCOLAR */}
-            <TabsTrigger value="evaluator"><Sparkles className="mr-2 h-4 w-4" />Evaluador Escolar</TabsTrigger>
-            {/* 2. PESTAÑA: EVALUADOR SUPERIOR */}
-            <TabsTrigger value="evaluator-superior"><Sparkles className="mr-2 h-4 w-4" />Evaluador Superior 🎓</TabsTrigger> 
-            <TabsTrigger value="dashboard"><ClipboardList className="mr-2 h-4 w-4" />Resumen</TabsTrigger>
-            <TabsTrigger value="presentacion"><Eye className="mr-2 h-4 w-4" />Presentación</TabsTrigger>
+          {/* ✅ Pestañas con scroll horizontal en móvil */}
+          <TabsList className="flex overflow-x-auto bg-[var(--bg-muted)] py-2 gap-2 hide-scrollbar">
+            <TabsTrigger value="inicio" className="whitespace-nowrap"><Home className="mr-2 h-4 w-4" />Inicio</TabsTrigger>
+            <TabsTrigger value="evaluator" className="whitespace-nowrap"><Sparkles className="mr-2 h-4 w-4" />Evaluador Escolar</TabsTrigger>
+            <TabsTrigger value="evaluator-superior" className="whitespace-nowrap"><Sparkles className="mr-2 h-4 w-4" />Evaluador Superior 🎓</TabsTrigger> 
+            <TabsTrigger value="dashboard" className="whitespace-nowrap"><ClipboardList className="mr-2 h-4 w-4" />Resumen</TabsTrigger>
+            <TabsTrigger value="presentacion" className="whitespace-nowrap"><Eye className="mr-2 h-4 w-4" />Presentación</TabsTrigger>
           </TabsList>
           <TabsContent value="inicio" className="mt-8 text-center">
             <Card className="max-w-3xl mx-auto border-2 shadow-lg bg-[var(--bg-card)] border-[var(--border-color)]" style={{ backgroundImage: 'radial-gradient(circle, rgba(124, 58, 237, 0.15) 0%, rgba(9, 9, 11, 0) 70%)' }}>
               <CardContent className="p-12">
                 {/* LOGO AJUSTADO: h-20 w-20 */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={LIBELIA_LOGO_PNG_BASE64} alt="Logo de Libel-IA" className="mx-auto h-20 w-20 mb-4" />
+                <img src={LIBELIA_LOGO_PNG_BASE64} alt="Logo" className="mx-auto h-20 w-20 mb-4" />
                 <h1 className={`text-6xl font-bold ${wordmarkClass} font-logo`}>Libel-IA</h1>
                 <p className="mt-3 text-xl italic text-cyan-300">&quot;Evaluación con Inteligencia Docente: Hecha por un Profe, para Profes&quot;</p>
                 <p className="mt-6 text-lg text-[var(--text-secondary)]">Asistente pedagógico inteligente que analiza las respuestas de tus estudiantes, genera retroalimentación detallada y crea informes al instante.</p>
@@ -637,13 +646,13 @@ export default function EvaluatorClient() {
             </Card>
           </TabsContent>
           {/* ======================================================================================================================================================================= */}
-          {/* PESTAÑA 1: EVALUADOR ESCOLAR (Media y Básica) */}
+          {/* PESTAÑA 1: EVALUADOR ESCOLAR (Media y Básica) */
+          }
           {/* ======================================================================================================================================================================= */}
           <TabsContent value="evaluator" className="space-y-8 mt-4">
             <div className="flex items-center gap-3">
               {/* LOGO AJUSTADO: h-8 w-8 */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={LIBELIA_LOGO_PNG_BASE64} alt="Logo de Libel-IA" className="h-8 w-8" />
+              <img src={LIBELIA_LOGO_PNG_BASE64} alt="Logo Libel-IA" className="h-8 w-8" />
               <span className={`font-semibold text-xl ${wordmarkClass} font-logo`}>Evaluador Escolar</span>
             </div>
             <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
@@ -665,7 +674,8 @@ export default function EvaluatorClient() {
                         )} />
                       </div>
                     </div>
-                    {/* SELECTOR DE ÁREA DE CONOCIMIENTO (Se mantiene) */}
+                    {/* SELECTOR DE ÁREA DE CONOCIMIENTO (Se mantiene) */
+                    }
                     <FormField control={form.control} name="areaConocimiento" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="font-bold text-[var(--text-accent)]">Área de Conocimiento</FormLabel>
@@ -683,7 +693,8 @@ export default function EvaluatorClient() {
                         </Select>
                       </FormItem>
                     )} />
-                    {/* SELECTOR DE NIVEL EDUCATIVO (LIMITADO a opciones escolares) */}
+                    {/* SELECTOR DE NIVEL EDUCATIVO (LIMITADO a opciones escolares) */
+                    }
                     <FormField control={form.control} name="nivelEducativo" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="font-bold text-[var(--text-accent)]">Nivel Educativo</FormLabel>
@@ -694,7 +705,8 @@ export default function EvaluatorClient() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {/* Opciones LIMITADAS A ESCOLAR */}
+                            {/* Opciones LIMITADAS A ESCOLAR */
+                            }
                             <SelectItem value="Educación Básica">Educación Básica (1° a 8°)</SelectItem>
                             <SelectItem value="Educación Media">Educación Media (1° a 4°)</SelectItem>
                           </SelectContent>
@@ -787,15 +799,18 @@ export default function EvaluatorClient() {
                 </Form>
               </CardContent>
             </Card>
-            {/* 🛑 AQUÍ TERMINA LA PESTAÑA ESCOLAR. LOS PASOS 2 Y 3 SE RENDERIZAN UNA SOLA VEZ AL FINAL. */}
+            {/* 🛑 AQUÍ TERMINA LA PESTAÑA ESCOLAR. LOS PASOS 2 Y 3 SE RENDERIZAN UNA SOLA VEZ AL FINAL. */
+            }
           </TabsContent>
-          {/* ======================================================================================================================================================================= */}
-          {/* PESTAÑA 2: EVALUADOR SUPERIOR (Universidad, Técnico, Postgrado) - ETIQUETAS ADAPTADAS */}
-          {/* ======================================================================================================================================================================= */}
+          {/* ======================================================================================================================================================================= */
+          }
+          {/* PESTAÑA 2: EVALUADOR SUPERIOR (Universidad, Técnico, Postgrado) - ETIQUETAS ADAPTADAS */
+          }
+          {/* ======================================================================================================================================================================= */
+          }
           <TabsContent value="evaluator-superior" className="space-y-8 mt-4">
             <div className="flex items-center gap-3">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={LIBELIA_LOGO_PNG_BASE64} alt="Logo de Libel-IA" className="h-8 w-8" />
+              <img src={LIBELIA_LOGO_PNG_BASE64} alt="Logo Libel-IA" className="h-8 w-8" />
               <span className={`font-semibold text-xl ${wordmarkClass} font-logo`}>Evaluador Superior 🎓</span>
             </div>
             <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
@@ -811,15 +826,18 @@ export default function EvaluatorClient() {
                       <div className="flex items-center space-x-3">
                         <FormField control={form.control} name="curso" render={({ field }) => (
                           <FormItem className="flex items-center space-x-3">
-                            {/* CAMBIO DE ETIQUETA: Curso -> Sección/Paralelo */}
+                            {/* CAMBIO DE ETIQUETA: Curso -> Sección/Paralelo */
+                            }
                             <FormLabel className="text-base font-bold mt-2 text-[var(--text-accent)]">Sección/Paralelo:</FormLabel>
-                            {/* CAMBIO DE PLACEHOLDER: Ej: N-101, Diurno */}
+                            {/* CAMBIO DE PLACEHOLDER: Ej: N-101, Diurno */
+                            }
                             <FormControl><Input placeholder="Ej: N-101, Diurno" {...field} className="w-40 text-base" /></FormControl>
                           </FormItem>
                         )} />
                       </div>
                     </div>
-                    {/* SELECTOR DE ÁREA DE CONOCIMIENTO (Se mantiene) */}
+                    {/* SELECTOR DE ÁREA DE CONOCIMIENTO (Se mantiene) */
+                    }
                     <FormField control={form.control} name="areaConocimiento" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="font-bold text-[var(--text-accent)]">Área de Conocimiento</FormLabel>
@@ -837,7 +855,8 @@ export default function EvaluatorClient() {
                         </Select>
                       </FormItem>
                     )} />
-                    {/* SELECTOR DE NIVEL EDUCATIVO (LIMITADO a opciones SUPERIORES) */}
+                    {/* SELECTOR DE NIVEL EDUCATIVO (LIMITADO a opciones SUPERIORES) */
+                    }
                     <FormField control={form.control} name="nivelEducativo" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="font-bold text-[var(--text-accent)]">Nivel Educativo</FormLabel>
@@ -848,7 +867,8 @@ export default function EvaluatorClient() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {/* Opciones LIMITADAS A SUPERIOR */}
+                            {/* Opciones LIMITADAS A SUPERIOR */
+                            }
                             <SelectItem value="Técnico Superior">Educación Técnico Profesional (IP/CFT)</SelectItem>
                             <SelectItem value="Universitario">Educación Universitaria (Pregrado)</SelectItem>
                             <SelectItem value="Postgrado">Postgrado (Magíster/Doctorado)</SelectItem>
@@ -874,16 +894,19 @@ export default function EvaluatorClient() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <FormField control={form.control} name="nombreProfesor" render={({ field }) => (
                           <FormItem>
-                            {/* CAMBIO DE ETIQUETA: Profesor -> Docente */}
+                            {/* CAMBIO DE ETIQUETA: Profesor -> Docente */
+                            }
                             <FormLabel className="text-[var(--text-accent)]">Nombre del Docente</FormLabel>
                             <FormControl><Input placeholder="Ej: Juan Pérez" {...field} /></FormControl>
                           </FormItem>
                         )} />
                         <FormField control={form.control} name="departamento" render={({ field }) => (
                           <FormItem>
-                            {/* CAMBIO DE ETIQUETA: Departamento -> Escuela/Carrera */}
+                            {/* CAMBIO DE ETIQUETA: Departamento -> Escuela/Carrera */
+                            }
                             <FormLabel className="text-[var(--text-accent)]">Escuela/Carrera</FormLabel>
-                            {/* CAMBIO DE PLACEHOLDER: Ej: Ingeniería, Trabajo Social */}
+                            {/* CAMBIO DE PLACEHOLDER: Ej: Ingeniería, Trabajo Social */
+                            }
                             <FormControl><Input placeholder="Ej: Ingeniería, Trabajo Social" {...field} /></FormControl>
                           </FormItem>
                         )} />
@@ -892,9 +915,11 @@ export default function EvaluatorClient() {
                         )} />
                         <FormField control={form.control} name="nombrePrueba" render={({ field }) => (
                           <FormItem>
-                            {/* CAMBIO DE ETIQUETA: Prueba -> Certamen/Evaluación */}
+                            {/* CAMBIO DE ETIQUETA: Prueba -> Certamen/Evaluación */
+                            }
                             <FormLabel className="text-[var(--text-accent)]">Nombre de la Evaluación/Certamen</FormLabel>
-                            {/* CAMBIO DE PLACEHOLDER: Ej: Certamen N°2 */}
+                            {/* CAMBIO DE PLACEHOLDER: Ej: Certamen N°2 */
+                            }
                             <FormControl><Input placeholder="Ej: Certamen N°2" {...field} /></FormControl>
                           </FormItem>
                         )} />
@@ -956,14 +981,19 @@ export default function EvaluatorClient() {
                 </Form>
               </CardContent>
             </Card>
-            {/* 🛑 AQUÍ TERMINA LA PESTAÑA SUPERIOR. LOS PASOS 2 Y 3 SE RENDERIZAN UNA SOLA VEZ AL FINAL. */}
+            {/* 🛑 AQUÍ TERMINA LA PESTAÑA SUPERIOR. LOS PASOS 2 Y 3 SE RENDERIZAN UNA SOLA VEZ AL FINAL. */
+            }
           </TabsContent>
-          {/* ======================================================================================================================================================================= */}
-          {/* LOS PASOS 2, 3 y RESULTADOS (QUE ANTES ESTABAN DUPLICADOS) SE RENDERIZAN UNA SOLA VEZ AQUÍ ABAJO */}
-          {/* Renderizar Pasos 2 y 3 solo si estamos en alguna de las pestañas de evaluación */}
+          {/* ======================================================================================================================================================================= */
+          }
+          {/* LOS PASOS 2, 3 y RESULTADOS (QUE ANTES ESTABAN DUPLICADOS) SE RENDERIZAN UNA SOLA VEZ AQUÍ ABAJO */
+          }
+          {/* Renderizar Pasos 2 y 3 solo si estamos en alguna de las pestañas de evaluación */
+          }
           {(activeTab === 'evaluator' || activeTab === 'evaluator-superior') && (
             <>
-              {/* Paso 2: Cargar y Agrupar Trabajos */}
+              {/* Paso 2: Cargar y Agrupar Trabajos */
+              }
               <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
                 <CardHeader>
                   <CardTitle className="text-[var(--text-accent)]">Paso 2: Cargar y Agrupar Trabajos</CardTitle>
@@ -1004,7 +1034,8 @@ export default function EvaluatorClient() {
                   )}
                 </CardContent>
               </Card>
-              {/* Paso 3: Grupos y Evaluación */}
+              {/* Paso 3: Grupos y Evaluación */
+              }
               {studentGroups.length > 0 && (
                 <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
                   <CardHeader>
@@ -1044,7 +1075,8 @@ export default function EvaluatorClient() {
                   </CardFooter>
                 </Card>
               )}
-              {/* Paso 4: Resultados */}
+              {/* Paso 4: Resultados */
+              }
               {studentGroups.some(g => g.isEvaluated || g.isEvaluating) && (
                 <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
                   <CardHeader><CardTitle className="text-[var(--text-accent)]">Paso 3: Resultados</CardTitle></CardHeader>
@@ -1204,9 +1236,9 @@ export default function EvaluatorClient() {
           </TabsContent>
           <TabsContent value="presentacion" className="mt-8">
             <Card className="max-w-4xl mx-auto border-2 shadow-xl bg-[var(--bg-card)] border-[var(--border-color)] p-10 text-center">
-              {/* LOGO AJUSTADO: h-20 w-20 */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={LIBELIA_LOGO_PNG_BASE64} alt="Logo de Libel-IA" className="mx-auto h-20 w-20 mb-6" />
+              {/* LOGO AJUSTADO: h-20 w-20 */
+              }
+              <img src={LIBELIA_LOGO_PNG_BASE64} alt="Logo Libel-IA" className="mx-auto h-20 w-20 mb-6" />
               <h1 className={`text-5xl font-bold ${wordmarkClass} font-logo mb-4`}>Libel-IA</h1>
               <p className="text-lg text-[var(--text-secondary)] mb-6">
                 Plataforma chilena de evaluación educativa con inteligencia artificial.
