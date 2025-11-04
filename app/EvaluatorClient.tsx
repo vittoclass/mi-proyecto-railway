@@ -19,9 +19,9 @@ import { Calendar } from '@/components/ui/calendar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Sparkles, FileUp, Camera, Users, X, Printer, CalendarIcon, ImageUp, ClipboardList, Home, Palette, Eye } from 'lucide-react';
+import { Loader2, Sparkles, FileUp, Camera, Users, X, Printer, CalendarIcon, ImageUp, ClipboardList, Home, Palette, Eye, FileText, File } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { NotesDashboard } from '@/components/NotesDashboard';
+import NotesDashboard from '@/components/NotesDashboard';
 // PDF
 import { Document, Page, Text, View, StyleSheet, PDFDownloadLink, Image as PDFImage, PDFViewer, pdf } from '@react-pdf/renderer';
 import { useEvaluator } from './useEvaluator';
@@ -30,11 +30,47 @@ const Label = React.forwardRef<HTMLLabelElement, React.ComponentPropsWithoutRef<
   <label ref={ref} className={cn('text-sm font-medium', className)} {...props} />
 ));
 Label.displayName = 'Label';
+
+// 🔥 FUNCIÓN DE PREVISUALIZACIÓN (AGREGADA)
+const renderFilePreview = (file: { file: File; previewUrl: string }) => {
+  const { file: f, previewUrl } = file;
+  const type = f.type;
+  const name = f.name.toLowerCase();
+
+  if (type.startsWith('image/')) {
+    return <img src={previewUrl} alt={f.name} className="w-full h-full object-cover rounded-md" />;
+  }
+
+  if (type === 'application/pdf' || name.endsWith('.pdf')) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-red-50 rounded-md">
+        <FileText className="text-red-500 h-6 w-6" />
+        <span className="text-[10px] mt-1 text-gray-600 truncate px-1">PDF</span>
+      </div>
+    );
+  }
+
+  if (type.includes('word') || name.endsWith('.docx')) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-blue-50 rounded-md">
+        <FileText className="text-blue-500 h-6 w-6" />
+        <span className="text-[10px] mt-1 text-gray-600 truncate px-1">Word</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full h-full flex flex-col items-center justify-center bg-gray-100 rounded-md">
+      <File className="text-gray-500 h-6 w-6" />
+      <span className="text-[10px] mt-1 text-gray-600 truncate px-1">Archivo</span>
+    </div>
+  );
+};
+
 // ==== DEFINICIONES DE CONSTANTES GLOBALES ====
-// 1. Clase de degradado para el texto (REORDENADA PARA EVITAR EL ERROR DE ÁMBITO)
 const wordmarkClass = 'text-transparent bg-clip-text bg-gradient-to-r from-violet-500 via-indigo-500 to-cyan-400';
-// 2. Logo PNG en base64 (CÓDIGO ESTABLE - UTILIZADO VÍA CSS BACKGROUND)
 const LIBELIA_LOGO_PNG_BASE64 = '/LOGO-LIBEL.png';
+
 // ==== Estilos Globales ====
 const GlobalStyles = () => (
   <style jsx global>{`
@@ -68,30 +104,16 @@ const GlobalStyles = () => (
     .compact-field label { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
     .compact-field .range-hints { font-size: 10px; margin-top: 2px; }
     @media (max-width: 600px) { body { font-size: 12px; line-height: 1.4; } }
-
-    /* Estilos para ocultar scrollbar en pestañas móviles */
-    .hide-scrollbar {
-      -ms-overflow-style: none;
-      scrollbar-width: none;
-    }
-    .hide-scrollbar::-webkit-scrollbar {
-      display: none;
-    }
   `}</style>
 );
+
 // ==== Estilos PDF ====
 const styles = StyleSheet.create({
   page: { padding: 20, fontSize: 10, lineHeight: 1.25 },
   header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, paddingBottom: 5, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
   headerLeft: { flexDirection: 'row', alignItems: 'center' },
   headerRight: { textAlign: 'right' },
-  // ✅ LOGO AJUSTADO PARA SER VISIBLE (30x30)
-  logoLibelia: { 
-    height: 30, 
-    width: 30, 
-    marginRight: 8,
-    objectFit: 'contain', 
-  },
+  logoLibelia: { height: 30, width: 30, marginRight: 8, objectFit: 'contain' },
   logoColegio: { maxHeight: 30, maxWidth: 110, objectFit: 'contain' },
   title: { fontSize: 13, fontWeight: 'bold', color: '#4F46E5' },
   subtitle: { fontSize: 9, color: '#6B7280' },
@@ -105,7 +127,6 @@ const styles = StyleSheet.create({
   feedbackTitle: { fontSize: 9, fontWeight: 'bold', color: '#166534', marginBottom: 3 },
   feedbackImproveTitle: { fontSize: 9, fontWeight: 'bold', color: '#854D0E', marginBottom: 3 },
   feedbackText: { fontSize: 8, lineHeight: 1.15, flexWrap: 'wrap' as any },
-  // ✅ CORREGIDO: display: 'table' eliminado
   table: { width: '100%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 6 },
   tableRow: { margin: 'auto', flexDirection: 'row', borderBottomWidth: 1, borderColor: '#E5E7EB' },
   tableColHeader: { width: '35%', borderStyle: 'solid', borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', padding: 2 },
@@ -120,6 +141,7 @@ const styles = StyleSheet.create({
   tableCellHeader: { margin: 1, fontSize: 8, fontWeight: 'bold' },
   tableCell: { margin: 1, fontSize: 8, textAlign: 'left' as any },
 });
+
 // ----------------- Helpers safe render -----------------
 function renderForWeb(value: any): React.ReactNode {
   if (value === null || value === undefined) return '';
@@ -178,7 +200,6 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
   }));
   const correccionConDesarrollo = [...correccion, ...correccionDesarrolloArray];
   const { first: correccionP1, rest: correccionP2 } = splitCorreccionForTwoPages(correccionConDesarrollo);
-  // Lógica para adaptar etiquetas del PDF según el nivel educativo (NECESARIO PARA EL REPORTE)
   const isSuperior = ['Técnico Superior', 'Universitario', 'Postgrado'].includes(formData.nivelEducativo);
   const cursoLabel = isSuperior ? 'Sección' : 'Curso';
   const departamentoLabel = isSuperior ? 'Escuela/Carrera' : 'Departamento';
@@ -197,13 +218,11 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
             {logoPreview && <PDFImage src={logoPreview} style={styles.logoColegio} />}
             <Text style={styles.infoText}>Profesor: {pdfSafe(formData.nombreProfesor || 'N/A')}</Text>
             <Text style={styles.infoText}>Asignatura: {pdfSafe(formData.asignatura || 'N/A')}</Text>
-            {/* 👇 Aplicación de etiqueta condicional en PDF */}
             <Text style={styles.infoText}>{departamentoLabel}: {pdfSafe(formData.departamento || 'N/A')}</Text>
             <Text style={styles.infoText}>Evaluación: {pdfSafe(formData.nombrePrueba || 'N/A')}</Text>
             <Text style={styles.infoText}>Fecha: {pdfSafe(format(new Date(), 'dd/MM/yyyy'))}</Text>
           </View>
         </View>
-        {/* 👇 Aplicación de etiqueta condicional en PDF */}
         <Text style={styles.studentLine}>Alumno: {pdfSafe(group.studentName)} · {cursoLabel}: {pdfSafe(formData.curso || 'N/A')}</Text>
         <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
           <View style={{ flex: 1, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', padding: 5, borderRadius: 6, textAlign: 'center' as any }}>
@@ -221,14 +240,10 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
         </View>
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
           <View style={{ padding: 6, borderRadius: 6, flex: 1, backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#BBF7D0' }}>
-            {/* CORRECCIÓN DE SOLAPAMIENTO DE TEXTO EN PDF */
-            }
             <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#166534', marginBottom: 3 }}>✅ <Text>Fortalezas</Text></Text> 
             <Text style={styles.feedbackText}>{pdfSafe(resumen.fortalezas)}</Text>
           </View>
           <View style={{ padding: 6, borderRadius: 6, flex: 1, backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A' }}>
-            {/* CORRECCIÓN DE SOLAPAMIENTO DE TEXTO EN PDF */
-            }
             <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#854D0E', marginBottom: 3 }}>✏️ <Text>Áreas de Mejora</Text></Text>
             <Text style={styles.feedbackText}>{pdfSafe(resumen.areas_mejora)}</Text>
           </View>
@@ -309,6 +324,7 @@ const ReportDocument = ({ group, formData, logoPreview }: any) => {
     </Document>
   );
 };
+
 interface CorreccionDetallada { seccion: string; detalle: string; }
 interface EvaluacionHabilidad { habilidad: string; evaluacion: string; evidencia: string; }
 interface RetroalimentacionEstructurada {
@@ -332,9 +348,7 @@ const formSchema = z.object({
   curso: z.string().optional(),
   fechaEvaluacion: z.date().optional(),
   areaConocimiento: z.string().default('general'),
-  // CAMPO AÑADIDO PARA EL NIVEL EDUCATIVO
   nivelEducativo: z.string().default('Educación Media'), 
-  // 🚀 NUEVO CAMPO: Para almacenar nombres grupales completos (separados por ; )
   nombresGrupales: z.string().optional(),
 });
 interface FilePreview { id: string; file: File; previewUrl: string; dataUrl: string; }
@@ -381,9 +395,7 @@ export default function EvaluatorClient() {
       curso: '',
       fechaEvaluacion: new Date(),
       areaConocimiento: 'general',
-      // VALOR POR DEFECTO AÑADIDO
       nivelEducativo: 'Educación Media', 
-      // VALOR POR DEFECTO DEL NUEVO CAMPO
       nombresGrupales: '',
     },
   });
@@ -404,9 +416,18 @@ export default function EvaluatorClient() {
     setUnassignedFiles([]);
   }, [classSize]);
   const processFiles = (files: File[]) => {
+    const validTypes = [
+      'image/jpeg',
+      'image/png',
+      'image/bmp',
+      'image/tiff',
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ];
     const validFiles = Array.from(files).filter(file => {
-      if (['image/jpeg', 'image/png', 'image/bmp', 'application/pdf', 'image/tiff'].includes(file.type)) return true;
-      alert(`Formato no soportado para "${file.name}". Usa: JPEG, PNG, BMP, PDF o TIFF.`);
+      if (validTypes.includes(file.type)) return true;
+      alert(`Formato no soportado para "${file.name}". Usa: JPEG, PNG, BMP, TIFF, PDF, DOCX o XLSX.`);
       return false;
     });
     if (validFiles.length === 0) return;
@@ -419,16 +440,19 @@ export default function EvaluatorClient() {
       reader.readAsDataURL(file);
     });
   };
-  // ✅ CORREGIDO: recibe ChangeEvent<HTMLInputElement>
   const handleFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) processFiles(Array.from(e.target.files));
-  };
-  const handleCapture = (dataUrl: string) => {
-    fetch(dataUrl).then(res => res.blob()).then(blob => {
-      processFiles([new File([blob], `captura-${Date.now()}.png`, { type: 'image/png' })]);
-    });
-    setIsCameraOpen(false);
-  };
+  };const handleCapture = (dataUrl: string) => {
+  fetch(dataUrl)
+    .then(res => res.blob())
+    .then(blob => {
+      // @ts-ignore
+      const file = new File([blob], `captura-${Date.now()}.png`, { type: 'image/png' });
+      processFiles([file]);
+    })
+    .catch(err => console.error('Error al crear archivo desde captura:', err));
+  setIsCameraOpen(false);
+};
   const handleLogoChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -467,7 +491,6 @@ export default function EvaluatorClient() {
     setStudentGroups(groups => groups.map(g => g.id === groupId ? { ...g, nota: parseFloat(value) || 0 } : g));
   };
   const removeUnassignedFile = (fileId: string) => { setUnassignedFiles(prev => prev.filter(f => f.id !== fileId)); };
-  // 🚀 MEJORA DE EXTRACCIÓN INTELIGENTE DE MÚLTIPLES NOMBRES - CORREGIDA Y OPTIMIZADA PARA GRUPOS
   const handleNameExtraction = async () => {
     if (unassignedFiles.length === 0) {
       alert('Sube primero la página que contiene el nombre.');
@@ -475,44 +498,32 @@ export default function EvaluatorClient() {
     }
     setIsExtractingNames(true);
     const formDataFD = new FormData();
-    // Siempre enviamos el primer archivo pendiente para la extracción
     formDataFD.append('files', unassignedFiles[0].file); 
-    // Asumiendo que 'nameList' no está disponible globalmente, se envía una lista vacía para que use el MODO 2 del backend
     formDataFD.append('nameList', '[]');
     try {
       const response = await fetch('/api/extract-name', { method: 'POST', body: formDataFD });
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.error || 'Error desconocido.');
-      // Aseguramos que sea un array
-      const detectedNames = Array.isArray(data.suggestions) ? data.suggestions as string[] : []; // ✅ CORREGIDO: tipado como string[]
+      const detectedNames = Array.isArray(data.suggestions) ? data.suggestions as string[] : [];
       const numDetected = detectedNames.length;
       if (numDetected > 0) {
-        // 1. Unir todos los nombres en una cadena para guardarlos en el campo oculto del formulario (separados por ; ).
         const allNamesList = detectedNames.map(n => n.trim());
         const allNamesString = allNamesList.join('; ');
-        // 2. Crear la etiqueta visible para el grupo, uniendo todos los nombres con comas.
         const visibleGroupName = allNamesList.join(', ');
-        // 🚀 CORRECCIÓN CLAVE: Asigna la etiqueta grupal COMPLETA al PRIMER grupo
         setStudentGroups(groups => {
             if (groups.length === 0) return groups;
-            // Crea una copia de la lista de grupos, solo actualizando el primero (índice 0)
             return groups.map((g, index) => {
                 if (index === 0) {
-                    // Actualiza el nombre del estudiante con la cadena de nombres completa
                     return { ...g, studentName: visibleGroupName };
                 }
-                // Si el grupo no es el primero, lo mantiene sin cambios
                 return g;
             });
         });
-        // 3. Asignar la lista COMPLETA al nuevo campo oculto del formulario
         form.setValue('nombresGrupales', allNamesString);
-        // El mensaje de éxito usa el número de detectados para confirmar la asignación.
         alert(`✅ Éxito: Se detectaron ${numDetected} nombres. El grupo fue renombrado a "${visibleGroupName}". La lista completa se adjuntará a la evaluación.`);
       } else {
           alert('⚠️ Advertencia: No se detectaron nombres en la imagen.');
       }
-      // ------------------------------------------------------------------
     } catch (error) {
       console.error('Error en extracción:', error);
       alert(`❌ Error al extraer nombres: ${error instanceof Error ? error.message : 'Error desconocido'}`);
@@ -521,12 +532,6 @@ export default function EvaluatorClient() {
     }
   };
   const onEvaluateAll = async () => {
-    // ❌ LÍNEA COMENTADA PARA ELIMINAR LA RESTRICCIÓN DE CRÉDITOS/EMAIL:
-    // if (!userEmail) {
-    //   alert('Falta confirmar tu correo. Ve a "Planes", activa o confirma tu correo y vuelve a evaluar.');
-    //   return;
-    // }
-    // Desestructurar todos los valores, incluyendo nivelEducativo y nombresGrupales
     const { rubrica, pauta, flexibilidad, tipoEvaluacion, areaConocimiento, puntajeTotal, nivelEducativo, nombresGrupales } = form.getValues();
     if (!rubrica) {
       form.setError('rubrica', { type: 'manual', message: 'La rúbrica es requerida.' });
@@ -537,16 +542,15 @@ export default function EvaluatorClient() {
       setStudentGroups(prev => prev.map(g => g.id === group.id ? { ...g, isEvaluating: true, isEvaluated: false, error: undefined } : g));
       const payload = {
         fileUrls: group.files.map(f => f.dataUrl),
+        fileMimeTypes: group.files.map(f => f.file.type),
         rubrica,
         pauta,
         flexibilidad: flexibilidad[0],
         tipoEvaluacion,
         areaConocimiento,
-        userEmail, // Se mantiene el userEmail en el payload aunque esté vacío
+        userEmail,
         puntajeTotal: Number(puntajeTotal),
-        // Envío del nuevo campo
         nivelEducativo,
-        // 🚀 NUEVO CAMPO ENVIADO AL BACKEND
         nombresGrupales, 
       };
       const result = await evaluate(payload);
@@ -576,7 +580,6 @@ export default function EvaluatorClient() {
       setPreviewGroupId(groupId);
     }
   };
-  // Variable para lógica condicional de etiquetas en la UI (mantener aunque no se use en esta nueva estructura de pestañas, puede ser útil)
   const selectedNivel = form.watch('nivelEducativo');
   const isSuperior = ['Técnico Superior', 'Universitario', 'Postgrado'].includes(selectedNivel);
   return (
@@ -623,18 +626,26 @@ export default function EvaluatorClient() {
           </div>
         </div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          {/* ✅ Pestañas con scroll horizontal en móvil */}
-          <TabsList className="flex overflow-x-auto bg-[var(--bg-muted)] py-2 gap-2 hide-scrollbar">
-            <TabsTrigger value="inicio" className="whitespace-nowrap"><Home className="mr-2 h-4 w-4" />Inicio</TabsTrigger>
-            <TabsTrigger value="evaluator" className="whitespace-nowrap"><Sparkles className="mr-2 h-4 w-4" />Evaluador Escolar</TabsTrigger>
-            <TabsTrigger value="evaluator-superior" className="whitespace-nowrap"><Sparkles className="mr-2 h-4 w-4" />Evaluador Superior 🎓</TabsTrigger> 
-            <TabsTrigger value="dashboard" className="whitespace-nowrap"><ClipboardList className="mr-2 h-4 w-4" />Resumen</TabsTrigger>
-            <TabsTrigger value="presentacion" className="whitespace-nowrap"><Eye className="mr-2 h-4 w-4" />Presentación</TabsTrigger>
-          </TabsList>
+          <TabsList className="flex overflow-x-auto bg-[var(--bg-muted)] py-2 gap-2 scrollbar-hide">
+  <TabsTrigger value="inicio" className="shrink-0 whitespace-nowrap px-3 py-1.5 text-sm">
+    <Home className="mr-2 h-4 w-4 inline" />Inicio
+  </TabsTrigger>
+  <TabsTrigger value="evaluator" className="shrink-0 whitespace-nowrap px-3 py-1.5 text-sm">
+    <Sparkles className="mr-2 h-4 w-4 inline" />Evaluador Escolar
+  </TabsTrigger>
+  <TabsTrigger value="evaluator-superior" className="shrink-0 whitespace-nowrap px-3 py-1.5 text-sm">
+    <Sparkles className="mr-2 h-4 w-4 inline" />Evaluador Superior 🎓
+  </TabsTrigger>
+  <TabsTrigger value="dashboard" className="shrink-0 whitespace-nowrap px-3 py-1.5 text-sm">
+    <ClipboardList className="mr-2 h-4 w-4 inline" />Resumen
+  </TabsTrigger>
+  <TabsTrigger value="presentacion" className="shrink-0 whitespace-nowrap px-3 py-1.5 text-sm">
+    <Eye className="mr-2 h-4 w-4 inline" />Presentación
+  </TabsTrigger>
+</TabsList>
           <TabsContent value="inicio" className="mt-8 text-center">
             <Card className="max-w-3xl mx-auto border-2 shadow-lg bg-[var(--bg-card)] border-[var(--border-color)]" style={{ backgroundImage: 'radial-gradient(circle, rgba(124, 58, 237, 0.15) 0%, rgba(9, 9, 11, 0) 70%)' }}>
               <CardContent className="p-12">
-                {/* LOGO AJUSTADO: h-20 w-20 */}
                 <img src={LIBELIA_LOGO_PNG_BASE64} alt="Logo" className="mx-auto h-20 w-20 mb-4" />
                 <h1 className={`text-6xl font-bold ${wordmarkClass} font-logo`}>Libel-IA</h1>
                 <p className="mt-3 text-xl italic text-cyan-300">&quot;Evaluación con Inteligencia Docente: Hecha por un Profe, para Profes&quot;</p>
@@ -645,13 +656,8 @@ export default function EvaluatorClient() {
               </CardContent>
             </Card>
           </TabsContent>
-          {/* ======================================================================================================================================================================= */}
-          {/* PESTAÑA 1: EVALUADOR ESCOLAR (Media y Básica) */
-          }
-          {/* ======================================================================================================================================================================= */}
           <TabsContent value="evaluator" className="space-y-8 mt-4">
             <div className="flex items-center gap-3">
-              {/* LOGO AJUSTADO: h-8 w-8 */}
               <img src={LIBELIA_LOGO_PNG_BASE64} alt="Logo Libel-IA" className="h-8 w-8" />
               <span className={`font-semibold text-xl ${wordmarkClass} font-logo`}>Evaluador Escolar</span>
             </div>
@@ -674,8 +680,6 @@ export default function EvaluatorClient() {
                         )} />
                       </div>
                     </div>
-                    {/* SELECTOR DE ÁREA DE CONOCIMIENTO (Se mantiene) */
-                    }
                     <FormField control={form.control} name="areaConocimiento" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="font-bold text-[var(--text-accent)]">Área de Conocimiento</FormLabel>
@@ -693,8 +697,6 @@ export default function EvaluatorClient() {
                         </Select>
                       </FormItem>
                     )} />
-                    {/* SELECTOR DE NIVEL EDUCATIVO (LIMITADO a opciones escolares) */
-                    }
                     <FormField control={form.control} name="nivelEducativo" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="font-bold text-[var(--text-accent)]">Nivel Educativo</FormLabel>
@@ -705,8 +707,6 @@ export default function EvaluatorClient() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {/* Opciones LIMITADAS A ESCOLAR */
-                            }
                             <SelectItem value="Educación Básica">Educación Básica (1° a 8°)</SelectItem>
                             <SelectItem value="Educación Media">Educación Media (1° a 4°)</SelectItem>
                           </SelectContent>
@@ -799,15 +799,7 @@ export default function EvaluatorClient() {
                 </Form>
               </CardContent>
             </Card>
-            {/* 🛑 AQUÍ TERMINA LA PESTAÑA ESCOLAR. LOS PASOS 2 Y 3 SE RENDERIZAN UNA SOLA VEZ AL FINAL. */
-            }
           </TabsContent>
-          {/* ======================================================================================================================================================================= */
-          }
-          {/* PESTAÑA 2: EVALUADOR SUPERIOR (Universidad, Técnico, Postgrado) - ETIQUETAS ADAPTADAS */
-          }
-          {/* ======================================================================================================================================================================= */
-          }
           <TabsContent value="evaluator-superior" className="space-y-8 mt-4">
             <div className="flex items-center gap-3">
               <img src={LIBELIA_LOGO_PNG_BASE64} alt="Logo Libel-IA" className="h-8 w-8" />
@@ -826,18 +818,12 @@ export default function EvaluatorClient() {
                       <div className="flex items-center space-x-3">
                         <FormField control={form.control} name="curso" render={({ field }) => (
                           <FormItem className="flex items-center space-x-3">
-                            {/* CAMBIO DE ETIQUETA: Curso -> Sección/Paralelo */
-                            }
                             <FormLabel className="text-base font-bold mt-2 text-[var(--text-accent)]">Sección/Paralelo:</FormLabel>
-                            {/* CAMBIO DE PLACEHOLDER: Ej: N-101, Diurno */
-                            }
                             <FormControl><Input placeholder="Ej: N-101, Diurno" {...field} className="w-40 text-base" /></FormControl>
                           </FormItem>
                         )} />
                       </div>
                     </div>
-                    {/* SELECTOR DE ÁREA DE CONOCIMIENTO (Se mantiene) */
-                    }
                     <FormField control={form.control} name="areaConocimiento" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="font-bold text-[var(--text-accent)]">Área de Conocimiento</FormLabel>
@@ -855,8 +841,6 @@ export default function EvaluatorClient() {
                         </Select>
                       </FormItem>
                     )} />
-                    {/* SELECTOR DE NIVEL EDUCATIVO (LIMITADO a opciones SUPERIORES) */
-                    }
                     <FormField control={form.control} name="nivelEducativo" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="font-bold text-[var(--text-accent)]">Nivel Educativo</FormLabel>
@@ -867,8 +851,6 @@ export default function EvaluatorClient() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {/* Opciones LIMITADAS A SUPERIOR */
-                            }
                             <SelectItem value="Técnico Superior">Educación Técnico Profesional (IP/CFT)</SelectItem>
                             <SelectItem value="Universitario">Educación Universitaria (Pregrado)</SelectItem>
                             <SelectItem value="Postgrado">Postgrado (Magíster/Doctorado)</SelectItem>
@@ -894,19 +876,13 @@ export default function EvaluatorClient() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <FormField control={form.control} name="nombreProfesor" render={({ field }) => (
                           <FormItem>
-                            {/* CAMBIO DE ETIQUETA: Profesor -> Docente */
-                            }
                             <FormLabel className="text-[var(--text-accent)]">Nombre del Docente</FormLabel>
                             <FormControl><Input placeholder="Ej: Juan Pérez" {...field} /></FormControl>
                           </FormItem>
                         )} />
                         <FormField control={form.control} name="departamento" render={({ field }) => (
                           <FormItem>
-                            {/* CAMBIO DE ETIQUETA: Departamento -> Escuela/Carrera */
-                            }
                             <FormLabel className="text-[var(--text-accent)]">Escuela/Carrera</FormLabel>
-                            {/* CAMBIO DE PLACEHOLDER: Ej: Ingeniería, Trabajo Social */
-                            }
                             <FormControl><Input placeholder="Ej: Ingeniería, Trabajo Social" {...field} /></FormControl>
                           </FormItem>
                         )} />
@@ -915,11 +891,7 @@ export default function EvaluatorClient() {
                         )} />
                         <FormField control={form.control} name="nombrePrueba" render={({ field }) => (
                           <FormItem>
-                            {/* CAMBIO DE ETIQUETA: Prueba -> Certamen/Evaluación */
-                            }
                             <FormLabel className="text-[var(--text-accent)]">Nombre de la Evaluación/Certamen</FormLabel>
-                            {/* CAMBIO DE PLACEHOLDER: Ej: Certamen N°2 */
-                            }
                             <FormControl><Input placeholder="Ej: Certamen N°2" {...field} /></FormControl>
                           </FormItem>
                         )} />
@@ -981,19 +953,9 @@ export default function EvaluatorClient() {
                 </Form>
               </CardContent>
             </Card>
-            {/* 🛑 AQUÍ TERMINA LA PESTAÑA SUPERIOR. LOS PASOS 2 Y 3 SE RENDERIZAN UNA SOLA VEZ AL FINAL. */
-            }
           </TabsContent>
-          {/* ======================================================================================================================================================================= */
-          }
-          {/* LOS PASOS 2, 3 y RESULTADOS (QUE ANTES ESTABAN DUPLICADOS) SE RENDERIZAN UNA SOLA VEZ AQUÍ ABAJO */
-          }
-          {/* Renderizar Pasos 2 y 3 solo si estamos en alguna de las pestañas de evaluación */
-          }
           {(activeTab === 'evaluator' || activeTab === 'evaluator-superior') && (
             <>
-              {/* Paso 2: Cargar y Agrupar Trabajos */
-              }
               <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
                 <CardHeader>
                   <CardTitle className="text-[var(--text-accent)]">Paso 2: Cargar y Agrupar Trabajos</CardTitle>
@@ -1008,7 +970,7 @@ export default function EvaluatorClient() {
                       <Button type="button" variant="secondary" onClick={() => setIsCameraOpen(true)}>
                         <Camera className="mr-2 h-4 w-4" /> Usar Cámara
                       </Button>
-                      <input type="file" multiple accept="image/*,application/pdf" ref={fileInputRef} onChange={handleFilesSelected} className="hidden" />
+                      <input type="file" multiple accept="image/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ref={fileInputRef} onChange={handleFilesSelected} className="hidden" />
                       <p className="text-sm text-[var(--text-secondary)]">Consejo: Sube primero la página con el nombre.</p>
                     </div>
                   </div>
@@ -1018,9 +980,10 @@ export default function EvaluatorClient() {
                         <ClipboardList className="mr-2 h-5 w-5" /> Archivos Pendientes
                       </h3>
                       <div className="flex flex-wrap gap-4 items-center">
+                        {/* ✅ USO DE renderFilePreview */}
                         {unassignedFiles.map(file => (
                           <div key={file.id} className="relative w-24 h-24">
-                            <img src={file.previewUrl} alt={file.file.name} className="w-full h-full object-cover rounded-md" />
+                            {renderFilePreview(file)}
                             <button onClick={() => removeUnassignedFile(file.id)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 transition-colors" aria-label="Eliminar archivo">
                               <X className="h-3 w-3" />
                             </button>
@@ -1034,8 +997,6 @@ export default function EvaluatorClient() {
                   )}
                 </CardContent>
               </Card>
-              {/* Paso 3: Grupos y Evaluación */
-              }
               {studentGroups.length > 0 && (
                 <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
                   <CardHeader>
@@ -1048,9 +1009,10 @@ export default function EvaluatorClient() {
                       <div key={group.id} className="border p-4 rounded-lg border-[var(--border-color)]">
                         <Input className="text-lg font-bold border-0 shadow-none focus-visible:ring-0 p-1 mb-2 bg-transparent" value={group.studentName} onChange={(e) => updateStudentName(group.id, e.target.value)} />
                         <div className="flex flex-wrap gap-2 min-h-[50px] bg-[var(--bg-muted-subtle)] p-2 rounded-md">
+                          {/* ✅ USO DE renderFilePreview */}
                           {group.files.map(file => (
                             <div key={file.id} className="relative w-20 h-20">
-                              <img src={file.previewUrl} alt={file.file.name} className="w-full h-full object-cover rounded-md" />
+                              {renderFilePreview(file)}
                               <button onClick={() => removeFileFromGroup(file.id, group.id)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5">
                                 <X className="h-3 w-3" />
                               </button>
@@ -1075,8 +1037,6 @@ export default function EvaluatorClient() {
                   </CardFooter>
                 </Card>
               )}
-              {/* Paso 4: Resultados */
-              }
               {studentGroups.some(g => g.isEvaluated || g.isEvaluating) && (
                 <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
                   <CardHeader><CardTitle className="text-[var(--text-accent)]">Paso 3: Resultados</CardTitle></CardHeader>
@@ -1236,8 +1196,6 @@ export default function EvaluatorClient() {
           </TabsContent>
           <TabsContent value="presentacion" className="mt-8">
             <Card className="max-w-4xl mx-auto border-2 shadow-xl bg-[var(--bg-card)] border-[var(--border-color)] p-10 text-center">
-              {/* LOGO AJUSTADO: h-20 w-20 */
-              }
               <img src={LIBELIA_LOGO_PNG_BASE64} alt="Logo Libel-IA" className="mx-auto h-20 w-20 mb-6" />
               <h1 className={`text-5xl font-bold ${wordmarkClass} font-logo mb-4`}>Libel-IA</h1>
               <p className="text-lg text-[var(--text-secondary)] mb-6">

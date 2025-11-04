@@ -1,117 +1,98 @@
-'use client'
+'use client';
 
-import * as React from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Button } from '@/components/ui/button'
-import { ArrowUpDown } from 'lucide-react'
-import { format } from "date-fns"
+import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import EvaluacionPDF from './EvaluacionPDF';
 
-// Definimos los tipos de datos que este componente recibirá
-interface StudentGroup {
-	id: string
-	studentName: string
-	nota?: number | string // Acepta número o string desde la API
-	decimasAdicionales: number
-	isEvaluated: boolean
-}
-
+// 🔑 NUEVO: Define las props que recibirá
 interface NotesDashboardProps {
-	studentGroups: StudentGroup[]
-	curso?: string
-	fecha?: Date
+  studentGroups?: any[];
+  curso?: string;
+  fecha?: Date;
 }
 
-type SortKey = 'studentName' | 'finalNota'
-type SortDirection = 'ascending' | 'descending'
+// 🔑 NUEVO: Agrégalo al componente
+const NotesDashboard = ({ studentGroups, curso, fecha }: NotesDashboardProps) => {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const [evaluations, setEvaluations] = useState<any[]>([]);
+  const [selectedEvaluation, setSelectedEvaluation] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-// CORRECCIÓN CRÍTICA: studentGroups = [] garantiza que la línea 34 no falle.
-export function NotesDashboard({ studentGroups = [], curso, fecha }: NotesDashboardProps) {
-	const [sortConfig, setSortConfig] = React.useState<{ key: SortKey; direction: SortDirection }>({
-		key: 'studentName',
-		direction: 'ascending'
-	})
+  useEffect(() => {
+    if (status === 'loading') return;
+    if (!session) {
+      router.push('/login');
+      return;
+    }
 
-	// Esta línea ahora es segura.
-	const evaluatedStudents = studentGroups.filter(g => g.isEvaluated)
+    const fetchEvaluations = async () => {
+      try {
+        const res = await fetch('/api/evaluations');
+        if (res.ok) {
+          const data = await res.json();
+          setEvaluations(data);
+        }
+      } catch (error) {
+        console.error('Error fetching evaluations:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-	const sortedStudents = React.useMemo(() => {
-		let sortableItems = [...evaluatedStudents]
-		sortableItems.sort((a, b) => {
-			let aValue: string | number, bValue: string | number
+    fetchEvaluations();
+  }, [session, status, router]);
 
-			if (sortConfig.key === 'finalNota') {
-				// Cálculo de la nota final
-				aValue = (Number(a.nota) || 0) + a.decimasAdicionales
-				bValue = (Number(b.nota) || 0) + b.decimasAdicionales
-			} else {
-				// 'studentName'
-				aValue = a.studentName.toLowerCase()
-				bValue = b.studentName.toLowerCase()
-			}
+  const handleSelectEvaluation = (evaluation: any) => {
+    setSelectedEvaluation(evaluation);
+  };
 
-			if (aValue < bValue) return sortConfig.direction === 'ascending' ? -1 : 1
-			if (aValue > bValue) return sortConfig.direction === 'ascending' ? 1 : -1
-			return 0
-		})
-		return sortableItems
-	}, [evaluatedStudents, sortConfig])
+  if (status === 'loading' || loading) {
+    return <div className="p-6">Cargando evaluaciones...</div>;
+  }
 
-	const requestSort = (key: SortKey) => {
-		let direction: SortDirection = 'ascending'
-		if (sortConfig.key === key && sortConfig.direction === 'ascending') {
-			direction = 'descending'
-		}
-		setSortConfig({ key, direction })
-	}
+  if (!session) return null;
 
-	if (evaluatedStudents.length === 0) {
-		return (
-			<Card>
-				<CardHeader><CardTitle>Resumen de Notas</CardTitle></CardHeader>
-				<CardContent><p className="text-muted-foreground">Aún no se han completado evaluaciones en esta sesión.</p></CardContent>
-			</Card>
-		)
-	}
+  return (
+    <div className="p-6 max-w-6xl mx-auto">
+      <h1 className="text-2xl font-bold mb-6">Mis Evaluaciones</h1>
 
-	return (
-		<Card>
-			<CardHeader>
-				<CardTitle>Resumen de Notas</CardTitle>
-			</CardHeader>
-			<CardContent>
-				<Table>
-					<TableHeader>
-						<TableRow>
-							<TableHead>
-								<Button variant="ghost" onClick={() => requestSort('studentName')}>
-									Alumno <ArrowUpDown className="ml-2 h-4 w-4" />
-								</Button>
-							</TableHead>
-							<TableHead>Curso</TableHead>
-							<TableHead>Fecha</TableHead>
-							<TableHead className="text-right">
-								<Button variant="ghost" onClick={() => requestSort('finalNota')}>
-									Nota Final <ArrowUpDown className="ml-2 h-4 w-4" />
-								</Button>
-							</TableHead>
-						</TableRow>
-					</TableHeader>
-					<TableBody>
-						{sortedStudents.map((group) => {
-							const finalNota = (Number(group.nota) || 0) + group.decimasAdicionales
-							return (
-								<TableRow key={group.id}>
-									<TableCell className="font-medium">{group.studentName}</TableCell>
-									<TableCell>{curso || 'N/A'}</TableCell>
-									<TableCell>{fecha ? format(fecha, "dd/MM/yyyy") : 'N/A'}</TableCell>
-									<TableCell className="text-right font-bold text-lg text-blue-600">{finalNota.toFixed(1)}</TableCell>
-								</TableRow>
-							)
-						})}
-					</TableBody>
-				</Table>
-			</CardContent>
-		</Card>
-	)
-}
+      {evaluations.length === 0 ? (
+        <p>No tienes evaluaciones aún.</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {evaluations.map((evaluacion) => (
+            <div
+              key={evaluacion.id}
+              className="border rounded-lg p-4 hover:shadow-md cursor-pointer"
+              onClick={() => handleSelectEvaluation(evaluacion)}
+            >
+              <h3 className="font-semibold">{evaluacion.nombreEstudiante || 'Estudiante'}</h3>
+              <p>Nota: {evaluacion.nota}</p>
+              <p>Área: {evaluacion.areaConocimiento}</p>
+              <p className="text-sm text-gray-500">
+                {new Date(evaluacion.createdAt).toLocaleDateString()}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {selectedEvaluation && (
+        <div className="mt-6">
+          <h3 className="text-lg font-semibold mb-2">Vista Previa del PDF</h3>
+          <EvaluacionPDF
+            nombreEstudiante={selectedEvaluation.nombreEstudiante}
+            puntaje={selectedEvaluation.puntaje}
+            nota={selectedEvaluation.nota}
+            retroalimentacion={selectedEvaluation.retroalimentacion}
+            areaConocimiento={selectedEvaluation.areaConocimiento}
+          />
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default NotesDashboard;
