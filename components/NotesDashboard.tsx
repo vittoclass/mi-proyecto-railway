@@ -1,58 +1,47 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 import EvaluacionPDF from './EvaluacionPDF';
 
-// 🔑 NUEVO: Define las props que recibirá
 interface NotesDashboardProps {
   studentGroups?: any[];
   curso?: string;
   fecha?: Date;
 }
 
-// 🔑 NUEVO: Agrégalo al componente
 const NotesDashboard = ({ studentGroups, curso, fecha }: NotesDashboardProps) => {
-  const { data: session, status } = useSession();
-  const router = useRouter();
   const [evaluations, setEvaluations] = useState<any[]>([]);
   const [selectedEvaluation, setSelectedEvaluation] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (status === 'loading') return;
-    if (!session) {
-      router.push('/login');
-      return;
-    }
-
-    const fetchEvaluations = async () => {
-      try {
-        const res = await fetch('/api/evaluations');
-        if (res.ok) {
-          const data = await res.json();
-          setEvaluations(data);
+    // ✅ Si se pasan evaluaciones por props, usarlas directamente
+    if (studentGroups) {
+      const evaluated = studentGroups.filter(g => g.isEvaluated);
+      setEvaluations(evaluated);
+      setLoading(false);
+    } else {
+      // ❌ Si no, cargar desde API (comportamiento original)
+      const fetchEvaluations = async () => {
+        try {
+          const res = await fetch('/api/evaluations');
+          if (res.ok) {
+            const data = await res.json();
+            setEvaluations(data);
+          }
+        } catch (error) {
+          console.error('Error al cargar evaluaciones:', error);
+        } finally {
+          setLoading(false);
         }
-      } catch (error) {
-        console.error('Error fetching evaluations:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+      };
+      fetchEvaluations();
+    }
+  }, [studentGroups]);
 
-    fetchEvaluations();
-  }, [session, status, router]);
-
-  const handleSelectEvaluation = (evaluation: any) => {
-    setSelectedEvaluation(evaluation);
-  };
-
-  if (status === 'loading' || loading) {
+  if (loading) {
     return <div className="p-6">Cargando evaluaciones...</div>;
   }
-
-  if (!session) return null;
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -64,15 +53,15 @@ const NotesDashboard = ({ studentGroups, curso, fecha }: NotesDashboardProps) =>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {evaluations.map((evaluacion) => (
             <div
-              key={evaluacion.id}
+              key={evaluacion.id || evaluacion.studentName}
               className="border rounded-lg p-4 hover:shadow-md cursor-pointer"
-              onClick={() => handleSelectEvaluation(evaluacion)}
+              onClick={() => setSelectedEvaluation(evaluacion)}
             >
-              <h3 className="font-semibold">{evaluacion.nombreEstudiante || 'Estudiante'}</h3>
+              <h3 className="font-semibold">{evaluacion.studentName || 'Estudiante'}</h3>
               <p>Nota: {evaluacion.nota}</p>
               <p>Área: {evaluacion.areaConocimiento}</p>
               <p className="text-sm text-gray-500">
-                {new Date(evaluacion.createdAt).toLocaleDateString()}
+                {curso || fecha ? `${curso} · ${fecha?.toLocaleDateString()}` : 'Sin fecha'}
               </p>
             </div>
           ))}
@@ -83,7 +72,7 @@ const NotesDashboard = ({ studentGroups, curso, fecha }: NotesDashboardProps) =>
         <div className="mt-6">
           <h3 className="text-lg font-semibold mb-2">Vista Previa del PDF</h3>
           <EvaluacionPDF
-            nombreEstudiante={selectedEvaluation.nombreEstudiante}
+            nombreEstudiante={selectedEvaluation.studentName}
             puntaje={selectedEvaluation.puntaje}
             nota={selectedEvaluation.nota}
             retroalimentacion={selectedEvaluation.retroalimentacion}

@@ -561,12 +561,64 @@ export default function EvaluatorClient() {
     }
   };
   const exportToDocOrCsv = (formatType: 'csv' | 'doc') => {
-    const evaluatedGroups = studentGroups.filter(g => g.isEvaluated);
-    if (evaluatedGroups.length === 0) {
-      alert('No hay evaluaciones para exportar.');
-      return;
-    }
-  };
+  const evaluatedGroups = studentGroups.filter(g => g.isEvaluated);
+  if (evaluatedGroups.length === 0) {
+    alert('No hay evaluaciones para exportar.');
+    return;
+  }
+
+  if (formatType === 'doc') {
+    // Generar documento Word (.doc) básico con HTML
+    const htmlContent = `
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Notas - Libel-IA</title>
+          <style>
+            table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+            th, td { border: 1px solid #000; padding: 10px; text-align: left; }
+            th { background-color: #f2f2f2; }
+          </style>
+        </head>
+        <body>
+          <h1>Resumen de Notas - Libel-IA</h1>
+          <table>
+            <thead>
+              <tr>
+                <th>Estudiante</th>
+                <th>Puntaje</th>
+                <th>Nota</th>
+                <th>Fortalezas</th>
+                <th>Áreas de Mejora</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${evaluatedGroups.map(g => `
+                <tr>
+                  <td>${g.studentName || 'N/A'}</td>
+                  <td>${g.puntaje || 'N/A'}</td>
+                  <td>${g.nota || 'N/A'}</td>
+                  <td>${(g.retroalimentacion?.resumen_general?.fortalezas || 'N/A').replace(/\n/g, '<br>')}</td>
+                  <td>${(g.retroalimentacion?.resumen_general?.areas_mejora || 'N/A').replace(/\n/g, '<br>')}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+
+    const blob = new Blob([htmlContent], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'notas_libel-ia.doc';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+};
   const isCurrentlyEvaluatingAny = studentGroups.some(g => g.isEvaluating);
   const previewGroup = previewGroupId ? studentGroups.find(g => g.id === previewGroupId) : null;
   const handlePreview = async (groupId: string) => {
