@@ -378,6 +378,7 @@ export default function EvaluatorClient() {
   const [previewGroupId, setPreviewGroupId] = useState<string | null>(null);
   const isMobile = typeof window !== 'undefined' && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const { evaluate, isLoading } = useEvaluator();
   const form = useForm<z.infer<typeof formSchema>>({
@@ -441,7 +442,11 @@ export default function EvaluatorClient() {
     });
   };
   const handleFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) processFiles(Array.from(e.target.files));
+    if (e.target && e.target.files) {
+      processFiles(Array.from(e.target.files));
+      // Reset the input so consecutive captures with the same filename still trigger onChange
+      try { e.target.value = ''; } catch {}
+    }
   };const handleCapture = (dataUrl: string) => {
   fetch(dataUrl)
     .then(res => res.blob())
@@ -1019,10 +1024,22 @@ export default function EvaluatorClient() {
                       <Button type="button" onClick={() => { fileInputRef.current?.click(); }}>
                         <FileUp className="mr-2 h-4 w-4" /> Subir Archivos
                       </Button>
-                      <Button type="button" variant="secondary" onClick={() => setIsCameraOpen(true)}>
-                        <Camera className="mr-2 h-4 w-4" /> Usar Cámara
-                      </Button>
+                     <Button
+  type="button"
+  variant="secondary"
+  onClick={() => {
+    if (isMobile) {
+      cameraInputRef.current?.click();   // ✅ CELULAR: cámara nativa
+    } else {
+      setIsCameraOpen(true);             // ✅ PC: abre webcam real del modal
+    }
+  }}
+>
+  <Camera className="mr-2 h-4 w-4" /> Usar Cámara
+</Button>
+
                       <input type="file" multiple accept="image/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ref={fileInputRef} onChange={handleFilesSelected} className="hidden" />
+                      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleFilesSelected} className="hidden" />
                       <p className="text-sm text-[var(--text-secondary)]">Consejo: Sube primero la página con el nombre.</p>
                     </div>
                   </div>
