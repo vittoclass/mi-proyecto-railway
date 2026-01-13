@@ -1,9 +1,9 @@
+// app/Libel-IA.tsx
 'use client';
 
 import { useState } from 'react';
-// CORRECCIÓN: La ruta debe apuntar al archivo correcto en la carpeta 'app'
-import { useEvaluator } from '../app/useEvaluator'; 
-import SmartCameraModal from '@/components/smart-camera-modal';
+import { useEvaluator } from './useEvaluator';
+import SmartCameraModal from '@/components/smart-camera-modal'; // Asegúrate que esta ruta sea correcta
 
 export default function LibelIA() {
   // ==================================================================
@@ -11,7 +11,6 @@ export default function LibelIA() {
   // ==================================================================
   const [fileUrl, setFileUrl] = useState<string>('');
   const [rubrica, setRubrica] = useState<string>('');
-  // CORRECCIÓN: El hook devuelve 'isLoading', no 'loading'.
   const { evaluate, isLoading } = useEvaluator();
   const [result, setResult] = useState<any>(null);
   
@@ -20,6 +19,7 @@ export default function LibelIA() {
   // ==================================================================
   // FIN DE LA ZONA DE HOOKS
   // ==================================================================
+
 
   const handleEvaluate = async () => {
     if (!fileUrl) {
@@ -34,8 +34,8 @@ export default function LibelIA() {
     const payload = {
         fileUrls: [fileUrl],
         rubrica: rubrica,
-        puntajeTotal: 100, // Asumiendo un valor por defecto
-        flexibilidad: 3,  // Asumiendo un valor por defecto
+        puntajeTotal: 100,
+        flexibilidad: 3,
       };
   
     const evaluationResult = await evaluate(payload);
@@ -128,3 +128,4 @@ export default function LibelIA() {
     </div>
   );
 }
+
