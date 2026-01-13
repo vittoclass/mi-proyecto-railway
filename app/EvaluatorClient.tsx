@@ -816,6 +816,9 @@ type CaptureMode = "sm_vf" | "terminos_pareados" | "desarrollo" | null
 interface CameraFeedback {
   confidence: number
   // Agrega aquí otras propiedades si son necesarias para el feedback
+  isDocumentDetected?: boolean
+  isBlurry?: boolean
+  isPoorLighting?: boolean
 }
 // *** FIN DE DECLARACIONES DE TIPOS ***
 
@@ -1041,6 +1044,7 @@ export default function EvaluatorClient() {
     fetch(dataUrl)
       .then((res) => res.blob())
       .then((blob) => {
+        // Opcional: Agregar el modo al nombre para el debug
         const fileName = mode ? `captura-${mode}-${Date.now()}.png` : `captura-${Date.now()}.png`
         const file = new (File as any)([blob], fileName, { type: "image/png" }) as File
         processFiles([file])
@@ -1426,7 +1430,13 @@ ${evaluatedGroups
       {/* 🚨 MODIFICADO: SmartCameraModal ahora requiere el modo, la función de feedback y el estado de feedback */}
       {isCameraOpen && (
         <SmartCameraModal
-          onCapture={(dataUrl: string, feedback: CameraFeedback) => handleCapture(dataUrl, captureMode, feedback)}
+          onCapture={(dataUrl: string, feedback?: CameraFeedback) =>
+            handleCapture(
+              dataUrl,
+              captureMode,
+              feedback || { confidence: 1, isDocumentDetected: true, isBlurry: false, isPoorLighting: false },
+            )
+          }
           onClose={() => {
             setIsCameraOpen(false)
             setCaptureMode(null)
@@ -2219,7 +2229,7 @@ h-4 w-4 animate-spin"
                                           Respuestas Cerradas - Revisión y Edición
                                         </h4>
                                         <div className="text-sm text-blue-800 mb-3 bg-blue-100 p-3 rounded border border-blue-300">
-                                          <strong>🔍 INSTRUCCIONES:</strong> Las respuestas marcadas en{" "}
+                                          <strong>🔍 INSTRUCCIONES:</strong> Las respuestas marcadas en
                                           <span className="bg-red-100 px-2 py-0.5 rounded border border-red-300 font-bold">
                                             ROJO
                                           </span>{" "}
