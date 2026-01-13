@@ -1,3 +1,5 @@
+// EVALAJUDRO CLIENT CUENTA CON PORCENTAJES Y PUATAS CON PUBTJAE TB.txt (EvaluatorClient.tsx)
+
 "use client"
 import * as React from "react"
 import { useState, useRef, type ChangeEvent, useEffect } from "react"
