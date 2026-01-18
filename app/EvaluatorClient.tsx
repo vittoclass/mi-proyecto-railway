@@ -50,7 +50,6 @@ import {
 } from "@react-pdf/renderer"
 import { useEvaluator } from "./useEvaluator"
 const SmartCameraModal = dynamic(() => import("@/components/smart-camera-modal"), {
-  ssr: false,
   loading: () => <p>Cargando...</p>,
 })
 
@@ -1914,7 +1913,7 @@ La IA usará una escala 0-10 por criterio de desarrollo."
                       capture="environment"
                       onChange={handleFilesSelected}
                       className="hidden"
-                    />{" "}
+                    />
                     {/* Se mantiene el input por si el modal decide usarlo */}
                     <p className="text-sm text-[var(--text-secondary)]">
                       Consejo: Sube primero la página con el nombre.
