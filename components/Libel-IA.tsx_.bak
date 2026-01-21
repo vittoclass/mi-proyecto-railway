@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useEvaluator } from "./useEvaluator"
+import { useEvaluator } from "@/components/useEvaluator"
 import SmartCameraModal from "@/components/smart-camera-modal"
 
 export default function LibelIA() {
@@ -62,15 +62,14 @@ export default function LibelIA() {
         />
       </div>
 
-      {/* CORRECCIÓN: Se añade un botón para abrir el modal de la cámara */}
+      {/* Botón para abrir el modal de la cámara */}
       <div className="mb-4">
         <button onClick={() => setIsCameraOpen(true)} className="bg-gray-200 px-4 py-2 rounded-lg">
           Abrir Cámara
         </button>
       </div>
 
-      {/* Módulo de cámara y subida */}
-      {/* CORRECCIÓN: El modal ahora se renderiza condicionalmente y se le pasa la propiedad 'onClose' obligatoria. */}
+      {/* Modal cámara */}
       {isCameraOpen && <SmartCameraModal onCapture={handleCapture} onClose={() => setIsCameraOpen(false)} />}
 
       {/* Previsualización de la imagen capturada */}
