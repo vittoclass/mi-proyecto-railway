@@ -15,6 +15,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Slider } from "@/components/ui/slider"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -26,12 +28,14 @@ import {
   Users,
   X,
   Printer,
+  CalendarIcon,
+  ImageUp,
   ClipboardList,
   Home,
   Palette,
   Eye,
   FileText,
-  File,
+  File as FileIcon,
   CheckCircle2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -88,7 +92,7 @@ const renderFilePreview = (file: { file: File; previewUrl: string }) => {
 
   return (
     <div className="w-full h-full flex flex-col items-center justify-center bg-gray-100 rounded-md">
-      <File className="text-gray-500 h-6 w-6" />
+          <FileIcon className="text-gray-500 h-6 w-6" />
       <span className="text-[10px] mt-1 text-gray-600 truncate px-1">Archivo</span>
     </div>
   )
@@ -815,9 +819,6 @@ type CaptureMode = "sm_vf" | "terminos_pareados" | "desarrollo" | null
 interface CameraFeedback {
   confidence: number
   // Agrega aquí otras propiedades si son necesarias para el feedback
-  isDocumentDetected?: boolean
-  isBlurry?: boolean
-  isPoorLighting?: boolean
 }
 // *** FIN DE DECLARACIONES DE TIPOS ***
 
@@ -1027,33 +1028,33 @@ export default function EvaluatorClient() {
       } catch {}
     }
   }
-  // 🚨 MODIFICACIÓN: handleCapture ahora recibe el modo Y el feedback de certeza.
-  const handleCapture = (dataUrl: string, mode: CaptureMode, feedback: CameraFeedback) => {
-    // 🚨 Nueva lógica de control para certeza baja
-    if (feedback.confidence < 0.98) {
-      const confirmCapture = window.confirm(
-        `⚠️ Baja Certeza OCR (${(feedback.confidence * 100).toFixed(1)}%). ¿Desea continuar con el riesgo de error o reintentar?`,
-      )
-      if (!confirmCapture) {
-        // Si el profesor no confirma, mantiene la cámara abierta y no procesa el archivo.
-        return
-      }
-    }
+// 🚨 MODIFICACIÓN: handleCapture ahora recibe el modo Y el feedback de certeza.
+const handleCapture = (dataUrl: string, mode: CaptureMode | null, feedback?: CameraFeedback) => {
+  const fb = feedback ?? ({ confidence: 1 } as CameraFeedback)
 
-    fetch(dataUrl)
-      .then((res) => res.blob())
-      .then((blob) => {
-        // Opcional: Agregar el modo al nombre para el debug
-        const fileName = mode ? `captura-${mode}-${Date.now()}.png` : `captura-${Date.now()}.png`
-        const file = new (File as any)([blob], fileName, { type: "image/png" }) as File
-        processFiles([file])
-      })
-      .catch((err) => console.error("Error al crear archivo desde captura:", err))
-    setIsCameraOpen(false) // Cierra la cámara
-    setIsCaptureModeSelectionOpen(false) // Cierra la selección
-    setCaptureMode(null) // Resetea el modo
-    setCameraFeedback(null) // Limpia el feedback de la cámara
+  // 🚨 Nueva lógica de control para certeza baja
+  if (fb.confidence < 0.98) {
+    const confirmCapture = window.confirm(
+      `⚠️ Baja Certeza OCR (${(fb.confidence * 100).toFixed(1)}%). ¿Desea continuar con el riesgo de error o reintentar?`,
+    )
+    if (!confirmCapture) return
   }
+
+  fetch(dataUrl)
+    .then((res) => res.blob())
+    .then((blob) => {
+      const fileName = mode ? `captura-${mode}-${Date.now()}.png` : `captura-${Date.now()}.png`
+      const file = new File([blob], fileName, { type: "image/png" })
+      processFiles([file])
+    })
+    .catch((err) => console.error("Error al crear archivo desde captura:", err))
+
+  setIsCameraOpen(false)
+  setIsCaptureModeSelectionOpen(false)
+  setCaptureMode(null)
+  setCameraFeedback(null)
+}
+
   const handleLogoChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
@@ -1429,13 +1430,10 @@ ${evaluatedGroups
       {/* 🚨 MODIFICADO: SmartCameraModal ahora requiere el modo, la función de feedback y el estado de feedback */}
       {isCameraOpen && (
         <SmartCameraModal
-          onCapture={(dataUrl: string, feedback?: CameraFeedback) =>
-            handleCapture(
-              dataUrl,
-              captureMode,
-              feedback || { confidence: 1, isDocumentDetected: true, isBlurry: false, isPoorLighting: false },
-            )
-          }
+     onCapture={(dataUrl: string, feedback?: CameraFeedback) =>
+                      handleCapture(dataUrl, captureMode, feedback)
+                  }
+
           onClose={() => {
             setIsCameraOpen(false)
             setCaptureMode(null)
@@ -1875,9 +1873,10 @@ La IA usará una escala 0-10 por criterio de desarrollo."
             </Card>
             <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
               <CardHeader>
-                <CardTitle className="text-[var(--text-accent)]">Paso 2: Cargar y Agrupar Trabajos</CardTitle>
+                <CardTitle className="text-[var(--text-accent)]">Paso 1.1: Personalización del Informe</CardTitle>
               </CardHeader>
 
+<<<<<<< Updated upstream
               <CardContent className="space-y-6">
                 <div>
                   <h3 className="font-bold text-[var(--text-accent)]">Cargar Archivos</h3>
@@ -1925,456 +1924,624 @@ La IA usará una escala 0-10 por criterio de desarrollo."
                     <h3 className="font-semibold mb-3 flex items-center text-[var(--text-accent)]">
                       <ClipboardList className="mr-2 h-5 w-5" /> Archivos Pendientes
                     </h3>
+=======
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <FormField
+                    control={form.control}
+                    name="nombreProfesor"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-[var(--text-accent)]">Nombre del Profesor</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ej: Juan Pérez" {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="departamento"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-[var(--text-accent)]">{departamentoLabel}</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder={isSuperior ? "Ej: Escuela de Ingeniería" : "Ej: Departamento de Lenguaje"}
+                            {...field}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="asignatura"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-[var(--text-accent)]">Asignatura</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ej: Lenguaje y Comunicación" {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="nombrePrueba"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-[var(--text-accent)]">Nombre de la Evaluación/Certamen</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ej: Certamen N°2" {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="fechaEvaluacion"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel className="text-[var(--text-accent)]">Fecha</FormLabel>
+>>>>>>> Stashed changes
 
-                    <div className="flex flex-wrap gap-4 items-center">
-                      {/* ✅ USO DE renderFilePreview */}
-                      {unassignedFiles.map((file) => (
-                        <div key={file.id} className="relative w-24 h-24">
-                          {renderFilePreview(file)}
-                          <button
-                            onClick={() => removeUnassignedFile(file.id)}
-                            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 transition-colors"
-                            aria-label="Eliminar archivo"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </div>
-                      ))}
-
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={handleNameExtraction}
-                        disabled={isExtractingNames}
-                        className="self-center bg-transparent"
-                      >
-                        {isExtractingNames ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Sparkles className="mr-2 h-4 w-4 text-purple-500" />
-                        )}{" "}
-                        Detectar Nombre
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant={"outline"}
+                                className={cn(
+                                  "pl-3 text-left font-normal",
+                                  !field.value && "text-[var(--text-secondary)]",
+                                )}
+                              >
+                                {field.value ? format(field.value, "PPP") : <span>Elige una fecha</span>}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus />
+                          </PopoverContent>
+                        </Popover>
+                      </FormItem>
+                    )}
+                  />
+                  <div className="space-y-2 col-span-full">
+                    <Label className="text-[var(--text-accent)]">Logo del Colegio (Opcional)</Label>
+                    <div className="flex items-center gap-4">
+                      <Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}>
+                        <ImageUp className="mr-2 h-4 w-4" />
+                        Subir Logo
                       </Button>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        ref={logoInputRef}
+                        onChange={handleLogoChange}
+                        className="hidden"
+                      />
+                      {logoPreview && (
+                        <img
+                          src={logoPreview || "/placeholder.svg"}
+                          alt="Vista previa del logo"
+                          className="h-12 w-auto object-contain border p-1 rounded-md"
+                        />
+                      )}
                     </div>
                   </div>
-                )}
+                </div>
               </CardContent>
             </Card>
-            {studentGroups.length > 0 && (
+          </TabsContent>
+          {activeTab === "evaluator" && (
+            <>
               <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-[var(--text-accent)]">
-                    <Users className="text-green-500" />
-                    Grupos de Estudiantes
-                  </CardTitle>
+                  <CardTitle className="text-[var(--text-accent)]">Paso 2: Cargar y Agrupar Trabajos</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  {studentGroups.map((group) => (
-                    <div key={group.id} className="border p-4 rounded-lg border-[var(--border-color)]">
-                      <Input
-                        className="text-lg font-bold border-0 shadow-none focus-visible:ring-0 p-1 mb-2 bg-transparent"
-                        value={group.studentName}
-                        onChange={(e) => updateStudentName(group.id, e.target.value)}
-                      />
 
-                      <div className="flex flex-wrap gap-2 min-h-[50px] bg-[var(--bg-muted-subtle)] p-2 rounded-md">
+                <CardContent className="space-y-6">
+                  <div>
+                    <h3 className="font-bold text-[var(--text-accent)]">Cargar Archivos</h3>
+                    <div className="flex flex-wrap gap-4 mt-2 items-center">
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          fileInputRef.current?.click()
+                        }}
+                      >
+                        <FileUp className="mr-2 h-4 w-4" /> Subir Archivos (PDF/DOCX/Imágenes)
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        // 🚨 MODIFICACIÓN CRÍTICA: Abrir el modal de selección
+                        onClick={() => setIsCaptureModeSelectionOpen(true)}
+                      >
+                        <Camera className="mr-2 h-4 w-4" /> Usar Cámara (Captura Guiada)
+                      </Button>
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        ref={fileInputRef}
+                        onChange={handleFilesSelected}
+                        className="hidden"
+                      />
+                      <input
+                        ref={cameraInputRef}
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={handleFilesSelected}
+                        className="hidden"
+                      />{" "}
+                      {/* Se mantiene el input por si el modal decide usarlo */}
+                      <p className="text-sm text-[var(--text-secondary)]">
+                        Consejo: Sube primero la página con el nombre.
+                      </p>
+                    </div>
+                  </div>
+                  {unassignedFiles.length > 0 && (
+                    <div className="p-4 border rounded-lg bg-[var(--bg-muted-subtle)] border-[var(--border-color)]">
+                      <h3 className="font-semibold mb-3 flex items-center text-[var(--text-accent)]">
+                        <ClipboardList className="mr-2 h-5 w-5" /> Archivos Pendientes
+                      </h3>
+
+                      <div className="flex flex-wrap gap-4 items-center">
                         {/* ✅ USO DE renderFilePreview */}
-                        {group.files.map((file) => (
-                          <div key={file.id} className="relative w-20 h-20">
+                        {unassignedFiles.map((file) => (
+                          <div key={file.id} className="relative w-24 h-24">
                             {renderFilePreview(file)}
                             <button
-                              onClick={() => removeFileFromGroup(file.id, group.id)}
-                              className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5"
+                              onClick={() => removeUnassignedFile(file.id)}
+                              className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600 transition-colors"
+                              aria-label="Eliminar archivo"
                             >
                               <X className="h-3 w-3" />
                             </button>
                           </div>
                         ))}
 
-                        {unassignedFiles.length > 0 && (
-                          <div className="flex items-center justify-center w-20 h-20 border-2 border-dashed rounded-md border-[var(--border-color)]">
-                            <select
-                              onChange={(e) => {
-                                if (e.target.value) assignFileToGroup(e.target.value, group.id)
-                                e.target.value = ""
-                              }}
-                              className="text-sm bg-transparent"
-                            >
-                              <option value="">Asignar</option>
-                              {unassignedFiles.map((f) => (
-                                <option key={f.id} value={f.id}>
-                                  {f.file.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleNameExtraction}
+                          disabled={isExtractingNames}
+                          className="self-center bg-transparent"
+                        >
+                          {isExtractingNames ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Sparkles className="mr-2 h-4 w-4 text-purple-500" />
+                          )}{" "}
+                          Detectar Nombre
+                        </Button>
                       </div>
                     </div>
-                  ))}
+                  )}
                 </CardContent>
-                <CardFooter>
-                  {/* 🚨 REEMPLAZO CRÍTICO: Botón de Evaluación por Flujo OMR Interactivo */}
-                  <Button
-                    size="lg"
-                    onClick={onEvaluateAll}
-                    disabled={
-                      isCurrentlyEvaluatingAny ||
-                      studentGroups.every((g) => g.files.length === 0) ||
-                      isCurrentlyValidatingAny
-                    }
-                  >
-                    {isCurrentlyValidatingAny ? (
-                      <>
-                        <CheckCircle2 className="mr-2 h-4 w-4 text-white" /> Confirmar Correcciones OMR
-                      </>
-                    ) : isLoading || isCurrentlyEvaluatingAny ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Evaluando...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="mr-2 h-4 w-4" /> Evaluar Todo
-                      </>
-                    )}
-                  </Button>
-                </CardFooter>
               </Card>
-            )}
-            {studentGroups.some((g) => g.isEvaluated || g.isEvaluating || g.isValidationStep) && (
-              <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
-                <CardHeader>
-                  <CardTitle className="text-[var(--text-accent)]">Paso 3: Resultados</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {studentGroups
-                    .filter((g) => g.isEvaluated || g.isEvaluating || g.isValidationStep)
-                    .map((group) => {
-                      const notaNumber = Number(group.nota) || 0
-                      const finalNota = notaNumber + (group.decimasAdicionales || 0)
-                      const isReadyToValidate = group.isValidationStep && group.alternativas_corregidas?.length
+              {studentGroups.length > 0 && (
+                <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-[var(--text-accent)]">
+                      <Users className="text-green-500" />
+                      Grupos de Estudiantes
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {studentGroups.map((group) => (
+                      <div key={group.id} className="border p-4 rounded-lg border-[var(--border-color)]">
+                        <Input
+                          className="text-lg font-bold border-0 shadow-none focus-visible:ring-0 p-1 mb-2 bg-transparent"
+                          value={group.studentName}
+                          onChange={(e) => updateStudentName(group.id, e.target.value)}
+                        />
 
-                      // 🔥 EXTRACCIÓN DE VALORES PARA EL VELOCÍMETRO
-                      const puntajeObtenido = Number.parseInt(group.puntaje?.split("/")[0] || "0", 10)
-                      const puntajeMaximo =
-                        group.puntosMaximos || Number.parseInt(group.puntaje?.split("/")[1] || "0", 10)
-                      const puntosAprobacion = group.puntosAprobacion || 0
+                        <div className="flex flex-wrap gap-2 min-h-[50px] bg-[var(--bg-muted-subtle)] p-2 rounded-md">
+                          {/* ✅ USO DE renderFilePreview */}
+                          {group.files.map((file) => (
+                            <div key={file.id} className="relative w-20 h-20">
+                              {renderFilePreview(file)}
+                              <button
+                                onClick={() => removeFileFromGroup(file.id, group.id)}
+                                className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
 
-                      return (
-                        <div
-                          key={group.id}
-                          className={`p-6 rounded-lg border-l-4 ${
-                            group.error ? "border-red-500" : "border-green-500"
-                          } bg-[var(--bg-card)] shadow`}
-                        >
-                          <div className="flex justify-between items-center flex-wrap gap-2">
-                            <h3 className="font-bold text-xl text-[var(--text-accent)]">{group.studentName}</h3>
-                            {group.isEvaluating && (
-                              <div className="flex items-center text-sm text-[var(--text-secondary)]">
-                                <Loader2
-                                  className="mr-2
-h-4 w-4 animate-spin"
-                                />
-                                Procesando...
-                              </div>
-                            )}
-                            {group.isEvaluated && !group.error && (
-                              <div className="flex items-center gap-2">
-                                <Button variant="outline" size="sm" onClick={() => handlePreview(group.id)}>
-                                  <Eye className="mr-2 h-4 w-4" /> Ver informe
-                                </Button>
-
-                                <PDFDownloadLink
-                                  document={
-                                    <ReportDocument
-                                      group={group}
-                                      formData={form.getValues()}
-                                      logoPreview={logoPreview}
-                                    />
-                                  }
-                                  fileName={`informe_${group.studentName.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`}
-                                >
-                                  {({ loading }) => (
-                                    <Button variant="ghost" size="sm" disabled={loading}>
-                                      {loading ? (
-                                        "Preparando PDF..."
-                                      ) : (
-                                        <>
-                                          <Printer className="mr-2 h-4 w-4" /> Descargar PDF
-                                        </>
-                                      )}
-                                    </Button>
-                                  )}
-                                </PDFDownloadLink>
-                              </div>
-                            )}
-                          </div>
-
-                          {group.error ? (
-                            <p className="text-red-600">Error: {group.error}</p>
-                          ) : (
-                            <div className="mt-4 space-y-6">
-                              {group.isEvaluated && (
-                                <>
-                                  {/* REEMPLAZO DE PUNTAJE Y NOTA PARA INCLUIR VELOCÍMETRO */}
-                                  <div className="flex justify-between items-start bg-[var(--bg-muted-subtle)] p-4 rounded-lg">
-                                    <div>
-                                      <p className="text-sm font-bold">PUNTAJE</p>
-                                      <Input
-                                        className="text-xl font-semibold w-24 h-12 text-center"
-                                        type="text"
-                                        value={group.puntaje || ""}
-                                        onChange={(e) => handlePuntajeChange(group.id, e.target.value)}
-                                        placeholder="N/A"
-                                      />
-                                    </div>
-
-                                    <div className="text-right">
-                                      <div className="flex items-center gap-2">
-                                        <label htmlFor={`decimas-${group.id}`} className="text-sm font-medium">
-                                          Décimas:
-                                        </label>
-                                        <Input
-                                          id={`decimas-${group.id}`}
-                                          type="number"
-                                          step={0.1}
-                                          defaultValue={group.decimasAdicionales}
-                                          onChange={(e) => handleDecimasChange(group.id, e.target.value)}
-                                          className="h-8 w-20"
-                                        />
-                                      </div>
-                                      <p className="text-sm font-bold mt-2">NOTA FINAL</p>
-                                      <Input
-                                        className="text-3xl font-bold w-24 h-12 text-center text-blue-600 border-none bg-transparent"
-                                        type="number"
-                                        step={0.1}
-                                        value={String(Number(group.nota || 0) + (group.decimasAdicionales || 0))}
-                                        onChange={(e) => handleNotaChange(group.id, e.target.value)}
-                                        placeholder="N/A"
-                                      />
-                                    </div>
-                                  </div>
-
-                                  {/* 🔥 INTEGRACIÓN DEL VELOCÍMETRO */}
-                                  {puntajeMaximo > 0 && puntosAprobacion > 0 && (
-                                    <div className="bg-[var(--bg-muted)] p-4 rounded-lg border border-[var(--border-color)]">
-                                      <h5 className="font-bold text-[var(--text-accent)] mb-2">
-                                        📊 Rendimiento vs. Exigencia ({form.getValues("porcentajeExigencia")}%)
-                                      </h5>
-                                      <ExigenciaVelocimeter
-                                        obtenido={puntajeObtenido}
-                                        maximo={puntajeMaximo}
-                                        aprobacion={puntosAprobacion}
-                                      />
-                                    </div>
-                                  )}
-                                  {/* FIN DE REEMPLAZO */}
-
-                                  <div>
-                                    <h4 className="font-bold mb-2 text-[var(--text-accent)]">Corrección Detallada</h4>
-
-                                    <div className="overflow-x-auto">
-                                      <Table>
-                                        <TableHeader>
-                                          <TableRow>
-                                            <TableHead>Sección</TableHead>
-
-                                            <TableHead>Detalle</TableHead>
-                                          </TableRow>
-                                        </TableHeader>
-
-                                        <TableBody>
-                                          {group.retroalimentacion?.correccion_detallada?.map((item, index) => (
-                                            <TableRow key={index}>
-                                              <TableCell className="font-medium">
-                                                {renderForWeb(item.seccion)}
-                                              </TableCell>
-
-                                              <TableCell>{renderForWeb(item.detalle)}</TableCell>
-                                            </TableRow>
-                                          ))}
-                                          {Object.keys(group.detalle_desarrollo || {}).map((key) => {
-                                            const item = group.detalle_desarrollo?.[key]
-                                            if (!item) return null
-
-                                            return (
-                                              <TableRow key={key}>
-                                                <TableCell className="font-medium text-purple-600">
-                                                  {key.replace(/_/g, " ")}
-                                                </TableCell>
-                                                <TableCell>
-                                                  <p className="font-semibold text-sm mb-1">Puntaje: {item.puntaje}</p>
-                                                  <p className="text-xs italic text-[var(--text-secondary)] mb-1">
-                                                    Cita Estudiante: &quot;{item.cita_estudiante}&quot;
-                                                  </p>
-
-                                                  <p className="text-sm">{item.justificacion}</p>
-                                                </TableCell>
-                                              </TableRow>
-                                            )
-                                          })}
-                                        </TableBody>
-                                      </Table>
-                                    </div>
-                                  </div>
-                                  {/* 🚨 VALIDACIÓN OMR INTERACTIVA - TABLA EDITABLE (PASO CRÍTICO DE LA METACONIGICIÓN) */}
-                                  {/* Asegurar que la tabla editable SIEMPRE esté visible cuando hay alternativas cerradas */}
-                                  {group.isEvaluated &&
-                                    group.alternativas_corregidas &&
-                                    group.alternativas_corregidas.length > 0 && (
-                                      <div className="mt-4 border-2 border-blue-500 rounded-lg p-4 bg-blue-50">
-                                        <h4 className="font-bold mb-2 flex items-center text-blue-700">
-                                          <Eye className="h-4 w-4 mr-2" />
-                                          Respuestas Cerradas - Revisión y Edición
-                                        </h4>
-                                        <div className="text-sm text-blue-800 mb-3 bg-blue-100 p-3 rounded border border-blue-300">
-                                          <strong>🔍 INSTRUCCIONES:</strong> Las respuestas marcadas en
-                                          <span className="bg-red-100 px-2 py-0.5 rounded border border-red-300 font-bold">
-                                            ROJO
-                                          </span>{" "}
-                                          requieren su revisión.
-                                          <br />
-                                          <strong>
-                                            Puede editar cualquier respuesta directamente. Los cambios se aplicarán
-                                            inmediatamente al puntaje.
-                                          </strong>
-                                        </div>
-
-                                        <div className="mb-4 flex gap-2 flex-wrap">
-                                          {group.files.map((file, idx) => (
-                                            <ImageMagnifier
-                                              key={idx}
-                                              src={file.previewUrl || "/placeholder.svg"}
-                                              alt={`Prueba ${group.studentName} - Página ${idx + 1}`}
-                                            />
-                                          ))}
-                                        </div>
-
-                                        <div className="overflow-x-auto">
-                                          <Table>
-                                            <TableHeader>
-                                              <TableRow className="bg-blue-50">
-                                                <TableHead>Pregunta</TableHead>
-                                                <TableHead>R. Estudiante (Editable)</TableHead>
-                                                <TableHead>R. Correcta</TableHead>
-                                                <TableHead>Estado</TableHead>
-                                              </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                              {group.alternativas_corregidas?.map((item, index) => {
-                                                const respuestaEst =
-                                                  item.respuesta_estudiante?.trim().toUpperCase() || ""
-                                                const respuestaCorr =
-                                                  item.respuesta_correcta?.trim().toUpperCase() || ""
-                                                const esIncorrecta =
-                                                  respuestaEst && respuestaCorr && respuestaEst !== respuestaCorr
-
-                                                const tieneBajaConfianza =
-                                                  respuestaEst.length > 2 || // Más de 2 caracteres indica ruido
-                                                  (item.pregunta.includes("VF") &&
-                                                    !["V", "F"].includes(respuestaEst)) || // V/F debe ser V o F
-                                                  (item.pregunta.includes("TP") &&
-                                                    isNaN(Number.parseInt(respuestaEst))) || // TP debe ser número
-                                                  (item.pregunta.includes("SM") &&
-                                                    !["A", "B", "C", "D", "E"].includes(respuestaEst)) || // SM debe ser A-E
-                                                  respuestaEst === "" // Respuesta vacía
-
-                                                const necesitaRevision = esIncorrecta || tieneBajaConfianza
-
-                                                return (
-                                                  <TableRow
-                                                    key={index}
-                                                    className={cn(
-                                                      necesitaRevision &&
-                                                        "bg-red-50 hover:bg-red-100 border-l-4 border-l-red-500",
-                                                    )}
-                                                  >
-                                                    <TableCell className="font-medium text-sm">
-                                                      {item.pregunta}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                      <Input
-                                                        type="text"
-                                                        className={cn(
-                                                          "h-8 w-20 text-center font-bold text-base",
-                                                          necesitaRevision
-                                                            ? "border-2 border-red-500 bg-red-50"
-                                                            : "border-gray-300",
-                                                        )}
-                                                        defaultValue={item.respuesta_estudiante}
-                                                        onChange={(e) =>
-                                                          handleAlternativeChange(
-                                                            group.id,
-                                                            item.pregunta,
-                                                            e.target.value,
-                                                          )
-                                                        }
-                                                      />
-                                                    </TableCell>
-                                                    <TableCell className="text-sm text-green-600 font-bold">
-                                                      {item.respuesta_correcta}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                      {necesitaRevision ? (
-                                                        <span className="text-xs font-bold text-red-600 flex items-center gap-1">
-                                                          <Eye className="h-3 w-3" /> ⚠️ REVISAR
-                                                        </span>
-                                                      ) : (
-                                                        <span className="text-xs text-gray-500 flex items-center gap-1">
-                                                          <CheckCircle2 className="h-3 w-3 text-green-500" />✓ OK
-                                                        </span>
-                                                      )}
-                                                    </TableCell>
-                                                  </TableRow>
-                                                )
-                                              })}
-                                            </TableBody>
-                                          </Table>
-                                        </div>
-                                      </div>
-                                    )}
-                                  {/* FIN DE LA TABLA EDITABLE */}
-
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                                    <Card className="border-l-4 border-l-green-500">
-                                      <CardHeader className="pb-3">
-                                        <CardTitle className="text-green-700 text-base">✅ Fortalezas</CardTitle>
-                                      </CardHeader>
-                                      <CardContent>
-                                        <p className="text-sm leading-relaxed">
-                                          {formatFeedbackText(
-                                            group.retroalimentacion?.resumen_general?.fortalezas || "No disponible",
-                                            group.studentName,
-                                          )}
-                                        </p>
-                                      </CardContent>
-                                    </Card>
-
-                                    <Card className="border-l-4 border-l-yellow-500">
-                                      <CardHeader className="pb-3">
-                                        <CardTitle className="text-yellow-700 text-base">✏️ Áreas de Mejora</CardTitle>
-                                      </CardHeader>
-                                      <CardContent>
-                                        <p className="text-sm leading-relaxed">
-                                          {formatFeedbackText(
-                                            group.retroalimentacion?.resumen_general?.areas_mejora || "No disponible",
-                                            group.studentName,
-                                          )}
-                                        </p>
-                                      </CardContent>
-                                    </Card>
-                                  </div>
-                                </>
-                              )}
+                          {unassignedFiles.length > 0 && (
+                            <div className="flex items-center justify-center w-20 h-20 border-2 border-dashed rounded-md border-[var(--border-color)]">
+                              <select
+                                onChange={(e) => {
+                                  if (e.target.value) assignFileToGroup(e.target.value, group.id)
+                                  e.target.value = ""
+                                }}
+                                className="text-sm bg-transparent"
+                              >
+                                <option value="">Asignar</option>
+                                {unassignedFiles.map((f) => (
+                                  <option key={f.id} value={f.id}>
+                                    {f.file.name}
+                                  </option>
+                                ))}
+                              </select>
                             </div>
                           )}
                         </div>
-                      )
-                    })}
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
+                      </div>
+                    ))}
+                  </CardContent>
+                  <CardFooter>
+                    {/* 🚨 REEMPLAZO CRÍTICO: Botón de Evaluación por Flujo OMR Interactivo */}
+                    <Button
+                      size="lg"
+                      onClick={onEvaluateAll}
+                      disabled={
+                        isCurrentlyEvaluatingAny ||
+                        studentGroups.every((g) => g.files.length === 0) ||
+                        isCurrentlyValidatingAny
+                      }
+                    >
+                      {isCurrentlyValidatingAny ? (
+                        <>
+                          <CheckCircle2 className="mr-2 h-4 w-4 text-white" /> Confirmar Correcciones OMR
+                        </>
+                      ) : isLoading || isCurrentlyEvaluatingAny ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Evaluando...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="mr-2 h-4 w-4" /> Evaluar Todo
+                        </>
+                      )}
+                    </Button>
+                  </CardFooter>
+                </Card>
+              )}
+              {studentGroups.some((g) => g.isEvaluated || g.isEvaluating || g.isValidationStep) && (
+                <Card className="bg-[var(--bg-card)] border-[var(--border-color)]">
+                  <CardHeader>
+                    <CardTitle className="text-[var(--text-accent)]">Paso 3: Resultados</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {studentGroups
+                      .filter((g) => g.isEvaluated || g.isEvaluating || g.isValidationStep)
+                      .map((group) => {
+                        const notaNumber = Number(group.nota) || 0
+                        const finalNota = notaNumber + (group.decimasAdicionales || 0)
+                        const isReadyToValidate = group.isValidationStep && group.alternativas_corregidas?.length
+
+                        // 🔥 EXTRACCIÓN DE VALORES PARA EL VELOCÍMETRO
+                        const puntajeObtenido = Number.parseInt(group.puntaje?.split("/")[0] || "0", 10)
+                        const puntajeMaximo =
+                          group.puntosMaximos || Number.parseInt(group.puntaje?.split("/")[1] || "0", 10)
+                        const puntosAprobacion = group.puntosAprobacion || 0
+
+                        return (
+                          <div
+                            key={group.id}
+                            className={`p-6 rounded-lg border-l-4 ${
+                              group.error ? "border-red-500" : "border-green-500"
+                            } bg-[var(--bg-card)] shadow`}
+                          >
+                            <div className="flex justify-between items-center flex-wrap gap-2">
+                              <h3 className="font-bold text-xl text-[var(--text-accent)]">{group.studentName}</h3>
+                              {group.isEvaluating && (
+                                <div className="flex items-center text-sm text-[var(--text-secondary)]">
+                                  <Loader2
+                                    className="mr-2
+h-4 w-4 animate-spin"
+                                  />
+                                  Procesando...
+                                </div>
+                              )}
+                              {group.isEvaluated && !group.error && (
+                                <div className="flex items-center gap-2">
+                                  <Button variant="outline" size="sm" onClick={() => handlePreview(group.id)}>
+                                    <Eye className="mr-2 h-4 w-4" /> Ver informe
+                                  </Button>
+
+                                  <PDFDownloadLink
+                                    document={
+                                      <ReportDocument
+                                        group={group}
+                                        formData={form.getValues()}
+                                        logoPreview={logoPreview}
+                                      />
+                                    }
+                                    fileName={`informe_${group.studentName.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`}
+                                  >
+                                    {({ loading }) => (
+                                      <Button variant="ghost" size="sm" disabled={loading}>
+                                        {loading ? (
+                                          "Preparando PDF..."
+                                        ) : (
+                                          <>
+                                            <Printer className="mr-2 h-4 w-4" /> Descargar PDF
+                                          </>
+                                        )}
+                                      </Button>
+                                    )}
+                                  </PDFDownloadLink>
+                                </div>
+                              )}
+                            </div>
+
+                            {group.error ? (
+                              <p className="text-red-600">Error: {group.error}</p>
+                            ) : (
+                              <div className="mt-4 space-y-6">
+                                {group.isEvaluated && (
+                                  <>
+                                    {/* REEMPLAZO DE PUNTAJE Y NOTA PARA INCLUIR VELOCÍMETRO */}
+                                    <div className="flex justify-between items-start bg-[var(--bg-muted-subtle)] p-4 rounded-lg">
+                                      <div>
+                                        <p className="text-sm font-bold">PUNTAJE</p>
+                                        <Input
+                                          className="text-xl font-semibold w-24 h-12 text-center"
+                                          type="text"
+                                          value={group.puntaje || ""}
+                                          onChange={(e) => handlePuntajeChange(group.id, e.target.value)}
+                                          placeholder="N/A"
+                                        />
+                                      </div>
+
+                                      <div className="text-right">
+                                        <div className="flex items-center gap-2">
+                                          <label htmlFor={`decimas-${group.id}`} className="text-sm font-medium">
+                                            Décimas:
+                                          </label>
+                                          <Input
+                                            id={`decimas-${group.id}`}
+                                            type="number"
+                                            step={0.1}
+                                            defaultValue={group.decimasAdicionales}
+                                            onChange={(e) => handleDecimasChange(group.id, e.target.value)}
+                                            className="h-8 w-20"
+                                          />
+                                        </div>
+                                        <p className="text-sm font-bold mt-2">NOTA FINAL</p>
+                                        <Input
+                                          className="text-3xl font-bold w-24 h-12 text-center text-blue-600 border-none bg-transparent"
+                                          type="number"
+                                          step={0.1}
+                                          value={String(Number(group.nota || 0) + (group.decimasAdicionales || 0))}
+                                          onChange={(e) => handleNotaChange(group.id, e.target.value)}
+                                          placeholder="N/A"
+                                        />
+                                      </div>
+                                    </div>
+
+                                    {/* 🔥 INTEGRACIÓN DEL VELOCÍMETRO */}
+                                    {puntajeMaximo > 0 && puntosAprobacion > 0 && (
+                                      <div className="bg-[var(--bg-muted)] p-4 rounded-lg border border-[var(--border-color)]">
+                                        <h5 className="font-bold text-[var(--text-accent)] mb-2">
+                                          📊 Rendimiento vs. Exigencia ({form.getValues("porcentajeExigencia")}%)
+                                        </h5>
+                                        <ExigenciaVelocimeter
+                                          obtenido={puntajeObtenido}
+                                          maximo={puntajeMaximo}
+                                          aprobacion={puntosAprobacion}
+                                        />
+                                      </div>
+                                    )}
+                                    {/* FIN DE REEMPLAZO */}
+
+                                    <div>
+                                      <h4 className="font-bold mb-2 text-[var(--text-accent)]">Corrección Detallada</h4>
+
+                                      <div className="overflow-x-auto">
+                                        <Table>
+                                          <TableHeader>
+                                            <TableRow>
+                                              <TableHead>Sección</TableHead>
+
+                                              <TableHead>Detalle</TableHead>
+                                            </TableRow>
+                                          </TableHeader>
+
+                                          <TableBody>
+                                            {group.retroalimentacion?.correccion_detallada?.map((item, index) => (
+                                              <TableRow key={index}>
+                                                <TableCell className="font-medium">
+                                                  {renderForWeb(item.seccion)}
+                                                </TableCell>
+
+                                                <TableCell>{renderForWeb(item.detalle)}</TableCell>
+                                              </TableRow>
+                                            ))}
+                                            {Object.keys(group.detalle_desarrollo || {}).map((key) => {
+                                              const item = group.detalle_desarrollo?.[key]
+                                              if (!item) return null
+
+                                              return (
+                                                <TableRow key={key}>
+                                                  <TableCell className="font-medium text-purple-600">
+                                                    {key.replace(/_/g, " ")}
+                                                  </TableCell>
+                                                  <TableCell>
+                                                    <p className="font-semibold text-sm mb-1">
+                                                      Puntaje: {item.puntaje}
+                                                    </p>
+                                                    <p className="text-xs italic text-[var(--text-secondary)] mb-1">
+                                                      Cita Estudiante: &quot;{item.cita_estudiante}&quot;
+                                                    </p>
+
+                                                    <p className="text-sm">{item.justificacion}</p>
+                                                  </TableCell>
+                                                </TableRow>
+                                              )
+                                            })}
+                                          </TableBody>
+                                        </Table>
+                                      </div>
+                                    </div>
+                                    {/* 🚨 VALIDACIÓN OMR INTERACTIVA - TABLA EDITABLE (PASO CRÍTICO DE LA METACONIGICIÓN) */}
+                                    {/* Asegurar que la tabla editable SIEMPRE esté visible cuando hay alternativas cerradas */}
+                                    {group.isEvaluated &&
+                                      group.alternativas_corregidas &&
+                                      group.alternativas_corregidas.length > 0 && (
+                                        <div className="mt-4 border-2 border-blue-500 rounded-lg p-4 bg-blue-50">
+                                          <h4 className="font-bold mb-2 flex items-center text-blue-700">
+                                            <Eye className="h-4 w-4 mr-2" />
+                                            Respuestas Cerradas - Revisión y Edición
+                                          </h4>
+                                          <div className="text-sm text-blue-800 mb-3 bg-blue-100 p-3 rounded border border-blue-300">
+                                            <strong>🔍 INSTRUCCIONES:</strong> Las respuestas marcadas en{" "}
+                                            <span className="bg-red-100 px-2 py-0.5 rounded border border-red-300 font-bold">
+                                              ROJO
+                                            </span>{" "}
+                                            requieren su revisión.
+                                            <br />
+                                            <strong>
+                                              Puede editar cualquier respuesta directamente. Los cambios se aplicarán
+                                              inmediatamente al puntaje.
+                                            </strong>
+                                          </div>
+
+                                          <div className="mb-4 flex gap-2 flex-wrap">
+                                            {group.files.map((file, idx) => (
+                                              <ImageMagnifier
+                                                key={idx}
+                                                src={file.previewUrl || "/placeholder.svg"}
+                                                alt={`Prueba ${group.studentName} - Página ${idx + 1}`}
+                                              />
+                                            ))}
+                                          </div>
+
+                                          <div className="overflow-x-auto">
+                                            <Table>
+                                              <TableHeader>
+                                                <TableRow className="bg-blue-50">
+                                                  <TableHead>Pregunta</TableHead>
+                                                  <TableHead>R. Estudiante (Editable)</TableHead>
+                                                  <TableHead>R. Correcta</TableHead>
+                                                  <TableHead>Estado</TableHead>
+                                                </TableRow>
+                                              </TableHeader>
+                                              <TableBody>
+                                                {group.alternativas_corregidas?.map((item, index) => {
+                                                  const respuestaEst =
+                                                    item.respuesta_estudiante?.trim().toUpperCase() || ""
+                                                  const respuestaCorr =
+                                                    item.respuesta_correcta?.trim().toUpperCase() || ""
+                                                  const esIncorrecta =
+                                                    respuestaEst && respuestaCorr && respuestaEst !== respuestaCorr
+
+                                                  const tieneBajaConfianza =
+                                                    respuestaEst.length > 2 || // Más de 2 caracteres indica ruido
+                                                    (item.pregunta.includes("VF") &&
+                                                      !["V", "F"].includes(respuestaEst)) || // V/F debe ser V o F
+                                                    (item.pregunta.includes("TP") &&
+                                                      isNaN(Number.parseInt(respuestaEst))) || // TP debe ser número
+                                                    (item.pregunta.includes("SM") &&
+                                                      !["A", "B", "C", "D", "E"].includes(respuestaEst)) || // SM debe ser A-E
+                                                    respuestaEst === "" // Respuesta vacía
+
+                                                  const necesitaRevision = esIncorrecta || tieneBajaConfianza
+
+                                                  return (
+                                                    <TableRow
+                                                      key={index}
+                                                      className={cn(
+                                                        necesitaRevision &&
+                                                          "bg-red-50 hover:bg-red-100 border-l-4 border-l-red-500",
+                                                      )}
+                                                    >
+                                                      <TableCell className="font-medium text-sm">
+                                                        {item.pregunta}
+                                                      </TableCell>
+                                                      <TableCell>
+                                                        <Input
+                                                          type="text"
+                                                          className={cn(
+                                                            "h-8 w-20 text-center font-bold text-base",
+                                                            necesitaRevision
+                                                              ? "border-2 border-red-500 bg-red-50"
+                                                              : "border-gray-300",
+                                                          )}
+                                                          defaultValue={item.respuesta_estudiante}
+                                                          onChange={(e) =>
+                                                            handleAlternativeChange(
+                                                              group.id,
+                                                              item.pregunta,
+                                                              e.target.value,
+                                                            )
+                                                          }
+                                                        />
+                                                      </TableCell>
+                                                      <TableCell className="text-sm text-green-600 font-bold">
+                                                        {item.respuesta_correcta}
+                                                      </TableCell>
+                                                      <TableCell>
+                                                        {necesitaRevision ? (
+                                                          <span className="text-xs font-bold text-red-600 flex items-center gap-1">
+                                                            <Eye className="h-3 w-3" /> ⚠️ REVISAR
+                                                          </span>
+                                                        ) : (
+                                                          <span className="text-xs text-gray-500 flex items-center gap-1">
+                                                            <CheckCircle2 className="h-3 w-3 text-green-500" />✓ OK
+                                                          </span>
+                                                        )}
+                                                      </TableCell>
+                                                    </TableRow>
+                                                  )
+                                                })}
+                                              </TableBody>
+                                            </Table>
+                                          </div>
+                                        </div>
+                                      )}
+                                    {/* FIN DE LA TABLA EDITABLE */}
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                                      <Card className="border-l-4 border-l-green-500">
+                                        <CardHeader className="pb-3">
+                                          <CardTitle className="text-green-700 text-base">✅ Fortalezas</CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                          <p className="text-sm leading-relaxed">
+                                            {formatFeedbackText(
+                                              group.retroalimentacion?.resumen_general?.fortalezas || "No disponible",
+                                              group.studentName,
+                                            )}
+                                          </p>
+                                        </CardContent>
+                                      </Card>
+
+                                      <Card className="border-l-4 border-l-yellow-500">
+                                        <CardHeader className="pb-3">
+                                          <CardTitle className="text-yellow-700 text-base">✏️ Áreas de Mejora</CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                          <p className="text-sm leading-relaxed">
+                                            {formatFeedbackText(
+                                              group.retroalimentacion?.resumen_general?.areas_mejora || "No disponible",
+                                              group.studentName,
+                                            )}
+                                          </p>
+                                        </CardContent>
+                                      </Card>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
           <TabsContent value="dashboard" className="mt-4 space-y-4">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-xl font-semibold text-[var(--text-accent)]">Resumen de Notas</h2>

@@ -1,4 +1,5 @@
 // lib/omr/OmniOMRProcessor.ts
+<<<<<<< Updated upstream
 import sharp from "sharp"
 import { DocumentAnalysisClient, AzureKeyCredential } from "@azure/ai-form-recognizer"
 import type { Point2D } from "@azure/ai-form-recognizer"
@@ -30,8 +31,41 @@ type Mark = {
 export async function processOMR(imageBuffer: Buffer, mimeType: string): Promise<OMRResult> {
   const start = Date.now()
   const warnings: string[] = []
+=======
 
+export type Point2D = { x: number; y: number }
+
+export type Mark = {
+  polygon?: Point2D[]
+  confidence: number
+  state: string // e.g. "selected"
+  // puedes tener más campos, no molestan
+  [k: string]: any
+}
+
+export type OMRItem = {
+  id: string
+  value: string
+  confidence: number
+}
+
+export type OMRResult = {
+  success: boolean
+  items?: OMRItem[]
+  error?: string
+  debug?: any
+}
+>>>>>>> Stashed changes
+
+// ------------ Helpers ------------
+function hasPolygon(m: Mark): m is Mark & { polygon: Point2D[] } {
+  return Array.isArray(m.polygon) && m.polygon.length > 0
+}
+
+// ------------ Core: procesa MARKS (tu lógica actual) ------------
+async function processMarks(marksInput: Mark[]): Promise<OMRResult> {
   try {
+<<<<<<< Updated upstream
     // Preprocesar a JPEG si es necesario
     let inputBuffer = imageBuffer
     if (!mimeType.includes("jpeg") && !mimeType.includes("png")) {
@@ -84,8 +118,43 @@ export async function processOMR(imageBuffer: Buffer, mimeType: string): Promise
         const row = rows.find((r) => Math.abs(r[0].polygon[0].y - y) < 15)
         if (row) row.push(mark)
         else rows.push([mark])
-      }
+=======
+    const marks = (marksInput || [])
+      .filter((m) => m?.state === "selected" && m?.confidence != null && m.confidence >= 0.85)
+      .filter(hasPolygon)
+      .sort((a, b) => {
+        const yA = a.polygon[0].y
+        const yB = b.polygon[0].y
+        if (Math.abs(yA - yB) < 20) return a.polygon[0].x - b.polygon[0].x // izq → der
+        return yA - yB // arriba → abajo
+      })
 
+    // Agrupar por filas
+    const rows: (Mark & { polygon: Point2D[] })[][] = []
+    for (const mark of marks) {
+      const y = mark.polygon[0].y
+      const row = rows.find((r) => Math.abs(r[0].polygon[0].y - y) < 15)
+      if (row) row.push(mark)
+      else rows.push([mark])
+    }
+
+    // Convertir filas → items (placeholder simple)
+    // Si tú ya tienes IDs reales por burbuja, aquí es donde se mapean.
+    const items: OMRItem[] = rows.map((row, idx) => {
+      const avgConf =
+        row.reduce((acc, m) => acc + (m.confidence ?? 0), 0) / Math.max(1, row.length)
+
+      // Valor simple: cantidad de marcas en la fila (para no “inventar” letras)
+      // Ajusta esta parte a tu mapping real (A/B/C/D/V/F/etc.) cuando corresponda.
+      return {
+        id: `ROW_${idx + 1}`,
+        value: String(row.length),
+        confidence: Number.isFinite(avgConf) ? avgConf : 0,
+>>>>>>> Stashed changes
+      }
+    })
+
+<<<<<<< Updated upstream
       // Convertir cada fila a un ítem lógico
       for (const row of rows) {
         const sorted = row.sort((a, b) => a.polygon[0].x - b.polygon[0].x)
@@ -135,4 +204,41 @@ export async function processOMR(imageBuffer: Buffer, mimeType: string): Promise
       processingTimeMs: Date.now() - start,
     }
   }
+=======
+    return { success: true, items, debug: { rows: rows.length, marks: marks.length } }
+  } catch (e: any) {
+    return { success: false, error: e?.message || "OMR processing error" }
+  }
+}
+
+// ------------ API: processOMR (sobrecargas) ------------
+
+// 1) Cuando te llaman con MARKS (front u otro pipeline)
+export async function processOMR(input: { marks: Mark[] }): Promise<OMRResult>
+
+// 2) Cuando te llaman con BUFFER desde route.ts
+export async function processOMR(input: Buffer, mimeType?: string): Promise<OMRResult>
+
+// Implementación única
+export async function processOMR(input: any, mimeType?: string): Promise<OMRResult> {
+  // Caso A: input = { marks: [...] }
+  if (input && typeof input === "object" && Array.isArray(input.marks)) {
+    return processMarks(input.marks as Mark[])
+  }
+
+  // Caso B: input = Buffer (route.ts)
+  // OJO: aquí NO hacemos visión real porque tu extractor de marks no está en este archivo.
+  // Esto evita romper build; si quieres OMR real desde imagen, aquí conectas tu extractor real.
+  if (typeof Buffer !== "undefined" && Buffer.isBuffer(input)) {
+    return {
+      success: false,
+      error:
+        "processOMR(buffer) está activo para compilar, pero falta conectar el extractor real de MARKS desde imagen. " +
+        "Este proyecto actualmente procesa OMR a partir de marks (polygons+confidence).",
+      debug: { mimeType: mimeType || null, bytes: input.length },
+    }
+  }
+
+  return { success: false, error: "Entrada inválida para processOMR()." }
+>>>>>>> Stashed changes
 }

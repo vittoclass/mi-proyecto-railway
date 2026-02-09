@@ -1,8 +1,14 @@
 "use client"
 
+<<<<<<< Updated upstream:app/components/Libel-IA_a.tsx.bak
 import { useState } from "react"
 import { useEvaluator } from "./useEvaluator"
 import SmartCameraModal from "@/components/smart-camera-modal"
+=======
+import { useState } from 'react';
+import { useEvaluator } from "@/app/useEvaluator"
+import SmartCameraModal from '@/components/smart-camera-modal'; // Asegúrate que esta ruta sea correcta
+>>>>>>> Stashed changes:components/Libel-IA.tsx
 
 export default function LibelIA() {
   // ==================================================================
@@ -71,7 +77,17 @@ export default function LibelIA() {
 
       {/* Módulo de cámara y subida */}
       {/* CORRECCIÓN: El modal ahora se renderiza condicionalmente y se le pasa la propiedad 'onClose' obligatoria. */}
+<<<<<<< Updated upstream:app/components/Libel-IA_a.tsx.bak
       {isCameraOpen && <SmartCameraModal onCapture={handleCapture} onClose={() => setIsCameraOpen(false)} />}
+=======
+      {isCameraOpen && (
+        <SmartCameraModal
+  captureMode={null}
+  onCapture={handleCapture}
+  onClose={() => setIsCameraOpen(false)}
+/>
+      )}
+>>>>>>> Stashed changes:components/Libel-IA.tsx
 
       {/* Previsualización de la imagen capturada */}
       {fileUrl && (

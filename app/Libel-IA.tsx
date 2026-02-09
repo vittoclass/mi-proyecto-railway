@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+<<<<<<< Updated upstream
 import { useEvaluator } from "./useEvaluator"
 import SmartCameraModal from "@/components/smart-camera-modal"
 
@@ -59,6 +60,32 @@ export default function LibelIA() {
           className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
           rows={4}
           placeholder="Ej: Evalúa ortografía, claridad, estructura, coherencia, uso de vocabulario técnico..."
+=======
+import SmartCameraModal from "@/components/smart-camera-modal"
+
+type CameraFeedback = { confidence: number }
+type CaptureMode = "sm_vf" | "terminos_pareados" | "desarrollo" | null
+
+export default function LibelIA() {
+  const [isCameraOpen, setIsCameraOpen] = useState(false)
+  const [currentFeedback, setCurrentFeedback] = useState<CameraFeedback | null>(null)
+
+  const handleCapture = (dataUrl: string, mode: CaptureMode | null, feedback?: CameraFeedback) => {
+    // si aquí tú usas processFiles u otra lógica real, déjala como la tienes en tu app principal
+    // este archivo solo debe compilar
+    console.log({ dataUrl, mode, feedback })
+  }
+
+  return (
+    <div>
+      {isCameraOpen && (
+        <SmartCameraModal
+          onCapture={(dataUrl: string, feedback?: CameraFeedback) => handleCapture(dataUrl, null, feedback)}
+          onClose={() => setIsCameraOpen(false)}
+          captureMode={null}
+          onFeedbackChange={setCurrentFeedback}
+          currentFeedback={currentFeedback}
+>>>>>>> Stashed changes
         />
       </div>
 
@@ -84,6 +111,7 @@ export default function LibelIA() {
           />
         </div>
       )}
+<<<<<<< Updated upstream
 
       {/* Resultado de evaluación */}
       {isLoading && <p className="text-center mt-6">🔄 Evaluando con IA...</p>}
@@ -125,6 +153,8 @@ export default function LibelIA() {
           {isLoading ? "Evaluando..." : "⚡ Evaluar con IA"}
         </button>
       </div>
+=======
+>>>>>>> Stashed changes
     </div>
   )
 }
