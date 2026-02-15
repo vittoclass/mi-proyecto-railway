@@ -936,10 +936,9 @@ export default function EvaluatorClient() {
   const [isExtractingNames, setIsExtractingNames] = useState(false)
   const [theme, setTheme] = useState("theme-ocaso")
   const [previewGroupId, setPreviewGroupId] = useState<string | null>(null)
-  // Estado de progreso para evaluacion por lotes (batch)
-  const [batchProgress, setBatchProgress] = useState(
-    { isActive: false, totalItems: 0, completedItems: 0, successCount: 0, errorCount: 0, currentBatch: 0, totalBatches: 0 }
-  )
+  // Progreso de evaluacion por lotes
+  const batchInitial = { isActive: false, totalItems: 0, completedItems: 0, successCount: 0, errorCount: 0, currentBatch: 0, totalBatches: 0 }
+  const [batchProgress, setBatchProgress] = useState(batchInitial)
   const isMobile = typeof window !== "undefined" && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
@@ -1332,13 +1331,9 @@ const handleCapture = (dataUrl: string, mode: CaptureMode | null, feedback?: Cam
     }
 
     // Filtrar grupos validos
-    const validGroups: StudentGroup[] = []
-    for (const id of groupIDsToEvaluate) {
-      const found = studentGroups.find((g) => g.id === id)
-      if (found && found.files.length > 0) {
-        validGroups.push(found)
-      }
-    }
+    const validGroups = studentGroups.filter(
+      (g) => groupIDsToEvaluate.includes(g.id) && g.files.length > 0
+    )
 
     if (validGroups.length === 0) return
 
