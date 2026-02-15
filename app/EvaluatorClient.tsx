@@ -936,24 +936,10 @@ export default function EvaluatorClient() {
   const [isExtractingNames, setIsExtractingNames] = useState(false)
   const [theme, setTheme] = useState("theme-ocaso")
   const [previewGroupId, setPreviewGroupId] = useState<string | null>(null)
-  // Estado de progreso para evaluación por lotes (batch)
-  const [batchProgress, setBatchProgress] = useState<{
-    isActive: boolean
-    totalItems: number
-    completedItems: number
-    successCount: number
-    errorCount: number
-    currentBatch: number
-    totalBatches: number
-  }>({
-    isActive: false,
-    totalItems: 0,
-    completedItems: 0,
-    successCount: 0,
-    errorCount: 0,
-    currentBatch: 0,
-    totalBatches: 0,
-  })
+  // Estado de progreso para evaluacion por lotes (batch)
+  const [batchProgress, setBatchProgress] = useState(
+    { isActive: false, totalItems: 0, completedItems: 0, successCount: 0, errorCount: 0, currentBatch: 0, totalBatches: 0 }
+  )
   const isMobile = typeof window !== "undefined" && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
@@ -1345,10 +1331,14 @@ const handleCapture = (dataUrl: string, mode: CaptureMode | null, feedback?: Cam
       return
     }
 
-    // Filtrar grupos válidos
-    const validGroups = groupIDsToEvaluate
-      .map((id) => studentGroups.find((g) => g.id === id))
-      .filter((g): g is StudentGroup => !!g && g.files.length > 0)
+    // Filtrar grupos validos
+    const validGroups: StudentGroup[] = []
+    for (const id of groupIDsToEvaluate) {
+      const found = studentGroups.find((g) => g.id === id)
+      if (found && found.files.length > 0) {
+        validGroups.push(found)
+      }
+    }
 
     if (validGroups.length === 0) return
 
@@ -1405,7 +1395,7 @@ const handleCapture = (dataUrl: string, mode: CaptureMode | null, feedback?: Cam
       })
 
       if (!response.ok || !response.body) {
-        throw new Error(`Error HTTP ${response.status}: ${response.statusText}`)
+        throw new Error("Error HTTP " + response.status + ": " + response.statusText)
       }
 
       // Leer stream NDJSON línea por línea
@@ -2378,15 +2368,15 @@ La IA usará una escala 0-10 por criterio de desarrollo."
                     >
                       {isCurrentlyValidatingAny ? (
                         <>
-                          <CheckCircle2 className="mr-2 h-4 w-4 text-white" /> Confirmar Correcciones OMR
+                          <CheckCircle2 className="mr-2 h-4 w-4 text-white" /> {"Confirmar Correcciones OMR"}
                         </>
                       ) : isLoading || isCurrentlyEvaluatingAny || batchProgress.isActive ? (
                         <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Evaluando{batchProgress.isActive ? ` (${batchProgress.completedItems}/${batchProgress.totalItems})` : "..."}
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> {"Evaluando"}{batchProgress.isActive ? (" (" + batchProgress.completedItems + "/" + batchProgress.totalItems + ")") : "..."}
                         </>
                       ) : (
                         <>
-                          <Sparkles className="mr-2 h-4 w-4" /> Evaluar Todo ({studentGroups.filter((g) => g.files.length > 0 && !g.isEvaluated).length} pendientes)
+                          <Sparkles className="mr-2 h-4 w-4" /> {"Evaluar Todo (" + studentGroups.filter((g) => g.files.length > 0 && !g.isEvaluated).length + " pendientes)"}
                         </>
                       )}
                     </Button>
@@ -2406,9 +2396,9 @@ La IA usará una escala 0-10 por criterio de desarrollo."
                           <div className="relative h-3 w-full bg-gray-200 rounded-full overflow-hidden">
                             <div
                               style={{
-                                width: `${batchProgress.totalItems > 0
-                                  ? (batchProgress.completedItems / batchProgress.totalItems) * 100
-                                  : 0}%`,
+                                width: (batchProgress.totalItems > 0
+                                  ? Math.round((batchProgress.completedItems / batchProgress.totalItems) * 100)
+                                  : 0) + "%",
                               }}
                               className="h-full bg-[var(--bg-primary)] transition-all duration-500 rounded-full"
                             />
