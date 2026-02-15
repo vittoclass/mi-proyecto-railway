@@ -1478,7 +1478,7 @@ const handleCapture = (dataUrl: string, mode: CaptureMode | null, feedback?: Cam
             } else if (msg.type === "done") {
               // Completado
             }
-          } catch {
+          } catch (_e) {
             // Línea JSON inválida, ignorar
           }
         }
